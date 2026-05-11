@@ -111,9 +111,9 @@ Likely files:
 
 Acceptance:
 
-- [ ] Query normalization is case-insensitive.
-- [ ] All query tokens are required.
-- [ ] Tests cover model/reference and descriptor examples.
+- [x] Query normalization is case-insensitive.
+- [x] All query tokens are required.
+- [x] Tests cover model/reference and descriptor examples.
 
 Verify:
 
@@ -130,9 +130,9 @@ Likely files:
 
 Acceptance:
 
-- [ ] Dedupe key uses normalized text, seller, and posted date.
-- [ ] Repeated listings are removed deterministically.
-- [ ] Tests cover whitespace/case/punctuation normalization.
+- [x] Dedupe key uses normalized text, seller, and posted date.
+- [x] Repeated listings are removed deterministically.
+- [x] Tests cover whitespace/case/punctuation normalization.
 
 Verify:
 
@@ -149,9 +149,9 @@ Likely files:
 
 Acceptance:
 
-- [ ] Parser extracts listing candidates from fixture HTML.
-- [ ] Missing fields are handled gracefully.
-- [ ] Parser tests do not need network access.
+- [x] Parser extracts listing candidates from fixture HTML.
+- [x] Missing fields are handled gracefully.
+- [x] Parser tests do not need network access.
 
 Verify:
 
