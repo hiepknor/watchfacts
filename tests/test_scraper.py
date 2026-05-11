@@ -33,9 +33,63 @@ class FakePage:
         return self._html
 
 
+class FakeLocator:
+    def __init__(self, *, count: int = 1, attributes: dict[str, str] | None = None) -> None:
+        self._count = count
+        self.attributes = attributes or {}
+
+    async def count(self) -> int:
+        return self._count
+
+    def locator(self, selector: str) -> "FakeLocator":
+        return FakeLocator(attributes={"value": self.attributes.get(selector, "")})
+
+    async def get_attribute(self, name: str) -> str | None:
+        return self.attributes.get(name)
+
+
+class FakeSearchPage(FakePage):
+    def locator(self, selector: str) -> FakeLocator:
+        if selector == "#mode3Form":
+            return FakeLocator(
+                attributes={
+                    "action": "https://watchfacts.example/simon-search-matches",
+                    'input[name="_token"]': "csrf-token",
+                }
+            )
+        return FakeLocator(count=0)
+
+
+class FakeRequest:
+    def __init__(self, response) -> None:
+        self.response = response
+        self.posts = []
+
+    async def post(self, url: str, *, form, timeout: int):
+        self.posts.append((url, form, timeout))
+        return self.response
+
+
+class FakeSearchResponse:
+    def __init__(
+        self,
+        *,
+        status: int = 200,
+        url: str = "https://watchfacts.example/simon-search-matches",
+        body: str = '{"listings":[]}',
+    ) -> None:
+        self.status = status
+        self.url = url
+        self.body = body
+
+    async def text(self) -> str:
+        return self.body
+
+
 class FakeContext:
-    def __init__(self, page: FakePage) -> None:
+    def __init__(self, page: FakePage, request: FakeRequest | None = None) -> None:
         self.page = page
+        self.request = request
         self.closed = False
 
     async def new_page(self) -> FakePage:
@@ -115,6 +169,18 @@ def make_playwright_factory(page: FakePage):
     return factory, chromium, browser, context
 
 
+def make_search_playwright_factory(page: FakeSearchPage, response: FakeSearchResponse):
+    request = FakeRequest(response)
+    context = FakeContext(page, request=request)
+    browser = FakeBrowser(context)
+    chromium = FakeChromium(browser)
+
+    def factory() -> FakePlaywrightManager:
+        return FakePlaywrightManager(FakePlaywright(chromium))
+
+    return factory, request
+
+
 def test_missing_browser_state_raises_clear_error(tmp_path) -> None:
     settings = make_settings(tmp_path, state_exists=False)
 
@@ -144,6 +210,44 @@ def test_fetch_watchfacts_html_loads_state_and_navigates_to_configured_url(tmp_p
     assert page.goto_calls == [(settings.watchfacts_url, "networkidle", 1234)]
     assert context.closed is True
     assert browser.closed is True
+
+
+def test_fetch_watchfacts_html_posts_query_to_watchfacts_search(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    page = FakeSearchPage("<html><body>Listings</body></html>", settings.watchfacts_url)
+    response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
+    factory, request = make_search_playwright_factory(page, response)
+
+    result = asyncio.run(
+        fetch_watchfacts_html(
+            settings,
+            query="116500 black",
+            playwright_factory=factory,
+            timeout_ms=1234,
+        )
+    )
+
+    assert result == ScrapeResult(
+        html='{"listings":[{"title":"116500 black"}]}',
+        final_url="https://watchfacts.example/simon-search-matches",
+        server_filtered=True,
+    )
+    assert request.posts == [
+        (
+            "https://watchfacts.example/simon-search-matches",
+            {
+                "_token": "csrf-token",
+                "listingType": "sale",
+                "reference": "116500 black",
+                "region": "",
+                "dial_color": "",
+                "is_bundle": "",
+                "sort_by": "price-low",
+                "created_days": "90",
+            },
+            90_000,
+        )
+    ]
 
 
 def test_expired_browser_state_raises_clear_error(tmp_path) -> None:

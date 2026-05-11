@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
 from bs4 import BeautifulSoup, Tag
 
@@ -25,9 +28,91 @@ LISTING_SELECTORS = [
 
 
 def parse_listings(html: str) -> list[ListingCandidate]:
+    json_candidates = _parse_json_listings(html)
+    if json_candidates is not None:
+        return json_candidates
+
     soup = BeautifulSoup(html, "lxml")
     nodes = _find_listing_nodes(soup)
     return [candidate for node in nodes if (candidate := _parse_listing_node(node))]
+
+
+def _parse_json_listings(value: str) -> list[ListingCandidate] | None:
+    stripped = value.lstrip()
+    if not stripped.startswith(("{", "[")):
+        return None
+
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+
+    if isinstance(payload, dict):
+        listings = payload.get("listings")
+    else:
+        listings = payload
+    if not isinstance(listings, list):
+        return None
+
+    candidates: list[ListingCandidate] = []
+    seen: set[tuple[str, str | None, str | None, str | None]] = set()
+    for item in listings:
+        if not isinstance(item, dict):
+            continue
+        for candidate in _parse_json_listing_item(item):
+            key = (
+                candidate.listing_text,
+                candidate.seller,
+                candidate.posted_date,
+                candidate.source_url,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(candidate)
+    return candidates
+
+
+def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
+    seller = _clean_text(item.get("companyName")) or _clean_text(item.get("fromName"))
+    posted_date = _format_json_date(item.get("repostedAt") or item.get("createdOn"))
+    source_url = _json_source_url(item)
+    parent_text = _clean_text(item.get("title"))
+    parent_image = _json_image_url(item)
+
+    candidates: list[ListingCandidate] = []
+    if parent_text:
+        candidates.append(
+            ListingCandidate(
+                listing_text=parent_text,
+                seller=seller or None,
+                posted_date=posted_date,
+                image_url=parent_image,
+                source_url=source_url,
+            )
+        )
+
+    nested = item.get("listings")
+    if isinstance(nested, list):
+        for nested_item in nested:
+            if not isinstance(nested_item, dict):
+                continue
+            nested_title = _clean_text(nested_item.get("title"))
+            if nested_title and nested_title == parent_text:
+                continue
+            nested_text = _json_nested_text(nested_item)
+            if not nested_text or nested_text == parent_text:
+                continue
+            candidates.append(
+                ListingCandidate(
+                    listing_text=nested_text,
+                    seller=seller or None,
+                    posted_date=posted_date,
+                    image_url=_json_image_url(nested_item) or parent_image,
+                    source_url=source_url,
+                )
+            )
+    return candidates
 
 
 def _find_listing_nodes(soup: BeautifulSoup) -> list[Tag]:
@@ -92,4 +177,50 @@ def _source_url(node: Tag) -> str | None:
 
 
 def _clean_text(value: str | None) -> str:
-    return " ".join(value.split()) if value else ""
+    return " ".join(str(value).split()) if value else ""
+
+
+def _json_nested_text(item: dict[str, Any]) -> str:
+    parts = [
+        _clean_text(item.get("brand")),
+        _clean_text(item.get("model")),
+        _clean_text(item.get("normalizedReference") or item.get("reference")),
+        _clean_text(item.get("dialColor")),
+        _clean_text(item.get("title")),
+    ]
+    return _clean_text(" ".join(part for part in parts if part))
+
+
+def _json_image_url(item: dict[str, Any]) -> str | None:
+    value = item.get("frontImage") or item.get("imageUrl") or item.get("image_url")
+    if isinstance(value, str):
+        return _clean_text(value) or None
+
+    nested = item.get("listings")
+    if isinstance(nested, list):
+        for nested_item in nested:
+            if isinstance(nested_item, dict):
+                nested_url = _json_image_url(nested_item)
+                if nested_url:
+                    return nested_url
+    return None
+
+
+def _json_source_url(item: dict[str, Any]) -> str | None:
+    number = item.get("number")
+    if number is None:
+        return None
+    return f"/flash-sales/{number}"
+
+
+def _format_json_date(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    for date_format in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            parsed = datetime.strptime(normalized[:19], date_format)
+            return f"{parsed.strftime('%B')} {parsed.day}, {parsed.year}"
+        except ValueError:
+            continue
+    return _clean_text(normalized)

@@ -31,10 +31,10 @@ def make_settings(tmp_path) -> Settings:
 def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = FIXTURE.read_text()
-    fetch_calls: list[Settings] = []
+    fetch_calls: list[tuple[Settings, str | None]] = []
 
-    async def fetch_html(received_settings: Settings) -> ScrapeResult:
-        fetch_calls.append(received_settings)
+    async def fetch_html(received_settings: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_calls.append((received_settings, query))
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
     workflow = WatchFactsSearchWorkflow(
@@ -45,10 +45,11 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
 
     results = asyncio.run(workflow.search("228253a choco"))
 
-    assert fetch_calls == [settings]
+    assert fetch_calls == [(settings, "228253a choco")]
     assert len(results) == 1
-    assert results[0].listing_text == "Rolex 228253A choco N2 467000hkd"
+    assert results[0].listing_text == "228253A choco N2 467000hkd"
     assert results[0].seller == "HK STOCKS"
+    assert results[0].image_url == "https://watchfacts.example/images/228253a.jpg"
 
     with sqlite3.connect(settings.db_path) as connection:
         query_row = connection.execute(
@@ -67,7 +68,7 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
 def test_search_workflow_persists_no_result_queries(tmp_path) -> None:
     settings = make_settings(tmp_path)
 
-    async def fetch_html(_: Settings) -> ScrapeResult:
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         return ScrapeResult(html=FIXTURE.read_text(), final_url=settings.watchfacts_url)
 
     workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
@@ -83,10 +84,91 @@ def test_search_workflow_persists_no_result_queries(tmp_path) -> None:
     assert query_row == ("does not exist", "does not exist", 0)
 
 
+def test_search_workflow_keeps_server_filtered_results_without_strict_refilter(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "matched_term": null,
+      "listings": [
+        {
+          "title": "2017 Patek 5712/1A Fullset Retail Ready $116",
+          "companyName": "Khoa Ng",
+          "repostedAt": "2026-04-22 18:23:39",
+          "number": 40881,
+          "listings": [
+            {
+              "title": "2017 Patek 5712/1A Fullset Retail Ready $116",
+              "frontImage": "https://watchfacts.example/5712.jpg",
+              "dialColor": "blue"
+            }
+          ]
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("5712 blue"))
+
+    assert len(results) == 1
+    assert results[0].listing_text == "2017 Patek 5712/1A Fullset Retail Ready $116"
+    assert results[0].seller == "Khoa Ng"
+    assert results[0].posted_date == "April 22, 2026"
+    assert results[0].image_url == "https://watchfacts.example/5712.jpg"
+    assert results[0].source_url == "/flash-sales/40881"
+
+
+def test_search_workflow_omits_bundle_images_for_multi_listing_cards(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    <html>
+      <body>
+        <div class="product">
+          <a href="/flash-sales/1">
+            <img src="https://watchfacts.example/watch-bundle.jpg" />
+          </a>
+          <div class="product-description">
+            <a class="title-link" href="/flash-sales/1">
+              124200 pistachio $60000 N12
+              126303g black oys $128000 N8
+              126331g sundust jub $155500 N3
+              126334 blue jub $116500 N2
+              7118/1200A blue N2/2026y 725k hkd
+              7300/1200R white 03/2026 $366k
+              5726/1A blue N9/2025y 1.065m hkd
+            </a>
+          </div>
+          <span data-field="seller">Forest</span>
+          <time data-field="posted-date">April 23, 2026</time>
+        </div>
+      </body>
+    </html>
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("7118/1200a blue"))
+
+    assert len(results) == 1
+    assert results[0].listing_text == "7118/1200A blue N2/2026y 725k hkd"
+    assert results[0].image_url is None
+
+
 def test_search_workflow_logs_counts_without_query_or_state_path(tmp_path, caplog) -> None:
     settings = make_settings(tmp_path)
 
-    async def fetch_html(_: Settings) -> ScrapeResult:
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         return ScrapeResult(html=FIXTURE.read_text(), final_url=settings.watchfacts_url)
 
     workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
@@ -105,7 +187,7 @@ def test_search_workflow_logs_counts_without_query_or_state_path(tmp_path, caplo
 def test_search_workflow_logs_error_type_without_query_or_state_path(tmp_path, caplog) -> None:
     settings = make_settings(tmp_path)
 
-    async def fetch_html(_: Settings) -> ScrapeResult:
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         raise RuntimeError("network unavailable")
 
     workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)

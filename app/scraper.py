@@ -8,6 +8,7 @@ from app.config import Settings
 
 
 DEFAULT_TIMEOUT_MS = 30_000
+SEARCH_TIMEOUT_MS = 90_000
 
 
 class ScraperError(RuntimeError):
@@ -22,6 +23,7 @@ class BrowserSessionError(ScraperError):
 class ScrapeResult:
     html: str
     final_url: str
+    server_filtered: bool = False
 
 
 class Page(Protocol):
@@ -32,6 +34,9 @@ class Page(Protocol):
 
     async def content(self) -> str:
         ...
+
+
+SEARCH_FORM_SELECTOR = "#mode3Form"
 
 
 class BrowserContext(Protocol):
@@ -53,6 +58,7 @@ class Browser(Protocol):
 async def fetch_watchfacts_html(
     settings: Settings,
     *,
+    query: str | None = None,
     playwright_factory=None,
     timeout_ms: int = DEFAULT_TIMEOUT_MS,
 ) -> ScrapeResult:
@@ -91,11 +97,62 @@ async def fetch_watchfacts_html(
                         "Saved browser session appears expired. "
                         "Run `python scripts/login.py` again."
                     )
+                if query and query.strip():
+                    search_result = await _fetch_search_results(
+                        context,
+                        page,
+                        query.strip(),
+                        timeout_ms=timeout_ms,
+                    )
+                    if search_result is not None:
+                        return search_result
                 return ScrapeResult(html=html, final_url=final_url)
             finally:
                 await context.close()
         finally:
             await browser.close()
+
+
+async def _fetch_search_results(
+    context: BrowserContext,
+    page: Page,
+    query: str,
+    *,
+    timeout_ms: int,
+) -> ScrapeResult | None:
+    form = page.locator(SEARCH_FORM_SELECTOR)
+    if await form.count() == 0:
+        return None
+
+    token = await form.locator('input[name="_token"]').get_attribute("value")
+    action = await form.get_attribute("action")
+    if not token or not action:
+        return None
+
+    form_data = {
+        "_token": token,
+        "listingType": "sale",
+        "reference": query,
+        "region": "",
+        "dial_color": "",
+        "is_bundle": "",
+        "sort_by": "price-low",
+        "created_days": "90",
+    }
+    response = await context.request.post(
+        action,
+        form=form_data,
+        timeout=max(timeout_ms, SEARCH_TIMEOUT_MS),
+    )
+    if response.status >= 400:
+        raise ScraperError(
+            f"WatchFacts search failed with HTTP {response.status}"
+        )
+    return ScrapeResult(
+        html=await response.text(),
+        final_url=response.url,
+        server_filtered=True,
+    )
 
 
 def _looks_unauthenticated(final_url: str, html: str) -> bool:
