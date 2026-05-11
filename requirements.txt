@@ -4,3 +4,4 @@ crawl4ai
 beautifulsoup4
 lxml
 python-dotenv
+pytest

@@ -47,9 +47,9 @@ Description: Implement typed environment loading and path constants.
 
 Acceptance:
 
-- [ ] `app/config.py` loads required and optional environment variables.
-- [ ] Missing `TELEGRAM_BOT_TOKEN` fails with a clear config error.
-- [ ] Boolean values support common forms such as `true`, `false`, `1`, and `0`.
+- [x] `app/config.py` loads required and optional environment variables.
+- [x] Missing `TELEGRAM_BOT_TOKEN` fails with a clear config error.
+- [x] Boolean values support common forms such as `true`, `false`, `1`, and `0`.
 
 Verify:
 
@@ -69,9 +69,9 @@ Description: Add `app/main.py` that initializes config and starts the Telegram b
 
 Acceptance:
 
-- [ ] `python -m app.main` imports successfully.
-- [ ] Startup logs do not include secrets.
-- [ ] Missing config exits clearly.
+- [x] `python -m app.main` imports successfully.
+- [x] Startup logs do not include secrets.
+- [x] Missing config exits clearly.
 
 Verify:
 
@@ -90,9 +90,9 @@ Description: Register basic Telegram handlers and return placeholder responses u
 
 Acceptance:
 
-- [ ] `/start` returns a short usage message.
-- [ ] Empty messages are rejected.
-- [ ] Text messages call a search workflow interface.
+- [x] `/start` returns a short usage message.
+- [x] Empty messages are rejected.
+- [x] Text messages call a search workflow interface.
 
 Verify:
 

@@ -56,7 +56,11 @@ login:
 
 check:
 	git diff --check
-	@if [ -d app ] || [ -d scripts ]; then python -m compileall app scripts; fi
+	@paths=""; \
+	for path in app scripts; do \
+		if [ -d "$$path" ]; then paths="$$paths $$path"; fi; \
+	done; \
+	if [ -n "$$paths" ]; then python -m compileall $$paths; fi
 
 clean:
 	@find . -type d -name __pycache__ -prune -exec rm -rf {} +
