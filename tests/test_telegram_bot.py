@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from types import SimpleNamespace
 
 from app.telegram_bot import (
@@ -30,6 +31,11 @@ class FakeWorkflow:
     async def search(self, query: str) -> list[SearchResult]:
         self.queries.append(query)
         return self.results
+
+
+class FailingWorkflow:
+    async def search(self, query: str) -> list[SearchResult]:
+        raise RuntimeError("boom")
 
 
 def make_context(workflow: FakeWorkflow | None = None):
@@ -77,3 +83,23 @@ def test_text_messages_call_search_workflow() -> None:
 
     assert workflow.queries == ["228253a choco"]
     assert message.replies == ["228253A choco N2\nSeller: HK STOCKS\nPosted: April 20, 2026"]
+
+
+def test_search_errors_are_logged_without_query_text(caplog) -> None:
+    message = FakeMessage("228253a choco")
+
+    with caplog.at_level(logging.ERROR, logger="app.telegram_bot"):
+        asyncio.run(
+            handle_text_message(
+                SimpleNamespace(message=message),
+                make_context(FailingWorkflow()),
+            )
+        )
+
+    assert message.replies == ["Search failed. Please check the bot logs."]
+    assert (
+        "event=telegram.search_error error_type=RuntimeError query_length=13"
+        in caplog.text
+    )
+    assert "228253a choco" not in caplog.text
+    assert "token" not in caplog.text

@@ -1,5 +1,17 @@
 # Operations Guide
 
+## First Server Deploy
+
+1. Clone the repository.
+2. Run `make init`.
+3. Edit `.env` with the real Telegram bot token and WatchFacts URL if needed.
+4. Create browser state with `python scripts/login.py`.
+5. Run `make build`.
+6. Run `make up`.
+7. Inspect startup with `make logs`.
+
+The bot expects `data/watchfacts_state.json` to exist before the first real search.
+
 ## Local Setup
 
 ```bash
@@ -46,6 +58,14 @@ Restart:
 make restart
 ```
 
+Restart after updating code:
+
+```bash
+git pull
+make build
+make restart
+```
+
 Status:
 
 ```bash
@@ -67,6 +87,16 @@ Logs should never include:
 - cookies
 - local storage
 - full browser storage state
+
+Useful event names:
+
+- `event=bot.starting`
+- `event=query.start`
+- `event=query.end`
+- `event=query.error`
+- `event=telegram.search_error`
+
+Query logs include lengths and result counts, not the raw Telegram query text.
 
 ## Browser Login State
 
@@ -100,33 +130,22 @@ Runtime files:
 Back up:
 
 ```bash
-tar -czf watchfacts-data-backup.tgz data
+mkdir -p backups
+tar -czf backups/watchfacts-data-$(date +%Y%m%d-%H%M%S).tgz data
 ```
 
 Restore:
 
 ```bash
+make down
 tar -xzf watchfacts-data-backup.tgz
+make up
 ```
 
 Treat backups as sensitive if they contain browser state.
 
-## First Server Deploy
+## Restore Notes
 
-1. Clone repository.
-2. Run `make init`.
-3. Edit `.env`.
-4. Create `data/watchfacts_state.json` with `python scripts/login.py`.
-5. Run `make build`.
-6. Run `make up`.
-7. Inspect `make logs`.
-
-## Current Limitation
-
-The Docker entrypoint is:
-
-```bash
-python -m app.main
-```
-
-Until `app/main.py` exists, `make build` can pass but `make up` cannot run the bot successfully.
+- Restore `.env` separately if needed; it is not part of the `data/` backup.
+- Recreate `data/watchfacts_state.json` with `python scripts/login.py` if the restored session is expired.
+- `data/bot.db` is the SQLite query history/cache.

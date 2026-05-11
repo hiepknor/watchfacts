@@ -255,8 +255,8 @@ Likely files:
 
 Acceptance:
 
-- [ ] Structured logs cover startup, query start/end, result counts, and error categories.
-- [ ] Logs do not contain tokens, cookies, or browser state.
+- [x] Structured logs cover startup, query start/end, result counts, and error categories.
+- [x] Logs do not contain tokens, cookies, or browser state.
 
 Verify:
 
@@ -268,8 +268,8 @@ python -m pytest
 
 Acceptance:
 
-- [ ] `docs/operations.md` includes first deploy, restart, logs, backup, and restore steps.
-- [ ] README links to operations docs.
+- [x] `docs/operations.md` includes first deploy, restart, logs, backup, and restore steps.
+- [x] README links to operations docs.
 
 Verify:
 

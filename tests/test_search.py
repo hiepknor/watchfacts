@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -54,7 +55,9 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
             "SELECT query_text, normalized_query, result_count FROM queries"
         ).fetchone()
         listing_count = connection.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
-        result_count = connection.execute("SELECT COUNT(*) FROM query_results").fetchone()[0]
+        result_count = connection.execute(
+            "SELECT COUNT(*) FROM query_results"
+        ).fetchone()[0]
 
     assert query_row == ("228253a choco", "228253a choco", 1)
     assert listing_count == 1
@@ -78,3 +81,43 @@ def test_search_workflow_persists_no_result_queries(tmp_path) -> None:
         ).fetchone()
 
     assert query_row == ("does not exist", "does not exist", 0)
+
+
+def test_search_workflow_logs_counts_without_query_or_state_path(tmp_path, caplog) -> None:
+    settings = make_settings(tmp_path)
+
+    async def fetch_html(_: Settings) -> ScrapeResult:
+        return ScrapeResult(html=FIXTURE.read_text(), final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    with caplog.at_level(logging.INFO, logger="app.search"):
+        asyncio.run(workflow.search("228253a choco"))
+
+    log_text = caplog.text
+    assert "event=query.start query_length=13" in log_text
+    assert "event=query.end parsed_count=2 matched_count=1 result_count=1" in log_text
+    assert "228253a choco" not in log_text
+    assert str(settings.browser_state_path) not in log_text
+    assert settings.telegram_bot_token not in log_text
+
+
+def test_search_workflow_logs_error_type_without_query_or_state_path(tmp_path, caplog) -> None:
+    settings = make_settings(tmp_path)
+
+    async def fetch_html(_: Settings) -> ScrapeResult:
+        raise RuntimeError("network unavailable")
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    with caplog.at_level(logging.INFO, logger="app.search"):
+        try:
+            asyncio.run(workflow.search("228253a choco"))
+        except RuntimeError:
+            pass
+
+    log_text = caplog.text
+    assert "event=query.error error_type=RuntimeError" in log_text
+    assert "228253a choco" not in log_text
+    assert str(settings.browser_state_path) not in log_text
+    assert settings.telegram_bot_token not in log_text

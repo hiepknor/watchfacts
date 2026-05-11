@@ -61,8 +61,12 @@ async def handle_text_message(update, context) -> None:
     workflow = _get_search_workflow(context)
     try:
         results = await workflow.search(query)
-    except Exception:
-        logger.exception("Search workflow failed")
+    except Exception as exc:
+        logger.exception(
+            "event=telegram.search_error error_type=%s query_length=%d",
+            exc.__class__.__name__,
+            len(query),
+        )
         if message is not None:
             await _maybe_await(
                 message.reply_text("Search failed. Please check the bot logs.")
@@ -112,7 +116,7 @@ def run_bot(settings: Settings, workflow: SearchWorkflow | None = None) -> None:
         workflow = WatchFactsSearchWorkflow(settings)
 
     application = build_application(settings, workflow)
-    logger.info("Starting WatchFacts Telegram bot")
+    logger.info("event=bot.starting")
     application.run_polling()
 
 

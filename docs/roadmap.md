@@ -2,7 +2,7 @@
 
 ## Milestone 0: Project Foundation
 
-Status: in progress.
+Status: complete.
 
 Scope:
 
@@ -18,6 +18,8 @@ Exit criteria:
 - Documentation explains current limitations.
 
 ## Milestone 1: Minimal Bot Skeleton
+
+Status: complete.
 
 Goal: the bot process starts and responds to basic Telegram messages.
 
@@ -37,6 +39,8 @@ Exit criteria:
 
 ## Milestone 2: Deterministic Matching Core
 
+Status: complete.
+
 Goal: search logic is testable without WatchFacts or Telegram.
 
 Deliverables:
@@ -54,6 +58,8 @@ Exit criteria:
 
 ## Milestone 3: WatchFacts Browser Session
 
+Status: complete.
+
 Goal: authorized browser automation works with manual login state.
 
 Deliverables:
@@ -69,6 +75,8 @@ Exit criteria:
 - No credential storage is introduced.
 
 ## Milestone 4: End-To-End Search
+
+Status: complete.
 
 Goal: Telegram query returns WatchFacts search results.
 
@@ -86,6 +94,8 @@ Exit criteria:
 - Docker Compose runtime works with valid `.env` and browser state.
 
 ## Milestone 5: Production Hardening
+
+Status: complete.
 
 Goal: make the bot maintainable on a small server.
 

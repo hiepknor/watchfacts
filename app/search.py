@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 
 from app.config import Settings
@@ -12,6 +13,7 @@ from app.telegram_bot import SearchResult
 
 
 FetchHtml = Callable[[Settings], Awaitable[ScrapeResult]]
+logger = logging.getLogger(__name__)
 
 
 class WatchFactsSearchWorkflow:
@@ -27,13 +29,27 @@ class WatchFactsSearchWorkflow:
         self.fetch_html = fetch_html or fetch_watchfacts_html
 
     async def search(self, query: str) -> list[SearchResult]:
-        scrape_result = await self.fetch_html(self.settings)
-        parsed = parse_listings(scrape_result.html)
-        matched = filter_matching_listings(query, parsed)
-        unique = unique_listings(matched)
+        logger.info("event=query.start query_length=%d", len(query))
+        try:
+            scrape_result = await self.fetch_html(self.settings)
+            parsed = parse_listings(scrape_result.html)
+            matched = filter_matching_listings(query, parsed)
+            unique = unique_listings(matched)
 
-        self.database.record_query_results(query, unique)
-        return [_to_search_result(listing) for listing in unique]
+            self.database.record_query_results(query, unique)
+            logger.info(
+                "event=query.end parsed_count=%d matched_count=%d result_count=%d",
+                len(parsed),
+                len(matched),
+                len(unique),
+            )
+            return [_to_search_result(listing) for listing in unique]
+        except Exception as exc:
+            logger.exception(
+                "event=query.error error_type=%s",
+                exc.__class__.__name__,
+            )
+            raise
 
 
 def _to_search_result(listing: ListingCandidate) -> SearchResult:
