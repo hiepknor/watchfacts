@@ -67,10 +67,13 @@ scripts/
 data/
   bot.db
   watchfacts_state.json
+docs/
 logs/
 Dockerfile
 docker-compose.yml
+Makefile
 requirements.txt
+.env.example
 README.md
 ```
 
@@ -88,11 +91,29 @@ Use these commands when the matching files exist:
 | Install Playwright browser | `playwright install chromium` |
 | Create WatchFacts session | `python scripts/login.py` |
 | Run bot locally | `python -m app.main` |
-| Build Docker image | `docker compose build` |
-| Start Docker service | `docker compose up -d` |
-| Follow Docker logs | `docker compose logs -f` |
+| Initialize local runtime files | `make init` |
+| Build Docker image | `make build` |
+| Start Docker service | `make up` |
+| Stop Docker service | `make down` |
+| Follow Docker logs | `make logs` |
+| Open container shell | `make shell` |
+| Run lightweight checks | `make check` |
 
 If tests or lint commands are added later, update this file and prefer those commands for verification.
+
+The Docker entrypoint is `python -m app.main`. If `app/main.py` is not present yet, Docker build can still pass but `make up` will not run the bot.
+
+## Project Documentation
+
+Use `docs/README.md` as the documentation index.
+
+Load docs selectively:
+
+- New features: `docs/product-spec.md`, `docs/technical-spec.md`, and `docs/implementation-plan.md`.
+- Crawler/auth changes: `docs/technical-spec.md`, `docs/security-compliance.md`, and `docs/decisions/002-authenticated-browser-session.md`.
+- Matching/parser/dedupe changes: `docs/technical-spec.md` and `docs/decisions/001-deterministic-matching.md`.
+- Docker/runtime changes: `docs/operations.md` and `docs/decisions/004-docker-compose-runtime.md`.
+- Roadmap or task planning: `docs/roadmap.md` and `docs/implementation-plan.md`.
 
 ## Environment And Secrets
 

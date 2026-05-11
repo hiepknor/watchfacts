@@ -54,12 +54,11 @@ playwright install chromium
 
 Create `.env`:
 
-```env
-TELEGRAM_BOT_TOKEN=your_telegram_token
-WATCHFACTS_URL=https://watchfacts.com/simon-match-making
-HEADLESS=true
-ENABLE_CRAWL4AI=true
+```bash
+cp .env.example .env
 ```
+
+Then edit `.env` with your real Telegram bot token.
 
 Create an authenticated WatchFacts browser session:
 
@@ -77,6 +76,13 @@ python -m app.main
 
 | Command | Description |
 | --- | --- |
+| `make init` | Create `data/`, `logs/`, and `.env` from `.env.example` when missing |
+| `make build` | Build the Docker image |
+| `make up` | Start the bot with Docker Compose |
+| `make down` | Stop Docker Compose services |
+| `make logs` | Follow bot logs |
+| `make shell` | Open a shell in the bot container |
+| `make check` | Run lightweight repository checks |
 | `python scripts/login.py` | Open Chromium for manual WatchFacts login and save browser state |
 | `python -m app.main` | Run the Telegram bot locally |
 | `docker compose build` | Build the Docker image |
@@ -102,14 +108,31 @@ watchfacts-bot/
 ├── data/
 │   ├── bot.db
 │   └── watchfacts_state.json
+├── docs/
 ├── logs/
 ├── Dockerfile
 ├── docker-compose.yml
+├── Makefile
 ├── requirements.txt
+├── .env.example
 ├── .env
+├── .dockerignore
 ├── .gitignore
 └── README.md
 ```
+
+## Documentation
+
+Detailed project docs live in [docs/](docs/README.md):
+
+- [Product Spec](docs/product-spec.md)
+- [Technical Spec](docs/technical-spec.md)
+- [Implementation Plan](docs/implementation-plan.md)
+- [Roadmap](docs/roadmap.md)
+- [Operations Guide](docs/operations.md)
+- [Security And Compliance](docs/security-compliance.md)
+- [Contributing](docs/contributing.md)
+- [Architecture Decisions](docs/decisions/)
 
 ## Authentication
 
@@ -211,17 +234,20 @@ Used for:
 
 ## Docker Deployment
 
+The Docker entrypoint expects the application module at `app/main.py`.
+
 Build and start the service:
 
 ```bash
-docker compose build
-docker compose up -d
+make init
+make build
+make up
 ```
 
 Follow logs:
 
 ```bash
-docker compose logs -f
+make logs
 ```
 
 Example `docker-compose.yml` service:
