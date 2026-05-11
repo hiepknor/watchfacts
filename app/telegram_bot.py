@@ -106,6 +106,11 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
 
 
 def run_bot(settings: Settings, workflow: SearchWorkflow | None = None) -> None:
+    if workflow is None:
+        from app.search import WatchFactsSearchWorkflow
+
+        workflow = WatchFactsSearchWorkflow(settings)
+
     application = build_application(settings, workflow)
     logger.info("Starting WatchFacts Telegram bot")
     application.run_polling()

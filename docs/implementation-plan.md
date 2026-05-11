@@ -210,9 +210,9 @@ Likely files:
 
 Acceptance:
 
-- [ ] `data/bot.db` is created automatically.
-- [ ] Tables exist for queries, listings, and query results.
-- [ ] SQL uses parameterized queries.
+- [x] `data/bot.db` is created automatically.
+- [x] Tables exist for queries, listings, and query results.
+- [x] SQL uses parameterized queries.
 
 Verify:
 
@@ -229,9 +229,9 @@ Likely files:
 
 Acceptance:
 
-- [ ] Telegram query triggers scrape -> parse -> match -> dedupe -> persist -> format.
-- [ ] No-result state is user-friendly.
-- [ ] Errors are logged and surfaced without secrets.
+- [x] Telegram query triggers scrape -> parse -> match -> dedupe -> persist -> format.
+- [x] No-result state is user-friendly.
+- [x] Errors are logged and surfaced without secrets.
 
 Verify:
 
