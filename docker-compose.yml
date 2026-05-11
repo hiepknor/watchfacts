@@ -1,0 +1,21 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: watchfacts-bot:local
+    container_name: watchfacts-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      HEADLESS: "${HEADLESS:-true}"
+      ENABLE_CRAWL4AI: "${ENABLE_CRAWL4AI:-true}"
+      WATCHFACTS_URL: "${WATCHFACTS_URL:-https://watchfacts.com/simon-match-making}"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    shm_size: "1gb"
+    init: true
+    command: ["python", "-m", "app.main"]
