@@ -68,35 +68,33 @@ async def fetch_watchfacts_html(
 
         playwright_factory = async_playwright
 
-    browser = None
-    context = None
-    try:
-        async with playwright_factory() as playwright:
-            browser = await playwright.chromium.launch(headless=settings.headless)
+    async with playwright_factory() as playwright:
+        browser = await playwright.chromium.launch(headless=settings.headless)
+        try:
             context = await browser.new_context(storage_state=state_path)
-            page = await context.new_page()
-            response = await page.goto(
-                settings.watchfacts_url,
-                wait_until="networkidle",
-                timeout=timeout_ms,
-            )
-            if response is not None and response.status >= 400:
-                raise ScraperError(
-                    f"WatchFacts navigation failed with HTTP {response.status}"
+            try:
+                page = await context.new_page()
+                response = await page.goto(
+                    settings.watchfacts_url,
+                    wait_until="networkidle",
+                    timeout=timeout_ms,
                 )
+                if response is not None and response.status >= 400:
+                    raise ScraperError(
+                        f"WatchFacts navigation failed with HTTP {response.status}"
+                    )
 
-            html = await page.content()
-            final_url = getattr(page, "url", settings.watchfacts_url)
-            if _looks_unauthenticated(final_url, html):
-                raise BrowserSessionError(
-                    "Saved browser session appears expired. "
-                    "Run `python scripts/login.py` again."
-                )
-            return ScrapeResult(html=html, final_url=final_url)
-    finally:
-        if context is not None:
-            await context.close()
-        if browser is not None:
+                html = await page.content()
+                final_url = getattr(page, "url", settings.watchfacts_url)
+                if _looks_unauthenticated(final_url, html):
+                    raise BrowserSessionError(
+                        "Saved browser session appears expired. "
+                        "Run `python scripts/login.py` again."
+                    )
+                return ScrapeResult(html=html, final_url=final_url)
+            finally:
+                await context.close()
+        finally:
             await browser.close()
 
 

@@ -20,6 +20,7 @@ LISTING_SELECTORS = [
     ".listing",
     ".listing-card",
     ".watch-listing",
+    ".product",
 ]
 
 
@@ -38,7 +39,11 @@ def _find_listing_nodes(soup: BeautifulSoup) -> list[Tag]:
 
 
 def _parse_listing_node(node: Tag) -> ListingCandidate | None:
-    listing_text = _field_text(node, "listing-text", ".listing-text, .text, .title")
+    listing_text = _field_text(
+        node,
+        "listing-text",
+        ".product-description .title-link, .listing-text, .text, .title",
+    )
     if not listing_text:
         listing_text = _clean_text(node.get_text(" ", strip=True))
     if not listing_text:
@@ -46,8 +51,16 @@ def _parse_listing_node(node: Tag) -> ListingCandidate | None:
 
     return ListingCandidate(
         listing_text=listing_text,
-        seller=_field_text(node, "seller", ".seller, .seller-name"),
-        posted_date=_field_text(node, "posted-date", ".posted-date, .date, time"),
+        seller=_field_text(
+            node,
+            "seller",
+            ".product-rate-removed .blur-premium, .seller, .seller-name",
+        ),
+        posted_date=_field_text(
+            node,
+            "posted-date",
+            '[id^="countDownText"] .text-dark, .posted-date, .date, time',
+        ),
         image_url=_image_url(node),
         source_url=_source_url(node),
     )

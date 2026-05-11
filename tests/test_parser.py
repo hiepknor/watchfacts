@@ -30,5 +30,51 @@ def test_parse_listings_handles_missing_fields_gracefully() -> None:
     )
 
 
+def test_parse_listings_extracts_live_watchfacts_product_cards() -> None:
+    html = """
+    <html>
+      <body>
+        <div class="product">
+          <div class="card shadow-sm">
+            <div class="product-image">
+              <a href="/flash-sales/1566977?highlight=116500">
+                <img src="https://watchfacts.example/image.jpg" />
+              </a>
+            </div>
+            <div class="product-description" id="1566977">
+              <a class="title-link" href="/flash-sales/1566977?highlight=116500">
+                2021 RLX
+                <mark>116500</mark>
+                Retail ready
+                Watch + Card
+                $26 000.00 USD
+              </a>
+            </div>
+            <div class="product-rate-removed">
+              <span class="link-dark">
+                <span class="blur-premium">Devin Schonauer</span>
+              </span>
+            </div>
+            <span id="countDownText-abc">
+              Posted:
+              <span class="text-dark">May 5, 2026</span>
+            </span>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+
+    assert parse_listings(html) == [
+        ListingCandidate(
+            listing_text="2021 RLX 116500 Retail ready Watch + Card $26 000.00 USD",
+            seller="Devin Schonauer",
+            posted_date="May 5, 2026",
+            image_url="https://watchfacts.example/image.jpg",
+            source_url="/flash-sales/1566977?highlight=116500",
+        )
+    ]
+
+
 def test_parse_listings_returns_empty_list_when_no_listing_container_exists() -> None:
     assert parse_listings("<html><body><p>No listings here</p></body></html>") == []
