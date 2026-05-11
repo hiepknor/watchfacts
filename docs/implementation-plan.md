@@ -171,9 +171,9 @@ Likely files:
 
 Acceptance:
 
-- [ ] `python scripts/login.py` opens Chromium for manual login.
-- [ ] Authenticated state is saved to `data/watchfacts_state.json`.
-- [ ] Script does not ask for or store passwords.
+- [x] `python scripts/login.py` opens Chromium for manual login.
+- [x] Authenticated state is saved to `data/watchfacts_state.json`.
+- [x] Script does not ask for or store passwords.
 
 Verify:
 
@@ -189,9 +189,9 @@ Likely files:
 
 Acceptance:
 
-- [ ] Scraper loads existing browser state.
-- [ ] Scraper navigates to configured WatchFacts URL.
-- [ ] Missing/expired session produces a clear error.
+- [x] Scraper loads existing browser state.
+- [x] Scraper navigates to configured WatchFacts URL.
+- [x] Missing/expired session produces a clear error.
 
 Verify:
 
