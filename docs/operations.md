@@ -6,9 +6,8 @@
 2. Run `make init`.
 3. Edit `.env` with the real Telegram bot token and WatchFacts URL if needed.
 4. Create browser state with `python scripts/login.py`.
-5. Run `make build`.
-6. Run `make up`.
-7. Inspect startup with `make logs`.
+5. Run `make deploy`.
+6. Inspect startup with `make logs` if needed.
 
 The bot expects `data/watchfacts_state.json` to exist before the first real search.
 
@@ -61,9 +60,16 @@ make restart
 Restart after updating code:
 
 ```bash
-git pull
-make build
-make restart
+make deploy
+```
+
+`make deploy` runs `git pull --ff-only`, builds the Docker image, force-recreates
+the bot container, prints Compose status, and shows recent startup logs.
+
+If you are deploying local unpushed changes, use:
+
+```bash
+make deploy SKIP_PULL=1
 ```
 
 Status:

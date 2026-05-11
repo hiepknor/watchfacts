@@ -2,16 +2,22 @@ SHELL := /bin/sh
 
 COMPOSE ?= docker compose
 SERVICE ?= bot
+LOG_LINES ?= 80
+SKIP_PULL ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init build up down restart logs ps shell run login check clean
+.PHONY: help init verify-env pull build deploy update up down restart logs ps shell run login check clean
 
 help:
 	@printf "%s\n" "watchfacts-bot commands"
 	@printf "%s\n" ""
 	@printf "%s\n" "  make init     Create local runtime directories and .env from .env.example when missing"
+	@printf "%s\n" "  make verify-env Check server runtime files before deploy"
+	@printf "%s\n" "  make pull     Pull latest git changes unless SKIP_PULL=1"
 	@printf "%s\n" "  make build    Build Docker image"
+	@printf "%s\n" "  make deploy   Pull, build, recreate bot, show status and startup logs"
+	@printf "%s\n" "  make update   Alias for deploy"
 	@printf "%s\n" "  make up       Start bot with Docker Compose"
 	@printf "%s\n" "  make down     Stop Docker Compose services"
 	@printf "%s\n" "  make restart  Restart bot service"
@@ -27,8 +33,26 @@ init:
 	@mkdir -p data logs
 	@if [ ! -f .env ]; then cp .env.example .env; fi
 
+verify-env: init
+	@test -s .env || { printf "%s\n" "Missing .env. Run make init and edit .env."; exit 1; }
+	@test -s data/watchfacts_state.json || { printf "%s\n" "Missing data/watchfacts_state.json. Run make login on a machine with browser access."; exit 1; }
+
+pull:
+	@if [ "$(SKIP_PULL)" = "1" ]; then \
+		printf "%s\n" "Skipping git pull because SKIP_PULL=1"; \
+	else \
+		git pull --ff-only; \
+	fi
+
 build:
 	$(COMPOSE) build
+
+deploy: verify-env pull build
+	$(COMPOSE) up -d --force-recreate $(SERVICE)
+	$(COMPOSE) ps
+	$(COMPOSE) logs --tail=$(LOG_LINES) $(SERVICE)
+
+update: deploy
 
 up: init
 	$(COMPOSE) up -d
