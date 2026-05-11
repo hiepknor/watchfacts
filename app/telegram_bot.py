@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import secrets
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,7 +15,15 @@ from app.config import Settings
 logger = logging.getLogger(__name__)
 
 
-START_MESSAGE = "Send a WatchFacts search query, for example: 228253a choco"
+START_MESSAGE = (
+    "🔎 Dealer Scan Bot\n\n"
+    "Gửi mã đồng hồ hoặc mô tả ngắn để quét WatchFacts.\n\n"
+    "Ví dụ:\n"
+    "• 7118/1a grey\n"
+    "• 116500 black\n"
+    "• 5712 blue\n\n"
+    "Mẹo: thêm màu dial, năm, tình trạng hoặc khoảng giá để kết quả gọn hơn."
+)
 EMPTY_QUERY_MESSAGE = "Please send a non-empty WatchFacts search query."
 PROCESSING_MESSAGE = (
     "🔎 Đang quét WatchFacts\n"
@@ -23,6 +32,10 @@ PROCESSING_MESSAGE = (
 WORKFLOW_KEY = "search_workflow"
 PROCESSING_MIN_SECONDS_KEY = "processing_min_seconds"
 DEFAULT_PROCESSING_MIN_SECONDS = 1.0
+RESULT_LIMIT_KEY = "result_limit"
+DEFAULT_RESULT_LIMIT = 5
+RESULT_PAGES_KEY = "result_pages"
+MORE_RESULTS_PREFIX = "more_results:"
 
 
 @dataclass(frozen=True)
@@ -102,20 +115,80 @@ async def handle_text_message(update, context) -> None:
             started_at=processing_started_at,
             min_seconds=_processing_min_seconds(context),
         )
-        await send_search_results(message, results)
+        await send_search_results(
+            context,
+            message,
+            results,
+            result_limit=_result_limit(context),
+        )
 
 
-async def send_search_results(message, results: list[SearchResult]) -> None:
+async def send_search_results(
+    context,
+    message,
+    results: list[SearchResult],
+    *,
+    result_limit: int = DEFAULT_RESULT_LIMIT,
+) -> None:
     if not results:
         await _maybe_await(message.reply_text("No matching listings found."))
         return
 
-    for result in results:
-        caption = format_search_result_caption(result)
-        if result.image_url:
-            await _maybe_await(message.reply_photo(photo=result.image_url, caption=caption))
-        else:
-            await _maybe_await(message.reply_text(caption))
+    visible_results = results[:result_limit]
+    await _send_result_batch(message, visible_results)
+
+    if len(results) > len(visible_results):
+        token = _store_result_page(
+            context,
+            results=results,
+            next_offset=len(visible_results),
+            result_limit=result_limit,
+        )
+        await _maybe_await(
+            message.reply_text(
+                format_result_limit_notice(len(visible_results), len(results)),
+                reply_markup=_more_results_markup(token, len(results) - len(visible_results)),
+            )
+        )
+
+
+async def handle_more_results(update, context) -> None:
+    callback_query = getattr(update, "callback_query", None)
+    if callback_query is None:
+        return
+
+    data = getattr(callback_query, "data", "") or ""
+    token = data.removeprefix(MORE_RESULTS_PREFIX)
+    page = _get_result_page(context, token)
+    if not token or page is None:
+        await _maybe_await(callback_query.answer("Kết quả đã hết hạn. Vui lòng search lại."))
+        return
+
+    await _maybe_await(callback_query.answer("Đang gửi thêm kết quả..."))
+    message = getattr(callback_query, "message", None)
+    if message is None:
+        return
+
+    results = page["results"]
+    offset = page["next_offset"]
+    limit = page["result_limit"]
+    next_results = results[offset : offset + limit]
+    next_offset = offset + len(next_results)
+
+    await _send_result_batch(message, next_results)
+
+    remaining = len(results) - next_offset
+    if remaining > 0:
+        page["next_offset"] = next_offset
+        await _maybe_await(
+            message.reply_text(
+                format_more_results_notice(next_offset, len(results)),
+                reply_markup=_more_results_markup(token, remaining),
+            )
+        )
+    else:
+        _remove_result_page(context, token)
+        await _maybe_await(message.reply_text("✅ Đã gửi hết kết quả."))
 
 
 def format_search_results(results: list[SearchResult]) -> str:
@@ -146,6 +219,22 @@ def format_search_result_caption(result: SearchResult) -> str:
     return "\n\n".join(sections)
 
 
+def format_result_limit_notice(visible_count: int, total_count: int) -> str:
+    return (
+        f"📊 Tìm thấy {total_count} kết quả.\n"
+        f"Hiển thị {visible_count} kết quả đầu tiên để tránh spam.\n"
+        "Bấm “Xem thêm” nếu muốn nhận thêm kết quả.\n"
+        "Gợi ý: thêm màu dial, năm, tình trạng hoặc khoảng giá để lọc chính xác hơn."
+    )
+
+
+def format_more_results_notice(visible_count: int, total_count: int) -> str:
+    return (
+        f"📊 Đã hiển thị {visible_count}/{total_count} kết quả.\n"
+        "Bấm “Xem thêm” để nhận batch tiếp theo."
+    )
+
+
 def format_posted_date(value: str) -> str:
     normalized = value.split("·", maxsplit=1)[0].strip()
     for date_format in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d %H:%M:%S"):
@@ -157,11 +246,12 @@ def format_posted_date(value: str) -> str:
 
 
 def build_application(settings: Settings, workflow: SearchWorkflow | None = None):
-    from telegram.ext import Application, CommandHandler, MessageHandler, filters
+    from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
     application = Application.builder().token(settings.telegram_bot_token).build()
     application.bot_data[WORKFLOW_KEY] = workflow or PlaceholderSearchWorkflow()
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CallbackQueryHandler(handle_more_results, pattern=f"^{MORE_RESULTS_PREFIX}"))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
     )
@@ -193,6 +283,73 @@ def _processing_min_seconds(context) -> float:
         return max(0.0, float(value))
     except (TypeError, ValueError):
         return DEFAULT_PROCESSING_MIN_SECONDS
+
+
+def _result_limit(context) -> int:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(RESULT_LIMIT_KEY, DEFAULT_RESULT_LIMIT)
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return DEFAULT_RESULT_LIMIT
+
+
+async def _send_result_batch(message, results: list[SearchResult]) -> None:
+    for result in results:
+        caption = format_search_result_caption(result)
+        if result.image_url:
+            await _maybe_await(message.reply_photo(photo=result.image_url, caption=caption))
+        else:
+            await _maybe_await(message.reply_text(caption))
+
+
+def _store_result_page(
+    context,
+    *,
+    results: list[SearchResult],
+    next_offset: int,
+    result_limit: int,
+) -> str:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    pages = bot_data.setdefault(RESULT_PAGES_KEY, {})
+    token = secrets.token_urlsafe(8)
+    pages[token] = {
+        "results": results,
+        "next_offset": next_offset,
+        "result_limit": result_limit,
+    }
+    return token
+
+
+def _get_result_page(context, token: str):
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    pages = bot_data.get(RESULT_PAGES_KEY, {})
+    return pages.get(token)
+
+
+def _remove_result_page(context, token: str) -> None:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    pages = bot_data.get(RESULT_PAGES_KEY, {})
+    pages.pop(token, None)
+
+
+def _more_results_markup(token: str, remaining_count: int):
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    f"Xem thêm {remaining_count}",
+                    callback_data=f"{MORE_RESULTS_PREFIX}{token}",
+                )
+            ]
+        ]
+    )
 
 
 async def _send_typing_action(message, context) -> None:
