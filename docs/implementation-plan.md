@@ -1,0 +1,288 @@
+# Implementation Plan
+
+## Overview
+
+Build the bot in small, verifiable phases. Each phase should leave the repo in a working state and should be committed separately.
+
+## Phase 0: Foundation
+
+### Task 0.1: Runtime Scaffold
+
+Status: mostly complete.
+
+Acceptance:
+
+- [x] `Dockerfile` exists and installs Python dependencies plus Playwright Chromium.
+- [x] `docker-compose.yml` mounts `data/` and `logs/`.
+- [x] `Makefile` wraps common commands.
+- [x] `.env.example`, `.gitignore`, and `.dockerignore` exist.
+
+Verify:
+
+```bash
+make check
+make build
+docker compose config
+```
+
+### Task 0.2: Documentation Baseline
+
+Acceptance:
+
+- [x] README explains quick start and commands.
+- [x] AGENT.md defines project context and agent rules.
+- [x] Specs, roadmap, operations, security, and ADR docs exist.
+
+Verify:
+
+```bash
+git diff --check
+```
+
+## Phase 1: Core Application Skeleton
+
+### Task 1.1: Add Config Module
+
+Description: Implement typed environment loading and path constants.
+
+Acceptance:
+
+- [ ] `app/config.py` loads required and optional environment variables.
+- [ ] Missing `TELEGRAM_BOT_TOKEN` fails with a clear config error.
+- [ ] Boolean values support common forms such as `true`, `false`, `1`, and `0`.
+
+Verify:
+
+```bash
+python -m pytest tests/test_config.py
+python -m compileall app
+```
+
+Likely files:
+
+- `app/config.py`
+- `tests/test_config.py`
+
+### Task 1.2: Add App Entrypoint
+
+Description: Add `app/main.py` that initializes config and starts the Telegram bot.
+
+Acceptance:
+
+- [ ] `python -m app.main` imports successfully.
+- [ ] Startup logs do not include secrets.
+- [ ] Missing config exits clearly.
+
+Verify:
+
+```bash
+python -m compileall app
+```
+
+Likely files:
+
+- `app/__init__.py`
+- `app/main.py`
+
+### Task 1.3: Add Telegram Bot Shell
+
+Description: Register basic Telegram handlers and return placeholder responses until search is implemented.
+
+Acceptance:
+
+- [ ] `/start` returns a short usage message.
+- [ ] Empty messages are rejected.
+- [ ] Text messages call a search workflow interface.
+
+Verify:
+
+```bash
+python -m pytest tests/test_telegram_bot.py
+```
+
+Likely files:
+
+- `app/telegram_bot.py`
+- `tests/test_telegram_bot.py`
+
+## Phase 2: Deterministic Search Pipeline
+
+### Task 2.1: Matching
+
+Acceptance:
+
+- [ ] Query normalization is case-insensitive.
+- [ ] All query tokens are required.
+- [ ] Tests cover model/reference and descriptor examples.
+
+Verify:
+
+```bash
+python -m pytest tests/test_matcher.py
+```
+
+Likely files:
+
+- `app/matcher.py`
+- `tests/test_matcher.py`
+
+### Task 2.2: Deduplication
+
+Acceptance:
+
+- [ ] Dedupe key uses normalized text, seller, and posted date.
+- [ ] Repeated listings are removed deterministically.
+- [ ] Tests cover whitespace/case/punctuation normalization.
+
+Verify:
+
+```bash
+python -m pytest tests/test_dedupe.py
+```
+
+Likely files:
+
+- `app/dedupe.py`
+- `tests/test_dedupe.py`
+
+### Task 2.3: Parser
+
+Acceptance:
+
+- [ ] Parser extracts listing candidates from fixture HTML.
+- [ ] Missing fields are handled gracefully.
+- [ ] Parser tests do not need network access.
+
+Verify:
+
+```bash
+python -m pytest tests/test_parser.py
+```
+
+Likely files:
+
+- `app/parser.py`
+- `tests/fixtures/watchfacts_listing.html`
+- `tests/test_parser.py`
+
+## Phase 3: Browser Integration
+
+### Task 3.1: Login Script
+
+Acceptance:
+
+- [ ] `python scripts/login.py` opens Chromium for manual login.
+- [ ] Authenticated state is saved to `data/watchfacts_state.json`.
+- [ ] Script does not ask for or store passwords.
+
+Verify:
+
+```bash
+python -m compileall scripts
+```
+
+Likely files:
+
+- `scripts/login.py`
+
+### Task 3.2: Scraper
+
+Acceptance:
+
+- [ ] Scraper loads existing browser state.
+- [ ] Scraper navigates to configured WatchFacts URL.
+- [ ] Missing/expired session produces a clear error.
+
+Verify:
+
+```bash
+python -m pytest tests/test_scraper.py
+```
+
+Likely files:
+
+- `app/scraper.py`
+- `tests/test_scraper.py`
+
+## Phase 4: Persistence
+
+### Task 4.1: SQLite Schema
+
+Acceptance:
+
+- [ ] `data/bot.db` is created automatically.
+- [ ] Tables exist for queries, listings, and query results.
+- [ ] SQL uses parameterized queries.
+
+Verify:
+
+```bash
+python -m pytest tests/test_db.py
+```
+
+Likely files:
+
+- `app/db.py`
+- `tests/test_db.py`
+
+### Task 4.2: Search Workflow Integration
+
+Acceptance:
+
+- [ ] Telegram query triggers scrape -> parse -> match -> dedupe -> persist -> format.
+- [ ] No-result state is user-friendly.
+- [ ] Errors are logged and surfaced without secrets.
+
+Verify:
+
+```bash
+python -m pytest
+make build
+```
+
+Likely files:
+
+- `app/telegram_bot.py`
+- `app/scraper.py`
+- `app/parser.py`
+- `app/matcher.py`
+- `app/dedupe.py`
+- `app/db.py`
+
+## Phase 5: Production Hardening
+
+### Task 5.1: Logging And Observability
+
+Acceptance:
+
+- [ ] Structured logs cover startup, query start/end, result counts, and error categories.
+- [ ] Logs do not contain tokens, cookies, or browser state.
+
+Verify:
+
+```bash
+python -m pytest
+```
+
+### Task 5.2: Deployment Runbook
+
+Acceptance:
+
+- [ ] `docs/operations.md` includes first deploy, restart, logs, backup, and restore steps.
+- [ ] README links to operations docs.
+
+Verify:
+
+```bash
+git diff --check
+```
+
+## Checkpoints
+
+After each phase:
+
+- [ ] `make check` passes.
+- [ ] Relevant tests pass.
+- [ ] Docker build passes when runtime files changed.
+- [ ] No secrets are staged.
+- [ ] README/AGENT/docs are updated when commands or architecture change.
