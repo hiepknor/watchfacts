@@ -2,7 +2,7 @@
 
 ## Overview
 
-The initial implementation phases are complete. Keep this document as the project baseline and use it to verify that future changes preserve the intended architecture.
+The initial implementation phases and the continuous-improvement loop are complete. Keep this document as the project baseline and use it to verify that future changes preserve the intended architecture.
 
 For new work, add a focused task under "Future Work" before implementing if the change affects behavior, data retention, scraping strategy, or deployment.
 
@@ -294,7 +294,6 @@ git diff --check
 
 Each item needs a focused spec before implementation:
 
-- Continuous improvement loop for feedback buttons, issue storage, suspicious-result detection, and regression export. See [Continuous Improvement Spec](continuous-improvement.md).
 - Multi-page crawling beyond the current search response.
 - Scheduled refresh jobs and proactive alerts.
 - Dealer/seller filters.
@@ -304,7 +303,9 @@ Each item needs a focused spec before implementation:
 - Additional watch sources.
 - Query operators such as optional terms, quoted phrases, or negative filters.
 
-## Future Phase 6: Continuous Improvement Loop
+## Phase 6: Continuous Improvement Loop
+
+Status: complete.
 
 Goal: reduce manual back-and-forth when search results are incomplete or wrong by collecting issue evidence directly from Telegram and turning it into regression tests.
 
@@ -448,8 +449,9 @@ Likely files:
 After each phase:
 
 - [x] Baseline phases 0-5 complete.
-- [ ] `make check` passes for every change.
-- [ ] Relevant tests pass for every code change.
-- [ ] Docker build passes when runtime files changed.
-- [ ] No secrets are staged.
-- [ ] README and docs are updated when commands or architecture change.
+- [x] Phase 6 complete and deployed.
+- [x] `make check` passes for every change.
+- [x] Relevant tests pass for every code change.
+- [x] Docker build passes when runtime files changed.
+- [x] No secrets are staged.
+- [x] README and docs are updated when commands or architecture change.
