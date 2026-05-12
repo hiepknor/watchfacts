@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from app.config import Settings
+from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
 
 
 logger = logging.getLogger(__name__)
@@ -33,8 +33,7 @@ PROCESSING_MESSAGE = (
 WORKFLOW_KEY = "search_workflow"
 PROCESSING_MIN_SECONDS_KEY = "processing_min_seconds"
 DEFAULT_PROCESSING_MIN_SECONDS = 1.0
-RESULT_LIMIT_KEY = "result_limit"
-DEFAULT_RESULT_LIMIT = 5
+TELEGRAM_RESULT_LIMIT_KEY = "telegram_result_limit"
 RESULT_PAGES_KEY = "result_pages"
 MORE_RESULTS_PREFIX = "more_results:"
 ALLOWED_USER_IDS_KEY = "allowed_user_ids"
@@ -139,7 +138,7 @@ async def send_search_results(
     message,
     results: list[SearchResult],
     *,
-    result_limit: int = DEFAULT_RESULT_LIMIT,
+    result_limit: int = DEFAULT_TELEGRAM_RESULT_LIMIT,
 ) -> None:
     if not results:
         await _maybe_await(message.reply_text("No matching listings found."))
@@ -267,6 +266,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application = Application.builder().token(settings.telegram_bot_token).build()
     application.bot_data[WORKFLOW_KEY] = workflow or PlaceholderSearchWorkflow()
     application.bot_data[ALLOWED_USER_IDS_KEY] = settings.telegram_allowed_user_ids
+    application.bot_data[TELEGRAM_RESULT_LIMIT_KEY] = settings.telegram_result_limit
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CallbackQueryHandler(handle_more_results, pattern=f"^{MORE_RESULTS_PREFIX}"))
     application.add_handler(
@@ -305,11 +305,11 @@ def _processing_min_seconds(context) -> float:
 def _result_limit(context) -> int:
     application = getattr(context, "application", None)
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
-    value = bot_data.get(RESULT_LIMIT_KEY, DEFAULT_RESULT_LIMIT)
+    value = bot_data.get(TELEGRAM_RESULT_LIMIT_KEY, DEFAULT_TELEGRAM_RESULT_LIMIT)
     try:
         return max(1, int(value))
     except (TypeError, ValueError):
-        return DEFAULT_RESULT_LIMIT
+        return DEFAULT_TELEGRAM_RESULT_LIMIT
 
 
 def _allowed_user_ids(context) -> tuple[int, ...]:

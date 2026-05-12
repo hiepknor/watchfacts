@@ -63,6 +63,8 @@ Then edit `.env` with your real Telegram bot token.
 Leave `TELEGRAM_ALLOWED_USER_IDS` empty if everyone may use the bot. Set it to
 one or more Telegram user IDs, separated by commas, to restrict usage to those
 owners only.
+Set `TELEGRAM_RESULT_LIMIT` to control how many results are sent per Telegram
+batch.
 
 Create an authenticated WatchFacts browser session:
 
@@ -179,6 +181,12 @@ Multiple owners are supported:
 
 ```bash
 TELEGRAM_ALLOWED_USER_IDS=123456789,987654321
+```
+
+Control the number of results sent per button click:
+
+```bash
+TELEGRAM_RESULT_LIMIT=5
 ```
 
 Send a watch query to the bot:

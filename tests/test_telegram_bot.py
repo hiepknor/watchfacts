@@ -7,11 +7,10 @@ from types import SimpleNamespace
 from app.telegram_bot import (
     EMPTY_QUERY_MESSAGE,
     ALLOWED_USER_IDS_KEY,
-    DEFAULT_RESULT_LIMIT,
     PROCESSING_MIN_SECONDS_KEY,
     PROCESSING_MESSAGE,
-    RESULT_LIMIT_KEY,
     START_MESSAGE,
+    TELEGRAM_RESULT_LIMIT_KEY,
     UNAUTHORIZED_MESSAGE,
     WORKFLOW_KEY,
     SearchResult,
@@ -21,6 +20,7 @@ from app.telegram_bot import (
     handle_text_message,
     start_command,
 )
+from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT
 
 
 class FakeSentMessage:
@@ -102,7 +102,7 @@ def make_context(
     bot_data = {PROCESSING_MIN_SECONDS_KEY: 0}
     bot_data[ALLOWED_USER_IDS_KEY] = allowed_user_ids
     if result_limit is not None:
-        bot_data[RESULT_LIMIT_KEY] = result_limit
+        bot_data[TELEGRAM_RESULT_LIMIT_KEY] = result_limit
     if workflow is not None:
         bot_data[WORKFLOW_KEY] = workflow
     return SimpleNamespace(application=SimpleNamespace(bot=FakeBot(), bot_data=bot_data))
@@ -180,7 +180,7 @@ def test_text_messages_call_search_workflow() -> None:
     )
 
     assert workflow.queries == ["228253a choco"]
-    assert message.replies == [format_result_summary(1, DEFAULT_RESULT_LIMIT)]
+    assert message.replies == [format_result_summary(1, DEFAULT_TELEGRAM_RESULT_LIMIT)]
     assert message.sent_messages[0].text == PROCESSING_MESSAGE
     assert message.sent_messages[0].deleted is True
     assert context.application.bot.chat_actions == [(12345, "typing")]
@@ -275,7 +275,7 @@ def test_text_messages_send_each_result_as_separate_photo() -> None:
     assert message.photos[1][0] == "https://image-2.jpg"
     assert "Forest" in message.photos[1][1]
     assert "23/04/2026" in message.photos[1][1]
-    assert message.replies == [format_result_summary(2, DEFAULT_RESULT_LIMIT), "✅ Đã gửi hết kết quả."]
+    assert message.replies == [format_result_summary(2, DEFAULT_TELEGRAM_RESULT_LIMIT), "✅ Đã gửi hết kết quả."]
     assert context.application.bot.chat_actions == [(12345, "typing")]
 
 
@@ -467,7 +467,7 @@ def test_text_messages_fallback_to_text_when_image_is_missing() -> None:
     )
 
     assert message.photos == []
-    assert message.replies == [format_result_summary(1, DEFAULT_RESULT_LIMIT)]
+    assert message.replies == [format_result_summary(1, DEFAULT_TELEGRAM_RESULT_LIMIT)]
     notice_markup = message.sent_messages[-1].reply_markup
     token = notice_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
     callback = FakeCallbackQuery(f"more_results:{token}", message)
@@ -495,7 +495,7 @@ def test_format_posted_date_handles_reposted_suffix() -> None:
 
 
 def test_default_result_limit_is_conservative_for_telegram_chat() -> None:
-    assert DEFAULT_RESULT_LIMIT == 5
+    assert DEFAULT_TELEGRAM_RESULT_LIMIT == 5
 
 
 def test_search_errors_are_logged_without_query_text(caplog) -> None:

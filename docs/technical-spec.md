@@ -43,6 +43,7 @@ Expected environment:
 | --- | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Yes | None | Telegram bot token |
 | `TELEGRAM_ALLOWED_USER_IDS` | No | Empty | Comma-separated owner Telegram user ids; empty allows everyone |
+| `TELEGRAM_RESULT_LIMIT` | No | `5` | Number of results to send per Telegram pagination batch |
 | `WATCHFACTS_URL` | Yes | `https://watchfacts.com/simon-match-making` | WatchFacts page to crawl |
 | `HEADLESS` | No | `true` | Browser headless mode |
 | `ENABLE_CRAWL4AI` | No | `true` | Enable optional Crawl4AI extraction layer |
@@ -54,6 +55,7 @@ Configuration rules:
 - Fail fast if required values are missing.
 - Treat boolean env values case-insensitively.
 - Restrict Telegram handlers to configured user ids when `TELEGRAM_ALLOWED_USER_IDS` is non-empty.
+- Validate Telegram result limit as a positive integer.
 
 ## Runtime Architecture
 

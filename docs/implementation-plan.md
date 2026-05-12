@@ -94,6 +94,7 @@ Acceptance:
 - [x] Empty messages are rejected.
 - [x] Text messages call a search workflow interface.
 - [x] Optional Telegram user id allowlist restricts bot usage when configured.
+- [x] Telegram pagination result limit can be configured from `.env`.
 
 Verify:
 

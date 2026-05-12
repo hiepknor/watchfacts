@@ -32,6 +32,7 @@ Access control:
 - `TELEGRAM_ALLOWED_USER_IDS=` means all Telegram users may use the bot.
 - `TELEGRAM_ALLOWED_USER_IDS=123456789` means only that Telegram user id may use it.
 - Multiple owner ids can be comma-separated.
+- `TELEGRAM_RESULT_LIMIT=5` controls how many results each Telegram button click sends.
 
 ## Docker Build
 

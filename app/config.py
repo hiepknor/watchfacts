@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 
 DEFAULT_WATCHFACTS_URL = "https://watchfacts.com/simon-match-making"
+DEFAULT_TELEGRAM_RESULT_LIMIT = 5
 
 
 class ConfigError(ValueError):
@@ -19,6 +20,7 @@ class ConfigError(ValueError):
 class Settings:
     telegram_bot_token: str
     telegram_allowed_user_ids: tuple[int, ...]
+    telegram_result_limit: int
     watchfacts_url: str
     headless: bool
     enable_crawl4ai: bool
@@ -59,6 +61,16 @@ def parse_user_ids(value: str, *, name: str) -> tuple[int, ...]:
     return tuple(dict.fromkeys(user_ids))
 
 
+def parse_positive_int(value: str, *, name: str) -> int:
+    try:
+        parsed = int(value.strip())
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be a positive integer") from exc
+    if parsed <= 0:
+        raise ConfigError(f"{name} must be a positive integer")
+    return parsed
+
+
 def load_settings(
     env: Mapping[str, str] | None = None,
     *,
@@ -79,6 +91,10 @@ def load_settings(
         source.get("TELEGRAM_ALLOWED_USER_IDS", ""),
         name="TELEGRAM_ALLOWED_USER_IDS",
     )
+    telegram_result_limit = parse_positive_int(
+        source.get("TELEGRAM_RESULT_LIMIT", str(DEFAULT_TELEGRAM_RESULT_LIMIT)),
+        name="TELEGRAM_RESULT_LIMIT",
+    )
 
     watchfacts_url = source.get("WATCHFACTS_URL", DEFAULT_WATCHFACTS_URL).strip()
     if not watchfacts_url:
@@ -96,6 +112,7 @@ def load_settings(
     return Settings(
         telegram_bot_token=token,
         telegram_allowed_user_ids=telegram_allowed_user_ids,
+        telegram_result_limit=telegram_result_limit,
         watchfacts_url=watchfacts_url,
         headless=headless,
         enable_crawl4ai=enable_crawl4ai,
