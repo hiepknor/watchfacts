@@ -227,7 +227,11 @@ async def send_search_results(
     )
     await _maybe_await(
         message.reply_text(
-            format_result_summary(len(results), result_limit),
+            format_result_summary(
+                len(results),
+                result_limit,
+                similar_count=sum(len(result.similar_results) for result in results),
+            ),
             reply_markup=_results_markup(
                 token,
                 min(result_limit, len(results)),
@@ -310,13 +314,25 @@ def format_search_result_caption(result: SearchResult) -> str:
     return "\n\n".join(sections)
 
 
-def format_result_summary(total_count: int, result_limit: int) -> str:
+def format_result_summary(
+    total_count: int,
+    result_limit: int,
+    *,
+    similar_count: int = 0,
+) -> str:
     first_batch_count = min(total_count, result_limit)
+    similar_line = (
+        f"🔁 Listing tương tự đã gộp: {similar_count}\n"
+        if similar_count
+        else "🔁 Listing tương tự đã gộp: 0\n"
+    )
     return (
         "✅ Đã tìm xong\n\n"
-        f"📦 Tổng kết quả: {total_count}\n"
+        f"📦 Kết quả chính: {total_count}\n"
+        f"{similar_line}"
         f"📨 Lượt đầu: {first_batch_count} kết quả\n\n"
         "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
+        "🔎 Similar listings sẽ hiện bên trong từng kết quả.\n"
         "💡 Muốn gọn hơn: thêm màu dial, năm, tình trạng hoặc khoảng giá."
     )
 

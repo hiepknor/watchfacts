@@ -534,9 +534,11 @@ def test_text_messages_limit_large_result_sets_to_avoid_spam() -> None:
     ]
     assert message.replies[0] == (
         "✅ Đã tìm xong\n\n"
-        "📦 Tổng kết quả: 8\n"
+        "📦 Kết quả chính: 8\n"
+        "🔁 Listing tương tự đã gộp: 0\n"
         "📨 Lượt đầu: 3 kết quả\n\n"
         "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
+        "🔎 Similar listings sẽ hiện bên trong từng kết quả.\n"
         "💡 Muốn gọn hơn: thêm màu dial, năm, tình trạng hoặc khoảng giá."
     )
     assert message.sent_messages[-1].reply_markup is not None
@@ -544,6 +546,29 @@ def test_text_messages_limit_large_result_sets_to_avoid_spam() -> None:
     assert button.text == "Xem kết quả 3"
     assert message.sent_messages[0].text == PROCESSING_MESSAGE
     assert message.sent_messages[0].deleted is True
+
+
+def test_result_summary_counts_grouped_similar_listings() -> None:
+    message = FakeMessage("Fpj Elegante Titanium")
+    workflow = FakeWorkflow(
+        [
+            SearchResult(
+                "FPJ Elegante Titanium 48mm 2019 full set 780000",
+                similar_results=(
+                    SearchResult("FPJ Elegante titanium 48mm 2019 fullset 780000 hkd"),
+                    SearchResult("FPJ Elegante titanium ti 48mm2019 used 780000"),
+                ),
+            ),
+            SearchResult("FPJ Elegante Titanium 48mm 2022 Fullset HKD895,000"),
+        ]
+    )
+    context = make_context(workflow, result_limit=5)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert message.replies == [format_result_summary(2, 5, similar_count=2)]
+    assert "📦 Kết quả chính: 2" in message.replies[0]
+    assert "🔁 Listing tương tự đã gộp: 2" in message.replies[0]
 
 
 def test_more_results_callback_sends_next_batch() -> None:
