@@ -60,6 +60,9 @@ cp .env.example .env
 ```
 
 Then edit `.env` with your real Telegram bot token.
+Leave `TELEGRAM_ALLOWED_USER_IDS` empty if everyone may use the bot. Set it to
+one or more Telegram user IDs, separated by commas, to restrict usage to those
+owners only.
 
 Create an authenticated WatchFacts browser session:
 
@@ -164,6 +167,19 @@ data/watchfacts_state.json
 The bot reuses this session automatically when crawling WatchFacts.
 
 ## Telegram Usage
+
+By default, any Telegram user who can message the bot can use it. To make the
+bot owner-only, set `.env` like:
+
+```bash
+TELEGRAM_ALLOWED_USER_IDS=123456789
+```
+
+Multiple owners are supported:
+
+```bash
+TELEGRAM_ALLOWED_USER_IDS=123456789,987654321
+```
 
 Send a watch query to the bot:
 

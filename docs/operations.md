@@ -5,6 +5,8 @@
 1. Clone the repository.
 2. Run `make init`.
 3. Edit `.env` with the real Telegram bot token and WatchFacts URL if needed.
+   Set `TELEGRAM_ALLOWED_USER_IDS` to the owner Telegram user id if the bot
+   should be private. Leave it empty to allow everyone.
 4. Create browser state with `python scripts/login.py`.
 5. Run `make deploy`.
 6. Inspect startup with `make logs` if needed.
@@ -24,6 +26,12 @@ This creates:
 - `.env` copied from `.env.example` when `.env` is missing
 
 Edit `.env` with real operator values. Do not commit `.env`.
+
+Access control:
+
+- `TELEGRAM_ALLOWED_USER_IDS=` means all Telegram users may use the bot.
+- `TELEGRAM_ALLOWED_USER_IDS=123456789` means only that Telegram user id may use it.
+- Multiple owner ids can be comma-separated.
 
 ## Docker Build
 

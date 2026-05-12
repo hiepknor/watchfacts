@@ -16,6 +16,7 @@ def test_main_returns_config_error_exit_code(monkeypatch) -> None:
 def test_main_starts_bot_with_loaded_settings(monkeypatch, tmp_path) -> None:
     settings = Settings(
         telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
         watchfacts_url="https://example.test",
         headless=True,
         enable_crawl4ai=True,

@@ -2,7 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from app.config import ConfigError, DEFAULT_WATCHFACTS_URL, load_settings, parse_bool
+from app.config import (
+    ConfigError,
+    DEFAULT_WATCHFACTS_URL,
+    load_settings,
+    parse_bool,
+    parse_user_ids,
+)
 
 
 def test_load_settings_requires_telegram_token() -> None:
@@ -32,6 +38,16 @@ def test_parse_bool_rejects_unknown_values() -> None:
         parse_bool("sometimes", name="TEST_BOOL")
 
 
+def test_parse_user_ids_accepts_empty_and_comma_separated_values() -> None:
+    assert parse_user_ids("", name="TEST_IDS") == ()
+    assert parse_user_ids("123, 456,123", name="TEST_IDS") == (123, 456)
+
+
+def test_parse_user_ids_rejects_non_numeric_values() -> None:
+    with pytest.raises(ConfigError, match="TEST_IDS must contain only numeric"):
+        parse_user_ids("123,abc", name="TEST_IDS")
+
+
 def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     settings = load_settings(
         env={"TELEGRAM_BOT_TOKEN": "token"},
@@ -39,6 +55,7 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     )
 
     assert settings.telegram_bot_token == "token"
+    assert settings.telegram_allowed_user_ids == ()
     assert settings.watchfacts_url == DEFAULT_WATCHFACTS_URL
     assert settings.headless is True
     assert settings.enable_crawl4ai is True
@@ -46,3 +63,15 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.logs_dir == tmp_path / "logs"
     assert settings.db_path == tmp_path / "data" / "bot.db"
     assert settings.browser_state_path == tmp_path / "data" / "watchfacts_state.json"
+
+
+def test_load_settings_reads_allowed_telegram_user_ids(tmp_path: Path) -> None:
+    settings = load_settings(
+        env={
+            "TELEGRAM_BOT_TOKEN": "token",
+            "TELEGRAM_ALLOWED_USER_IDS": "111, 222",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.telegram_allowed_user_ids == (111, 222)

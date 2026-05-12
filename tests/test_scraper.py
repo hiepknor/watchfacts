@@ -147,6 +147,7 @@ def make_settings(tmp_path, *, state_exists: bool = True) -> Settings:
 
     return Settings(
         telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
         watchfacts_url="https://watchfacts.example/simon-match-making",
         headless=True,
         enable_crawl4ai=True,

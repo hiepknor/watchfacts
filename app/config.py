@@ -18,6 +18,7 @@ class ConfigError(ValueError):
 @dataclass(frozen=True)
 class Settings:
     telegram_bot_token: str
+    telegram_allowed_user_ids: tuple[int, ...]
     watchfacts_url: str
     headless: bool
     enable_crawl4ai: bool
@@ -37,6 +38,27 @@ def parse_bool(value: str, *, name: str) -> bool:
     raise ConfigError(f"{name} must be a boolean value such as true, false, 1, or 0")
 
 
+def parse_user_ids(value: str, *, name: str) -> tuple[int, ...]:
+    normalized = value.strip()
+    if not normalized:
+        return ()
+
+    user_ids: list[int] = []
+    for raw_part in normalized.split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+        try:
+            user_id = int(part)
+        except ValueError as exc:
+            raise ConfigError(f"{name} must contain only numeric Telegram user IDs") from exc
+        if user_id <= 0:
+            raise ConfigError(f"{name} must contain only positive Telegram user IDs")
+        user_ids.append(user_id)
+
+    return tuple(dict.fromkeys(user_ids))
+
+
 def load_settings(
     env: Mapping[str, str] | None = None,
     *,
@@ -53,6 +75,11 @@ def load_settings(
     if not token:
         raise ConfigError("TELEGRAM_BOT_TOKEN is required")
 
+    telegram_allowed_user_ids = parse_user_ids(
+        source.get("TELEGRAM_ALLOWED_USER_IDS", ""),
+        name="TELEGRAM_ALLOWED_USER_IDS",
+    )
+
     watchfacts_url = source.get("WATCHFACTS_URL", DEFAULT_WATCHFACTS_URL).strip()
     if not watchfacts_url:
         raise ConfigError("WATCHFACTS_URL must not be empty")
@@ -68,6 +95,7 @@ def load_settings(
 
     return Settings(
         telegram_bot_token=token,
+        telegram_allowed_user_ids=telegram_allowed_user_ids,
         watchfacts_url=watchfacts_url,
         headless=headless,
         enable_crawl4ai=enable_crawl4ai,

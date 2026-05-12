@@ -6,11 +6,13 @@ from types import SimpleNamespace
 
 from app.telegram_bot import (
     EMPTY_QUERY_MESSAGE,
+    ALLOWED_USER_IDS_KEY,
     DEFAULT_RESULT_LIMIT,
     PROCESSING_MIN_SECONDS_KEY,
     PROCESSING_MESSAGE,
     RESULT_LIMIT_KEY,
     START_MESSAGE,
+    UNAUTHORIZED_MESSAGE,
     WORKFLOW_KEY,
     SearchResult,
     format_result_limit_notice,
@@ -35,9 +37,10 @@ class FakeSentMessage:
 
 
 class FakeMessage:
-    def __init__(self, text: str | None = None) -> None:
+    def __init__(self, text: str | None = None, *, user_id: int = 123) -> None:
         self.text = text
         self.chat_id = 12345
+        self.from_user = SimpleNamespace(id=user_id)
         self.replies: list[str] = []
         self.photos: list[tuple[str, str]] = []
         self.sent_messages: list[FakeSentMessage] = []
@@ -80,17 +83,24 @@ class FakeBot:
 
 
 class FakeCallbackQuery:
-    def __init__(self, data: str, message: FakeMessage) -> None:
+    def __init__(self, data: str, message: FakeMessage, *, user_id: int = 123) -> None:
         self.data = data
         self.message = message
+        self.from_user = SimpleNamespace(id=user_id)
         self.answers: list[str] = []
 
     async def answer(self, text: str) -> None:
         self.answers.append(text)
 
 
-def make_context(workflow=None, *, result_limit: int | None = None):
+def make_context(
+    workflow=None,
+    *,
+    result_limit: int | None = None,
+    allowed_user_ids: tuple[int, ...] = (),
+):
     bot_data = {PROCESSING_MIN_SECONDS_KEY: 0}
+    bot_data[ALLOWED_USER_IDS_KEY] = allowed_user_ids
     if result_limit is not None:
         bot_data[RESULT_LIMIT_KEY] = result_limit
     if workflow is not None:
@@ -106,6 +116,15 @@ def test_start_command_returns_usage_message() -> None:
     assert message.replies == [START_MESSAGE]
 
 
+def test_start_command_rejects_unauthorized_user() -> None:
+    message = FakeMessage(user_id=999)
+    context = make_context(allowed_user_ids=(123,))
+
+    asyncio.run(start_command(SimpleNamespace(message=message), context))
+
+    assert message.replies == [UNAUTHORIZED_MESSAGE]
+
+
 def test_empty_messages_are_rejected() -> None:
     message = FakeMessage("   ")
     workflow = FakeWorkflow([SearchResult("unused")])
@@ -116,6 +135,28 @@ def test_empty_messages_are_rejected() -> None:
     )
 
     assert message.replies == [EMPTY_QUERY_MESSAGE]
+    assert workflow.queries == []
+    assert context.application.bot.chat_actions == []
+
+
+def test_text_messages_are_public_when_allowed_user_ids_are_empty() -> None:
+    message = FakeMessage("228253a choco", user_id=999)
+    workflow = FakeWorkflow([SearchResult("228253A choco N2")])
+    context = make_context(workflow, allowed_user_ids=())
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert workflow.queries == ["228253a choco"]
+
+
+def test_text_messages_reject_unauthorized_user_before_search() -> None:
+    message = FakeMessage("228253a choco", user_id=999)
+    workflow = FakeWorkflow([SearchResult("unused")])
+    context = make_context(workflow, allowed_user_ids=(123,))
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert message.replies == [UNAUTHORIZED_MESSAGE]
     assert workflow.queries == []
     assert context.application.bot.chat_actions == []
 
@@ -339,6 +380,17 @@ def test_more_results_callback_handles_expired_page() -> None:
     asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
 
     assert callback.answers == ["Kết quả đã hết hạn. Vui lòng search lại."]
+    assert message.replies == []
+
+
+def test_more_results_callback_rejects_unauthorized_user() -> None:
+    message = FakeMessage()
+    context = make_context(allowed_user_ids=(123,))
+    callback = FakeCallbackQuery("more_results:anything", message, user_id=999)
+
+    asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
+
+    assert callback.answers == [UNAUTHORIZED_MESSAGE]
     assert message.replies == []
 
 

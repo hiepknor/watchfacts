@@ -93,6 +93,7 @@ Acceptance:
 - [x] `/start` returns a short usage message.
 - [x] Empty messages are rejected.
 - [x] Text messages call a search workflow interface.
+- [x] Optional Telegram user id allowlist restricts bot usage when configured.
 
 Verify:
 

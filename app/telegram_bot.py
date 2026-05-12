@@ -25,6 +25,7 @@ START_MESSAGE = (
     "Mẹo: thêm màu dial, năm, tình trạng hoặc khoảng giá để kết quả gọn hơn."
 )
 EMPTY_QUERY_MESSAGE = "Please send a non-empty WatchFacts search query."
+UNAUTHORIZED_MESSAGE = "Bạn không có quyền sử dụng bot này."
 PROCESSING_MESSAGE = (
     "🔎 Đang quét WatchFacts\n"
     "⏳ Bot đang tìm listing phù hợp..."
@@ -36,6 +37,7 @@ RESULT_LIMIT_KEY = "result_limit"
 DEFAULT_RESULT_LIMIT = 5
 RESULT_PAGES_KEY = "result_pages"
 MORE_RESULTS_PREFIX = "more_results:"
+ALLOWED_USER_IDS_KEY = "allowed_user_ids"
 
 
 @dataclass(frozen=True)
@@ -66,12 +68,21 @@ class PlaceholderSearchWorkflow:
 
 async def start_command(update, context) -> None:
     message = getattr(update, "message", None)
+    if not _is_authorized(update, context):
+        if message is not None:
+            await _maybe_await(message.reply_text(UNAUTHORIZED_MESSAGE))
+        return
     if message is not None:
         await _maybe_await(message.reply_text(START_MESSAGE))
 
 
 async def handle_text_message(update, context) -> None:
     message = getattr(update, "message", None)
+    if not _is_authorized(update, context):
+        if message is not None:
+            await _maybe_await(message.reply_text(UNAUTHORIZED_MESSAGE))
+        return
+
     text = getattr(message, "text", None) if message is not None else None
     query = text.strip() if text else ""
 
@@ -155,6 +166,9 @@ async def send_search_results(
 async def handle_more_results(update, context) -> None:
     callback_query = getattr(update, "callback_query", None)
     if callback_query is None:
+        return
+    if not _is_authorized(update, context):
+        await _maybe_await(callback_query.answer(UNAUTHORIZED_MESSAGE))
         return
 
     data = getattr(callback_query, "data", "") or ""
@@ -250,6 +264,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
 
     application = Application.builder().token(settings.telegram_bot_token).build()
     application.bot_data[WORKFLOW_KEY] = workflow or PlaceholderSearchWorkflow()
+    application.bot_data[ALLOWED_USER_IDS_KEY] = settings.telegram_allowed_user_ids
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CallbackQueryHandler(handle_more_results, pattern=f"^{MORE_RESULTS_PREFIX}"))
     application.add_handler(
@@ -293,6 +308,45 @@ def _result_limit(context) -> int:
         return max(1, int(value))
     except (TypeError, ValueError):
         return DEFAULT_RESULT_LIMIT
+
+
+def _allowed_user_ids(context) -> tuple[int, ...]:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(ALLOWED_USER_IDS_KEY, ())
+    if value is None:
+        return ()
+    return tuple(int(user_id) for user_id in value)
+
+
+def _telegram_user_id(update) -> int | None:
+    effective_user = getattr(update, "effective_user", None)
+    user_id = getattr(effective_user, "id", None)
+    if user_id is not None:
+        return int(user_id)
+
+    message = getattr(update, "message", None)
+    from_user = getattr(message, "from_user", None) if message is not None else None
+    user_id = getattr(from_user, "id", None)
+    if user_id is not None:
+        return int(user_id)
+
+    callback_query = getattr(update, "callback_query", None)
+    from_user = getattr(callback_query, "from_user", None) if callback_query is not None else None
+    user_id = getattr(from_user, "id", None)
+    if user_id is not None:
+        return int(user_id)
+
+    return None
+
+
+def _is_authorized(update, context) -> bool:
+    allowed_user_ids = _allowed_user_ids(context)
+    if not allowed_user_ids:
+        return True
+
+    user_id = _telegram_user_id(update)
+    return user_id in allowed_user_ids
 
 
 async def _send_result_batch(message, results: list[SearchResult]) -> None:
