@@ -18,7 +18,10 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - As a Telegram user, I can include multiple terms and get listings that contain all required tokens.
 - As an operator, I can log in to WatchFacts manually once and let the bot reuse the saved session.
 - As an operator, I can run the bot locally or through Docker Compose.
+- As an operator, I can report incomplete or wrong Telegram results with one tap so they can become future regression cases.
+- As an operator, I can ask the bot to list suspicious or reported result issues for review.
 - As a maintainer, I can test matching, parsing, and dedupe behavior without calling external services.
+- As a maintainer, I can convert reported issue cases into deterministic tests.
 
 ## Core Flow
 
@@ -37,6 +40,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 
 - Accept plain-text Telegram messages as search queries.
 - Support `/start`, `/help`, `/settings`, and `/cancel`.
+- Support `/health` for checking whether the saved WatchFacts session is valid.
 - Ignore normal group chat messages unless the bot is mentioned at the start or the user replies to a bot message.
 - Support optional Telegram user-id allowlist.
 - Normalize query text for case-insensitive matching.
@@ -54,11 +58,14 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Reuse `data/watchfacts_state.json` for authenticated browser state.
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
 - Limit Telegram photo captions and text messages to platform-safe lengths.
+- Notify the owner in Vietnamese when WatchFacts browser session state is missing or expired.
+- Future continuous-improvement features should support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
 
 ## Non-Functional Requirements
 
 - No LLM is required for core behavior.
 - Matching must be deterministic and testable.
+- Continuous improvement must be evidence collection and review, not autonomous code mutation.
 - Telegram handlers should remain async and avoid blocking network/browser work on the event loop.
 - Secrets and browser session files must never be committed.
 - The bot must fail clearly when configuration or login state is missing.
@@ -72,6 +79,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Storing WatchFacts passwords in source code or config examples.
 - Building a web UI in the initial version.
 - Adding LLM ranking, summarization, or extraction in the initial version.
+- Letting the bot automatically rewrite matcher/parser code or deploy fixes based on feedback.
 - Supporting multiple watch sources before the WatchFacts path is stable.
 
 ## Commands
@@ -97,6 +105,7 @@ Telegram commands:
 | `/start` | Show intro and examples |
 | `/help` | Show usage flow and pagination actions |
 | `/settings` | Show safe runtime settings |
+| `/health` | Check WatchFacts browser-session health |
 | `/cancel` | Clear pending result buttons |
 
 In group chats, normal text messages are ignored. A search must mention the bot
@@ -109,6 +118,8 @@ at the start of the message or reply to a bot message.
 - Matching is case-insensitive, token-based, and covered by tests.
 - Duplicate listings are suppressed across a single search result set.
 - Missing config or missing browser state produces actionable operator errors.
+- Expired WatchFacts session notifies the owner without exposing cookies or browser state.
+- Reported or suspicious result issues can be reviewed and converted into regression tests after the continuous-improvement milestone is implemented.
 - Docker image builds successfully.
 - `make init`, `make build`, and `make check` work on a fresh clone.
 - `.env`, `data/watchfacts_state.json`, `data/bot.db`, and `logs/` stay out of git.
@@ -119,3 +130,5 @@ at the start of the message or reply to a bot message.
 - Should query history be retained forever or pruned by age/count?
 - Should price normalization support currency conversion or numeric sorting?
 - Should multi-page crawling be enabled beyond the current WatchFacts search response?
+- Should feedback buttons be shown to all authorized users or owner-only?
+- Should suspicious result flags appear in normal summaries or only in owner review commands?

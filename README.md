@@ -15,6 +15,7 @@ The bot receives a short watch query, searches WatchFacts through the logged-in 
 - Duplicate listing filtering
 - Summary-first Telegram pagination with "Xem kết quả" / "Xem thêm"
 - Telegram message length guards for long listings
+- WatchFacts session health check and owner alert when login state expires
 - SQLite local cache
 - Docker deployment
 - Fully async architecture
@@ -228,6 +229,7 @@ Bot commands:
 | `/start` | Open the visual intro and examples |
 | `/help` | Show search flow, examples, and pagination actions |
 | `/settings` | Show safe runtime settings without secrets |
+| `/health` | Check WatchFacts session health without exposing cookies or browser state |
 | `/cancel` | Clear pending result buttons |
 
 Send a watch query to the bot:

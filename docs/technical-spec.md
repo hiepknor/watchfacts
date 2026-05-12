@@ -24,6 +24,7 @@ app/
   dedupe.py        # listing identity and duplicate filtering
   db.py            # SQLite schema and persistence
   config.py        # environment/config loading
+  # future: feedback.py or issue_review.py for result feedback and issue commands
 scripts/
   login.py         # manual WatchFacts login and browser state creation
 data/
@@ -79,6 +80,7 @@ Telegram update
   -> parser extracts listing candidates from JSON response or HTML fallback
   -> matcher filters or scopes listings by query tokens
   -> dedupe removes repeated latest reposts
+  -> future suspicious-result detector records likely extraction issues
   -> db records query/cache/dedupe state
   -> telegram_bot sends a summary first, then paginated result batches
 ```
@@ -103,8 +105,11 @@ Responsibilities:
 - Call the search workflow asynchronously.
 - Format listing results for Telegram.
 - Catch user-facing errors and return clear messages.
+- Notify configured owners when WatchFacts browser session state is missing or expired.
+- Provide `/health` to check WatchFacts session validity without exposing browser state.
 - Ignore normal group chat messages unless the bot is mentioned or replied to.
 - Protect Telegram sends by limiting photo captions to 1024 characters and text messages to 4096 characters.
+- Future: attach feedback callbacks to results, handle feedback issue callbacks, and provide owner issue review commands.
 
 ### `scraper.py`
 
@@ -116,6 +121,7 @@ Responsibilities:
 - Wait for stable page content.
 - Submit the WatchFacts search form when present.
 - Return search response text plus metadata indicating whether the server already filtered results.
+- Check whether the saved browser session is valid without logging cookies or storage state.
 
 Boundaries:
 
@@ -175,6 +181,7 @@ Responsibilities:
 - Manage SQLite connection lifecycle.
 - Create schema if missing.
 - Persist query history and dedupe/cache data.
+- Future: persist result feedback, suspicious-result flags, issue review status, and fixture export metadata.
 - Use parameterized SQL only.
 
 ## Data Model
@@ -214,12 +221,70 @@ SQLite tables:
 | `listing_id` | integer | References `listings.id` |
 | `rank` | integer | Result order |
 
+### Future `result_feedback`
+
+See [Continuous Improvement Spec](continuous-improvement.md) for the full schema. The table should persist one-tap user feedback against the exact Telegram result shown to the user.
+
+Minimum fields:
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | integer primary key | Local ID |
+| `query_text` | text | Original query |
+| `result_rank` | integer | Rank within the search result set |
+| `reason` | text | `missing_info`, `wrong_result`, `correct`, or future reason |
+| `listing_text` | text | Text shown to the user |
+| `raw_listing_text` | text nullable | Original candidate text when available |
+| `seller` | text nullable | Seller display value |
+| `source_url` | text nullable | WatchFacts source URL |
+| `issue_status` | text | `open`, `reviewed`, `fixed`, `ignored` |
+
+### Future `suspicious_results`
+
+This table should persist deterministic auto-flags for results that look likely to be incomplete, such as text ending with a standalone currency token.
+
+Minimum fields:
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | integer primary key | Local ID |
+| `query_text` | text | Original query |
+| `result_rank` | integer | Rank within the search result set |
+| `reason` | text | Suspicion code |
+| `severity` | integer | 1 low, 2 medium, 3 high |
+| `listing_text` | text | Text shown to the user |
+| `raw_listing_text` | text nullable | Original candidate text when available |
+| `reviewed_at` | text nullable | Set when owner reviews |
+
+## Continuous Improvement Architecture
+
+Future feedback workflow:
+
+```text
+Telegram result batch
+  -> feedback callback or suspicious detector
+  -> db stores issue evidence
+  -> owner reviews with /issues and /issue <id>
+  -> owner exports issue fixtures
+  -> maintainer converts fixtures to tests
+  -> matcher/parser fix is committed and deployed
+```
+
+Design constraints:
+
+- Feedback collection must never change matcher/parser behavior at runtime.
+- Feedback callbacks must be authorized.
+- Issue formatting must be safe for Telegram and must not reveal cookies, tokens, browser state, or full page HTML.
+- Suspicious detection must be deterministic and covered by unit tests.
+- Issue exports should be small, stable, and suitable for regression tests.
+
 ## Error Handling
 
 Expected error categories:
 
 - Config error: missing token, missing URL, invalid boolean.
 - Login/session error: missing or expired browser state.
+- WatchFacts session health error: invalid state detected by `/health` or during search; owner should be notified in Vietnamese.
 - Crawl error: navigation timeout, unexpected page state.
 - Parse error: no listing container found or extraction failure.
 - Telegram error: message send failure, invalid chat state.
@@ -234,6 +299,9 @@ Preferred tests:
 - Unit tests for `matcher.py`, `dedupe.py`, and parser fixtures.
 - Integration tests for SQLite schema and query/listing persistence.
 - Handler-level tests for Telegram formatting and error branches.
+- Handler-level tests for `/health`, owner alerts, and future feedback callbacks.
+- Unit tests for suspicious-result detection rules.
+- Database tests for future feedback and issue-review tables.
 - Optional browser smoke test for login/session flow when credentials are available.
 
 Recommended commands:

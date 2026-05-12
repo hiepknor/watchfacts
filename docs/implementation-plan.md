@@ -294,6 +294,7 @@ git diff --check
 
 Each item needs a focused spec before implementation:
 
+- Continuous improvement loop for feedback buttons, issue storage, suspicious-result detection, and regression export. See [Continuous Improvement Spec](continuous-improvement.md).
 - Multi-page crawling beyond the current search response.
 - Scheduled refresh jobs and proactive alerts.
 - Dealer/seller filters.
@@ -302,6 +303,144 @@ Each item needs a focused spec before implementation:
 - Exporting result sets.
 - Additional watch sources.
 - Query operators such as optional terms, quoted phrases, or negative filters.
+
+## Future Phase 6: Continuous Improvement Loop
+
+Goal: reduce manual back-and-forth when search results are incomplete or wrong by collecting issue evidence directly from Telegram and turning it into regression tests.
+
+Reference spec:
+
+- [Continuous Improvement Spec](continuous-improvement.md)
+
+### Task 6.1: Feedback Data Model
+
+Description: Add SQLite storage for result feedback and suspicious-result flags.
+
+Acceptance:
+
+- [ ] `app/db.py` creates `result_feedback` and `suspicious_results` tables without breaking existing databases.
+- [ ] Feedback records include query, shown listing text, optional raw listing text, seller, posted date, source URL, reason, report count, and issue status.
+- [ ] Suspicious records include query, rank, reason code, severity, shown listing text, optional raw listing text, and source URL.
+- [ ] Database writes use parameterized SQL.
+- [ ] No token, cookie, browser state, password, or full HTML page is stored.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_db.py
+make check
+```
+
+Likely files:
+
+- `app/db.py`
+- `tests/test_db.py`
+
+### Task 6.2: Telegram Feedback Buttons
+
+Description: Add one-tap feedback controls to sent search results.
+
+Acceptance:
+
+- [ ] Result messages include feedback callbacks for `Thiếu thông tin` and `Sai kết quả`.
+- [ ] Callback data stays within Telegram limits.
+- [ ] Feedback is tied to the exact result shown to the user.
+- [ ] Unauthorized users cannot submit feedback.
+- [ ] Duplicate feedback on the same issue updates report count instead of creating noisy rows.
+- [ ] User acknowledgement is visual Vietnamese and does not expose internal data.
+- [ ] Feedback storage failures are logged safely and do not break result delivery.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_telegram_bot.py
+```
+
+Likely files:
+
+- `app/telegram_bot.py`
+- `app/db.py`
+- `tests/test_telegram_bot.py`
+
+### Task 6.3: Owner Issue Review Commands
+
+Description: Add owner-only commands for reviewing and exporting issue cases.
+
+Acceptance:
+
+- [ ] `/issues` lists open feedback and suspicious cases with concise Vietnamese formatting.
+- [ ] `/issue <id>` shows one issue with query, shown text, raw text when available, seller, date, source URL, and report count.
+- [ ] `/issues_export` returns deterministic JSON or text suitable for regression fixtures.
+- [ ] Future status commands can mark issues `reviewed`, `fixed`, or `ignored`.
+- [ ] Owner commands require `TELEGRAM_ALLOWED_USER_IDS`.
+- [ ] Outputs never include cookies, Telegram tokens, browser state, or full page HTML.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_telegram_bot.py tests/test_db.py
+```
+
+Likely files:
+
+- `app/telegram_bot.py`
+- `app/db.py`
+- `tests/test_telegram_bot.py`
+- `tests/test_db.py`
+
+### Task 6.4: Suspicious Result Detection
+
+Description: Add deterministic heuristics that auto-flag likely incomplete extractions.
+
+Acceptance:
+
+- [ ] Detect extracted text ending with standalone currency tokens such as `HKD`, `USD`, `USDT`, `EUR`, `AED`, or `CHF`.
+- [ ] Detect extracted text ending with price markers such as `Price`, `$`, `💰`, or `💲`.
+- [ ] Detect cases where raw listing text contains currency plus a long number but shown text omits that number.
+- [ ] Detect cases where raw text is much longer than shown text near the matched query/reference.
+- [ ] Store flags in `suspicious_results` with reason code and severity.
+- [ ] Do not block result delivery if suspicious detection fails.
+- [ ] Owner can review auto-flagged cases through `/issues`.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_search.py tests/test_matcher.py tests/test_db.py
+```
+
+Likely files:
+
+- `app/search.py`
+- `app/matcher.py`
+- `app/db.py`
+- new `app/issues.py` or `app/suspicious.py`
+- relevant tests
+
+### Task 6.5: Regression Export Workflow
+
+Description: Make reported cases easy to convert into tests.
+
+Acceptance:
+
+- [ ] Exported issue fixture includes query, raw text, shown text, expected text when reviewed, required tokens, forbidden suffixes, seller, and source URL.
+- [ ] Export is stable across runs and suitable for copying into test fixtures.
+- [ ] Documentation explains how to convert exported issues into `tests/test_matcher.py`, parser fixtures, or benchmark cases.
+- [ ] Maintainers can mark exported issues as reviewed/fixed/ignored.
+
+Verify:
+
+```bash
+git diff --check
+.venv/bin/python -m pytest
+```
+
+Likely files:
+
+- `docs/continuous-improvement.md`
+- `docs/operations.md`
+- `app/db.py`
+- `app/telegram_bot.py`
+- optional script under `scripts/`
 
 ## Checkpoints
 

@@ -112,6 +112,39 @@ Exit criteria:
 - Tests and build are documented and repeatable.
 - Security/compliance boundaries are preserved.
 
+## Milestone 6: Continuous Improvement Loop
+
+Status: planned.
+
+Goal: make result-quality issues observable and reviewable without requiring the operator to manually explain every bad query to a maintainer.
+
+Problem:
+
+- Current matcher/parser quality improves only after a human notices an issue, reports it manually, and a maintainer creates a regression test.
+- WatchFacts result text is messy enough that subtle truncation or wrong-segment bugs will keep appearing.
+
+Deliverables:
+
+- One-tap Telegram feedback for incomplete or wrong results.
+- SQLite issue store for feedback and suspicious auto-flags.
+- Owner-only issue review commands such as `/issues`, `/issue <id>`, and `/issues_export`.
+- Deterministic suspicious-result detector for common truncation patterns.
+- Regression export workflow for turning issue cases into tests.
+- Documentation for owner review and maintainer regression workflow.
+
+Exit criteria:
+
+- An authorized user can report a result as missing information or wrong from Telegram.
+- Owner can list and inspect open issue cases.
+- Bot can auto-flag suspicious extracted results without blocking result delivery.
+- Exported cases contain enough context to create matcher/parser tests.
+- No secrets, cookies, browser state, or full page HTML are exposed in issue records or exports.
+- `python -m pytest` and `make check` pass.
+
+Detailed spec:
+
+- [Continuous Improvement Spec](continuous-improvement.md)
+
 ## Later Ideas
 
 - Multi-page crawling.
