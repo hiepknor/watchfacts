@@ -138,6 +138,17 @@ def test_extract_relevant_listing_text_keeps_decimal_price() -> None:
     )
 
 
+def test_extract_relevant_listing_text_keeps_thousands_price_before_currency() -> None:
+    listing_text = (
+        "PP 7118/1A grey New 2/2026 PRICE 590.000 HKD "
+        "3 days to Hong Kong"
+    )
+
+    assert extract_relevant_listing_text("7118/1a grey", listing_text) == (
+        "7118/1A grey New 2/2026 PRICE 590.000 HKD 3 days to Hong Kong"
+    )
+
+
 def test_extract_relevant_listing_text_drops_next_item_marker() -> None:
     listing_text = (
         "7010R purple N3/2026y 580k hkd "

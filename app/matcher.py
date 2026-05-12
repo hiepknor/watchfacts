@@ -236,7 +236,10 @@ def _looks_like_product_reference_boundary(
 
 
 def _looks_like_price_token(token: str) -> bool:
-    return bool(re.fullmatch(r"\d+(?:\.\d+)?(?:k|m)", token))
+    return bool(
+        re.fullmatch(r"\d+(?:\.\d+)?(?:k|m)", token)
+        or re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:\.\d+)?", token)
+    )
 
 
 def _looks_like_date_or_condition_token(token: str) -> bool:
