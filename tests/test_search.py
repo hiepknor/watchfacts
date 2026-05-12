@@ -369,3 +369,47 @@ def test_search_workflow_dedupes_again_after_local_llm_refine(tmp_path) -> None:
     assert len(results) == 1
     assert results[0].posted_date == "March 28, 2026"
     assert results[0].source_url == "/flash-sales/11"
+
+
+def test_search_workflow_final_dedupe_keeps_newest_when_text_matches_across_sellers(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "FPJ Elegante titanium ti",
+          "companyName": "A",
+          "repostedAt": "2026-04-03 10:00:00",
+          "number": 20
+        },
+        {
+          "title": "FPJ Elegante titanium ti",
+          "companyName": "Chris",
+          "repostedAt": "2026-04-05 10:00:00",
+          "number": 21
+        },
+        {
+          "title": "FPJ Elegante titanium ti",
+          "companyName": "KI",
+          "repostedAt": "2026-03-30 10:00:00",
+          "number": 22
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("Fpj Elegante Titanium"))
+
+    assert len(results) == 1
+    assert results[0].seller == "Chris"
+    assert results[0].posted_date == "April 5, 2026"
+    assert results[0].source_url == "/flash-sales/21"

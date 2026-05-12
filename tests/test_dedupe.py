@@ -1,6 +1,12 @@
 from dataclasses import dataclass
 
-from app.dedupe import dedupe_key, latest_dedupe_key, unique_latest_listings, unique_listings
+from app.dedupe import (
+    dedupe_key,
+    latest_dedupe_key,
+    unique_latest_by_text,
+    unique_latest_listings,
+    unique_listings,
+)
 
 
 @dataclass(frozen=True)
@@ -126,3 +132,11 @@ def test_unique_latest_listings_collapses_same_seller_reference_reposts_without_
     )
 
     assert unique_latest_listings([older, newer]) == [newer]
+
+
+def test_unique_latest_by_text_keeps_newest_across_sellers_when_text_matches() -> None:
+    older = Listing("FPJ Elegante titanium ti", "A", "April 3, 2026")
+    newest = Listing("FPJ Elegante titanium ti", "Chris", "April 5, 2026")
+    oldest = Listing("FPJ Elegante titanium ti", "KI", "March 30, 2026")
+
+    assert unique_latest_by_text([older, newest, oldest]) == [newest]

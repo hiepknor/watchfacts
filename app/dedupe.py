@@ -84,6 +84,23 @@ def unique_latest_listings(listings: Iterable[T]) -> list[T]:
     return [unique_by_key[key] for key in order]
 
 
+def unique_latest_by_text(listings: Iterable[T]) -> list[T]:
+    unique_by_key: dict[str, T] = {}
+    order: list[str] = []
+
+    for listing in listings:
+        key = normalize_text(listing.listing_text)
+        if key not in unique_by_key:
+            unique_by_key[key] = listing
+            order.append(key)
+            continue
+
+        if _is_newer(listing.posted_date, unique_by_key[key].posted_date):
+            unique_by_key[key] = listing
+
+    return [unique_by_key[key] for key in order]
+
+
 def latest_dedupe_key(listing_text: str, seller: str | None = None) -> str:
     return "|".join([_latest_listing_signature(listing_text), normalize_text(seller)])
 

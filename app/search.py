@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 
 from app.config import Settings
 from app.db import Database
-from app.dedupe import unique_latest_listings
+from app.dedupe import unique_latest_by_text, unique_latest_listings
 from app.llm_matcher import refine_search_results
 from app.matcher import extract_relevant_listing_text, filter_matching_listings
 from app.parser import ListingCandidate, parse_listings
@@ -48,6 +48,7 @@ class WatchFactsSearchWorkflow:
             unique = unique_latest_listings(results)
             unique = await self._refine_results(query, unique)
             unique = unique_latest_listings(unique)
+            unique = unique_latest_by_text(unique)
 
             self.database.record_query_results(query, unique)
             logger.info(
