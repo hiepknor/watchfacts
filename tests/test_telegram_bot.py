@@ -535,12 +535,12 @@ def test_text_messages_limit_large_result_sets_to_avoid_spam() -> None:
     assert message.replies[0] == (
         "✅ Đã tìm xong\n\n"
         "📦 Kết quả chính: 8\n"
-        "🔁 Listing tương tự đã gộp: 0\n"
+        "🔁 Không có listing tương tự bị gộp\n"
         "📨 Lượt đầu: 3 kết quả\n\n"
         "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
-        "🔎 Similar listings sẽ hiện bên trong từng kết quả.\n"
         "💡 Muốn gọn hơn: thêm màu dial, năm, tình trạng hoặc khoảng giá."
     )
+    assert "Similar listings sẽ hiện" not in message.replies[0]
     assert message.sent_messages[-1].reply_markup is not None
     button = message.sent_messages[-1].reply_markup.inline_keyboard[0][0]
     assert button.text == "Xem kết quả 3"
@@ -569,6 +569,7 @@ def test_result_summary_counts_grouped_similar_listings() -> None:
     assert message.replies == [format_result_summary(2, 5, similar_count=2)]
     assert "📦 Kết quả chính: 2" in message.replies[0]
     assert "🔁 Listing tương tự đã gộp: 2" in message.replies[0]
+    assert "🔎 Similar listings sẽ hiện bên trong từng kết quả." in message.replies[0]
 
 
 def test_more_results_callback_sends_next_batch() -> None:

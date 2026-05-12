@@ -324,7 +324,12 @@ def format_result_summary(
     similar_line = (
         f"🔁 Listing tương tự đã gộp: {similar_count}\n"
         if similar_count
-        else "🔁 Listing tương tự đã gộp: 0\n"
+        else "🔁 Không có listing tương tự bị gộp\n"
+    )
+    similar_hint = (
+        "🔎 Similar listings sẽ hiện bên trong từng kết quả.\n"
+        if similar_count
+        else ""
     )
     return (
         "✅ Đã tìm xong\n\n"
@@ -332,7 +337,7 @@ def format_result_summary(
         f"{similar_line}"
         f"📨 Lượt đầu: {first_batch_count} kết quả\n\n"
         "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
-        "🔎 Similar listings sẽ hiện bên trong từng kết quả.\n"
+        f"{similar_hint}"
         "💡 Muốn gọn hơn: thêm màu dial, năm, tình trạng hoặc khoảng giá."
     )
 
