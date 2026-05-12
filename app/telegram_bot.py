@@ -92,6 +92,7 @@ class SearchResult:
     posted_date: str | None = None
     image_url: str | None = None
     source_url: str | None = None
+    similar_results: tuple["SearchResult", ...] = ()
 
 
 class SearchWorkflow(Protocol):
@@ -293,6 +294,7 @@ def format_search_results(results: list[SearchResult]) -> str:
             sections.append(f"👤 {result.seller}")
         if result.posted_date:
             sections.append(f"📅 {result.posted_date}")
+        sections.extend(_format_similar_results(result))
         formatted.append("\n\n".join(sections))
 
     return "\n\n".join(formatted)
@@ -304,6 +306,7 @@ def format_search_result_caption(result: SearchResult) -> str:
         sections.append(f"👤 {result.seller}")
     if result.posted_date:
         sections.append(f"📅 {format_posted_date(result.posted_date)}")
+    sections.extend(_format_similar_results(result))
     return "\n\n".join(sections)
 
 
@@ -323,6 +326,25 @@ def format_more_results_notice(visible_count: int, total_count: int) -> str:
         f"📊 Đã hiển thị {visible_count}/{total_count} kết quả.\n"
         "Bấm “Xem thêm” để nhận lượt tiếp theo."
     )
+
+
+def _format_similar_results(result: SearchResult) -> list[str]:
+    if not result.similar_results:
+        return []
+
+    lines = ["🔁 Similar listings:"]
+    for similar in result.similar_results[:5]:
+        parts = []
+        if similar.seller:
+            parts.append(similar.seller)
+        if similar.posted_date:
+            parts.append(format_posted_date(similar.posted_date))
+        if similar.source_url:
+            parts.append(similar.source_url)
+        lines.append(f"- {' | '.join(parts) if parts else similar.listing_text}")
+    if len(result.similar_results) > 5:
+        lines.append(f"- +{len(result.similar_results) - 5} more")
+    return ["\n".join(lines)]
 
 
 def format_settings_message(context) -> str:

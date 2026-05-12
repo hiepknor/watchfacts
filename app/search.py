@@ -10,6 +10,7 @@ from app.dedupe import unique_latest_by_text, unique_latest_listings
 from app.matcher import extract_relevant_listing_text, filter_matching_listings
 from app.parser import ListingCandidate, parse_listings
 from app.scraper import ScrapeResult, fetch_watchfacts_html
+from app.similarity import group_similar_results
 from app.telegram_bot import SearchResult
 
 
@@ -49,6 +50,7 @@ class WatchFactsSearchWorkflow:
                 unique = await self._refine_results(query, unique)
                 unique = unique_latest_listings(unique)
             unique = unique_latest_by_text(unique)
+            unique = group_similar_results(unique, query=query)
 
             self.database.record_query_results(query, unique)
             logger.info(
