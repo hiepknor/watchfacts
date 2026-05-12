@@ -7,6 +7,9 @@ from types import SimpleNamespace
 from app.telegram_bot import (
     EMPTY_QUERY_MESSAGE,
     ALLOWED_USER_IDS_KEY,
+    CANCEL_EMPTY_MESSAGE,
+    CANCEL_MESSAGE,
+    HELP_MESSAGE,
     PROCESSING_MIN_SECONDS_KEY,
     PROCESSING_MESSAGE,
     START_MESSAGE,
@@ -14,10 +17,14 @@ from app.telegram_bot import (
     UNAUTHORIZED_MESSAGE,
     WORKFLOW_KEY,
     SearchResult,
+    cancel_command,
     format_result_summary,
     format_posted_date,
+    format_settings_message,
     handle_more_results,
     handle_text_message,
+    help_command,
+    settings_command,
     start_command,
 )
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT
@@ -123,6 +130,76 @@ def test_start_command_rejects_unauthorized_user() -> None:
     asyncio.run(start_command(SimpleNamespace(message=message), context))
 
     assert message.replies == [UNAUTHORIZED_MESSAGE]
+
+
+def test_help_command_returns_visual_usage_message() -> None:
+    message = FakeMessage()
+
+    asyncio.run(help_command(SimpleNamespace(message=message), make_context()))
+
+    assert message.replies == [HELP_MESSAGE]
+    assert "Xem kết quả" in message.replies[0]
+    assert "/cancel" in message.replies[0]
+
+
+def test_help_command_rejects_unauthorized_user() -> None:
+    message = FakeMessage(user_id=999)
+    context = make_context(allowed_user_ids=(123,))
+
+    asyncio.run(help_command(SimpleNamespace(message=message), context))
+
+    assert message.replies == [UNAUTHORIZED_MESSAGE]
+
+
+def test_settings_command_returns_safe_runtime_settings() -> None:
+    message = FakeMessage()
+    context = make_context(result_limit=7, allowed_user_ids=(123, 456))
+
+    asyncio.run(settings_command(SimpleNamespace(message=message), context))
+
+    assert message.replies == [
+        (
+            "⚙️ Cấu hình bot\n\n"
+            "🔐 Quyền truy cập: Owner-only\n"
+            "👤 Owner IDs: 2\n"
+            "📨 Kết quả mỗi lượt: 7\n\n"
+            "🔒 Token, cookie và browser state không bao giờ hiển thị ở đây."
+        )
+    ]
+    assert "token=" not in message.replies[0].lower()
+
+
+def test_format_settings_message_shows_public_access() -> None:
+    assert format_settings_message(make_context(result_limit=5)) == (
+        "⚙️ Cấu hình bot\n\n"
+        "🔐 Quyền truy cập: Public\n"
+        "👤 Owner IDs: Không giới hạn\n"
+        "📨 Kết quả mỗi lượt: 5\n\n"
+        "🔒 Token, cookie và browser state không bao giờ hiển thị ở đây."
+    )
+
+
+def test_cancel_command_clears_pending_result_pages() -> None:
+    message = FakeMessage("7118/1a grey")
+    workflow = FakeWorkflow([SearchResult("7118/1A grey")])
+    context = make_context(workflow)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert context.application.bot_data["result_pages"]
+
+    asyncio.run(cancel_command(SimpleNamespace(message=message), context))
+
+    assert message.replies[-1] == CANCEL_MESSAGE
+    assert context.application.bot_data["result_pages"] == {}
+
+
+def test_cancel_command_handles_empty_result_pages() -> None:
+    message = FakeMessage()
+
+    asyncio.run(cancel_command(SimpleNamespace(message=message), make_context()))
+
+    assert message.replies == [CANCEL_EMPTY_MESSAGE]
 
 
 def test_empty_messages_are_rejected() -> None:

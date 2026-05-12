@@ -189,6 +189,15 @@ Control the number of results sent per button click:
 TELEGRAM_RESULT_LIMIT=5
 ```
 
+Bot commands:
+
+| Command | Purpose |
+| --- | --- |
+| `/start` | Open the visual intro and examples |
+| `/help` | Show search flow, examples, and pagination actions |
+| `/settings` | Show safe runtime settings without secrets |
+| `/cancel` | Clear pending result buttons |
+
 Send a watch query to the bot:
 
 ```text

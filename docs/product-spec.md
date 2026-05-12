@@ -80,6 +80,15 @@ The bot should use an authenticated browser session, extract listings from Watch
 | Run bot locally | `python -m app.main` |
 | Run login locally | `python scripts/login.py` |
 
+Telegram commands:
+
+| Command | Purpose |
+| --- | --- |
+| `/start` | Show intro and examples |
+| `/help` | Show usage flow and pagination actions |
+| `/settings` | Show safe runtime settings |
+| `/cancel` | Clear pending result buttons |
+
 ## Success Criteria
 
 - A user can send a Telegram query and receive matching listings.

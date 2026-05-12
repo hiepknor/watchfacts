@@ -17,15 +17,39 @@ logger = logging.getLogger(__name__)
 
 START_MESSAGE = (
     "🔎 Dealer Scan Bot\n\n"
-    "Gửi mã đồng hồ hoặc mô tả ngắn để quét WatchFacts.\n\n"
-    "Ví dụ:\n"
+    "Gửi mã đồng hồ hoặc mô tả ngắn để quét WatchFacts.\n"
+    "Bot sẽ trả summary trước, rồi bạn bấm nút để nhận từng lượt kết quả.\n\n"
+    "Ví dụ nhanh:\n"
     "• 7118/1a grey\n"
     "• 116500 black\n"
     "• 5712 blue\n\n"
-    "Mẹo: thêm màu dial, năm, tình trạng hoặc khoảng giá để kết quả gọn hơn."
+    "Gõ /help để xem hướng dẫn đầy đủ."
+)
+HELP_MESSAGE = (
+    "📘 Hướng dẫn sử dụng\n\n"
+    "1️⃣ Gửi query\n"
+    "• 7118/1a grey\n"
+    "• 116500 black 2023\n"
+    "• 228253a choco\n\n"
+    "2️⃣ Nhận summary\n"
+    "Bot báo tổng số kết quả và số kết quả mỗi lượt.\n\n"
+    "3️⃣ Bấm nút\n"
+    "• Xem kết quả: nhận lượt đầu\n"
+    "• Xem thêm: nhận lượt tiếp theo\n\n"
+    "🧹 /cancel để xóa các nút kết quả đang chờ.\n"
+    "⚙️ /settings để xem cấu hình bot hiện tại."
 )
 EMPTY_QUERY_MESSAGE = "Please send a non-empty WatchFacts search query."
 UNAUTHORIZED_MESSAGE = "Bạn không có quyền sử dụng bot này."
+CANCEL_MESSAGE = (
+    "🧹 Đã dọn phiên kết quả\n\n"
+    "Các nút “Xem kết quả” / “Xem thêm” cũ sẽ hết hiệu lực.\n"
+    "Gửi query mới để bắt đầu lại."
+)
+CANCEL_EMPTY_MESSAGE = (
+    "🧹 Không có phiên kết quả nào đang chờ.\n\n"
+    "Gửi query mới để tìm WatchFacts."
+)
 PROCESSING_MESSAGE = (
     "🔎 Đang quét WatchFacts\n"
     "⏳ Bot đang tìm listing phù hợp..."
@@ -67,19 +91,42 @@ class PlaceholderSearchWorkflow:
 
 async def start_command(update, context) -> None:
     message = getattr(update, "message", None)
-    if not _is_authorized(update, context):
-        if message is not None:
-            await _maybe_await(message.reply_text(UNAUTHORIZED_MESSAGE))
+    if await _reject_unauthorized(update, context, message):
         return
     if message is not None:
         await _maybe_await(message.reply_text(START_MESSAGE))
 
 
+async def help_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is not None:
+        await _maybe_await(message.reply_text(HELP_MESSAGE))
+
+
+async def settings_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is not None:
+        await _maybe_await(message.reply_text(format_settings_message(context)))
+
+
+async def cancel_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    cleared_count = _clear_result_pages(context)
+    if message is not None:
+        await _maybe_await(
+            message.reply_text(CANCEL_MESSAGE if cleared_count else CANCEL_EMPTY_MESSAGE)
+        )
+
+
 async def handle_text_message(update, context) -> None:
     message = getattr(update, "message", None)
-    if not _is_authorized(update, context):
-        if message is not None:
-            await _maybe_await(message.reply_text(UNAUTHORIZED_MESSAGE))
+    if await _reject_unauthorized(update, context, message):
         return
 
     text = getattr(message, "text", None) if message is not None else None
@@ -250,6 +297,19 @@ def format_more_results_notice(visible_count: int, total_count: int) -> str:
     )
 
 
+def format_settings_message(context) -> str:
+    allowed_user_ids = _allowed_user_ids(context)
+    access_mode = "Owner-only" if allowed_user_ids else "Public"
+    owner_count = len(allowed_user_ids)
+    return (
+        "⚙️ Cấu hình bot\n\n"
+        f"🔐 Quyền truy cập: {access_mode}\n"
+        f"👤 Owner IDs: {owner_count if owner_count else 'Không giới hạn'}\n"
+        f"📨 Kết quả mỗi lượt: {_result_limit(context)}\n\n"
+        "🔒 Token, cookie và browser state không bao giờ hiển thị ở đây."
+    )
+
+
 def format_posted_date(value: str) -> str:
     normalized = value.split("·", maxsplit=1)[0].strip()
     for date_format in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d %H:%M:%S"):
@@ -268,6 +328,9 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.bot_data[ALLOWED_USER_IDS_KEY] = settings.telegram_allowed_user_ids
     application.bot_data[TELEGRAM_RESULT_LIMIT_KEY] = settings.telegram_result_limit
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("settings", settings_command))
+    application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CallbackQueryHandler(handle_more_results, pattern=f"^{MORE_RESULTS_PREFIX}"))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
@@ -351,6 +414,14 @@ def _is_authorized(update, context) -> bool:
     return user_id in allowed_user_ids
 
 
+async def _reject_unauthorized(update, context, message) -> bool:
+    if _is_authorized(update, context):
+        return False
+    if message is not None:
+        await _maybe_await(message.reply_text(UNAUTHORIZED_MESSAGE))
+    return True
+
+
 async def _send_result_batch(message, results: list[SearchResult]) -> None:
     for result in results:
         caption = format_search_result_caption(result)
@@ -391,6 +462,15 @@ def _remove_result_page(context, token: str) -> None:
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     pages = bot_data.get(RESULT_PAGES_KEY, {})
     pages.pop(token, None)
+
+
+def _clear_result_pages(context) -> int:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    pages = bot_data.get(RESULT_PAGES_KEY, {})
+    cleared_count = len(pages)
+    pages.clear()
+    return cleared_count
 
 
 def _results_markup(token: str, count: int, *, label: str):
