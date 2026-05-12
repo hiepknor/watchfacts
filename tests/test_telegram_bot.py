@@ -12,6 +12,8 @@ from app.telegram_bot import (
     HELP_MESSAGE,
     PROCESSING_MIN_SECONDS_KEY,
     PROCESSING_MESSAGE,
+    QUEUED_MESSAGE,
+    SEARCH_SEMAPHORE_KEY,
     START_MESSAGE,
     TELEGRAM_RESULT_LIMIT_KEY,
     TELEGRAM_PHOTO_CAPTION_LIMIT,
@@ -97,6 +99,19 @@ class FailingWorkflow:
         raise RuntimeError("boom")
 
 
+class BlockingWorkflow:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.queries: list[str] = []
+
+    async def search(self, query: str) -> list[SearchResult]:
+        self.queries.append(query)
+        self.started.set()
+        await self.release.wait()
+        return [SearchResult(f"result {query}")]
+
+
 class FakeBot:
     def __init__(self) -> None:
         self.id = 777
@@ -131,6 +146,7 @@ def make_context(
         bot_data[TELEGRAM_RESULT_LIMIT_KEY] = result_limit
     if workflow is not None:
         bot_data[WORKFLOW_KEY] = workflow
+    bot_data[SEARCH_SEMAPHORE_KEY] = asyncio.Semaphore(1)
     if refiner is not None:
         bot_data[RESULT_REFINER_KEY] = refiner
     bot = FakeBot()
@@ -324,6 +340,38 @@ def test_text_messages_call_search_workflow() -> None:
     assert context.application.bot.chat_actions == [(12345, "typing")]
     assert message.sent_messages[-1].reply_markup is not None
     assert message.photos == []
+
+
+def test_concurrent_text_messages_show_queue_notice() -> None:
+    async def run_test() -> None:
+        first_message = FakeMessage("6159G")
+        second_message = FakeMessage("Fpj Elegante Titanium")
+        workflow = BlockingWorkflow()
+        context = make_context(workflow)
+
+        first_task = asyncio.create_task(
+            handle_text_message(SimpleNamespace(message=first_message), context)
+        )
+        await workflow.started.wait()
+
+        second_task = asyncio.create_task(
+            handle_text_message(SimpleNamespace(message=second_message), context)
+        )
+        await asyncio.sleep(0)
+
+        assert QUEUED_MESSAGE in second_message.replies
+        assert PROCESSING_MESSAGE in second_message.replies
+        assert workflow.queries == ["6159G"]
+
+        workflow.release.set()
+        await first_task
+        await second_task
+
+        assert workflow.queries == ["6159G", "Fpj Elegante Titanium"]
+        assert QUEUED_MESSAGE not in second_message.replies
+        assert second_message.replies == [format_result_summary(1, DEFAULT_TELEGRAM_RESULT_LIMIT)]
+
+    asyncio.run(run_test())
 
 
 def test_results_callback_sends_first_photo_batch() -> None:

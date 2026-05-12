@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 DEFAULT_WATCHFACTS_URL = "https://watchfacts.com/simon-match-making"
 DEFAULT_TELEGRAM_RESULT_LIMIT = 5
+DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES = 1
 DEFAULT_LOCAL_LLM_BASE_URL = "http://localhost:8080"
 DEFAULT_LOCAL_LLM_MODEL = "gemma-4-e2b-Q4_K_M.gguf"
 DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS = 30
@@ -33,6 +34,7 @@ class Settings:
     logs_dir: Path
     db_path: Path
     browser_state_path: Path
+    telegram_max_concurrent_searches: int = DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES
     local_llm_enabled: bool = False
     local_llm_base_url: str = DEFAULT_LOCAL_LLM_BASE_URL
     local_llm_model: str = DEFAULT_LOCAL_LLM_MODEL
@@ -104,6 +106,13 @@ def load_settings(
         source.get("TELEGRAM_RESULT_LIMIT", str(DEFAULT_TELEGRAM_RESULT_LIMIT)),
         name="TELEGRAM_RESULT_LIMIT",
     )
+    telegram_max_concurrent_searches = parse_positive_int(
+        source.get(
+            "TELEGRAM_MAX_CONCURRENT_SEARCHES",
+            str(DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES),
+        ),
+        name="TELEGRAM_MAX_CONCURRENT_SEARCHES",
+    )
 
     watchfacts_url = source.get("WATCHFACTS_URL", DEFAULT_WATCHFACTS_URL).strip()
     if not watchfacts_url:
@@ -140,6 +149,7 @@ def load_settings(
         telegram_bot_token=token,
         telegram_allowed_user_ids=telegram_allowed_user_ids,
         telegram_result_limit=telegram_result_limit,
+        telegram_max_concurrent_searches=telegram_max_concurrent_searches,
         watchfacts_url=watchfacts_url,
         headless=headless,
         enable_crawl4ai=enable_crawl4ai,

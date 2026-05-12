@@ -66,6 +66,8 @@ one or more Telegram user IDs, separated by commas, to restrict usage to those
 owners only.
 Set `TELEGRAM_RESULT_LIMIT` to control how many results are sent per Telegram
 batch.
+Set `TELEGRAM_MAX_CONCURRENT_SEARCHES` to control how many WatchFacts searches
+may run at the same time; extra queries show a queue message and wait.
 
 Create an authenticated WatchFacts browser session:
 
@@ -211,6 +213,12 @@ Control the number of results sent per button click:
 
 ```bash
 TELEGRAM_RESULT_LIMIT=5
+```
+
+Control concurrent WatchFacts searches:
+
+```bash
+TELEGRAM_MAX_CONCURRENT_SEARCHES=1
 ```
 
 Bot commands:

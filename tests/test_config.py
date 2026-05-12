@@ -8,6 +8,7 @@ from app.config import (
     DEFAULT_LOCAL_LLM_MAX_REFINES,
     DEFAULT_LOCAL_LLM_MODEL,
     DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS,
+    DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
     DEFAULT_WATCHFACTS_URL,
     load_settings,
@@ -74,6 +75,7 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.telegram_bot_token == "token"
     assert settings.telegram_allowed_user_ids == ()
     assert settings.telegram_result_limit == DEFAULT_TELEGRAM_RESULT_LIMIT
+    assert settings.telegram_max_concurrent_searches == DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES
     assert settings.watchfacts_url == DEFAULT_WATCHFACTS_URL
     assert settings.headless is True
     assert settings.enable_crawl4ai is True
@@ -110,6 +112,18 @@ def test_load_settings_reads_telegram_result_limit(tmp_path: Path) -> None:
     )
 
     assert settings.telegram_result_limit == 12
+
+
+def test_load_settings_reads_telegram_max_concurrent_searches(tmp_path: Path) -> None:
+    settings = load_settings(
+        env={
+            "TELEGRAM_BOT_TOKEN": "token",
+            "TELEGRAM_MAX_CONCURRENT_SEARCHES": "2",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.telegram_max_concurrent_searches == 2
 
 
 def test_load_settings_reads_local_llm_options(tmp_path: Path) -> None:

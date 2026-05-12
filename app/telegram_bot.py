@@ -65,6 +65,10 @@ PROCESSING_MESSAGE = (
     "🔎 Đang quét WatchFacts\n"
     "⏳ Bot đang tìm mẫu tin phù hợp..."
 )
+QUEUED_MESSAGE = (
+    "⏳ Đang chờ lượt quét\n"
+    "Bot đang xử lý truy vấn khác. Truy vấn này sẽ tự chạy ngay khi có slot."
+)
 SEARCH_ERROR_MESSAGE = (
     "⚠️ Tìm kiếm thất bại\n\n"
     "Vui lòng thử lại sau hoặc kiểm tra nhật ký bot nếu lỗi tiếp diễn."
@@ -77,8 +81,10 @@ WORKFLOW_KEY = "search_workflow"
 PROCESSING_MIN_SECONDS_KEY = "processing_min_seconds"
 DEFAULT_PROCESSING_MIN_SECONDS = 1.0
 TELEGRAM_RESULT_LIMIT_KEY = "telegram_result_limit"
+TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY = "telegram_max_concurrent_searches"
 RESULT_PAGES_KEY = "result_pages"
 RESULT_REFINER_KEY = "result_refiner"
+SEARCH_SEMAPHORE_KEY = "search_semaphore"
 MORE_RESULTS_PREFIX = "more_results:"
 ALLOWED_USER_IDS_KEY = "allowed_user_ids"
 TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
@@ -165,9 +171,13 @@ async def handle_text_message(update, context) -> None:
         return
 
     processing_message = None
+    queued_message = None
     processing_started_at = 0.0
     if message is not None:
         await _send_typing_action(message, context)
+        search_semaphore = _search_semaphore(context)
+        if search_semaphore.locked():
+            queued_message = await _maybe_await(message.reply_text(QUEUED_MESSAGE))
         processing_message = await _maybe_await(
             message.reply_text(PROCESSING_MESSAGE)
         )
@@ -175,7 +185,9 @@ async def handle_text_message(update, context) -> None:
 
     workflow = _get_search_workflow(context)
     try:
-        results = await workflow.search(query)
+        async with _search_semaphore(context):
+            await _delete_message(queued_message)
+            results = await workflow.search(query)
     except Exception as exc:
         await _delete_processing_message(
             processing_message,
@@ -401,6 +413,12 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
         application.bot_data[RESULT_REFINER_KEY] = refiner
     application.bot_data[ALLOWED_USER_IDS_KEY] = settings.telegram_allowed_user_ids
     application.bot_data[TELEGRAM_RESULT_LIMIT_KEY] = settings.telegram_result_limit
+    application.bot_data[TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY] = (
+        settings.telegram_max_concurrent_searches
+    )
+    application.bot_data[SEARCH_SEMAPHORE_KEY] = asyncio.Semaphore(
+        settings.telegram_max_concurrent_searches
+    )
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("settings", settings_command))
@@ -447,6 +465,27 @@ def _result_limit(context) -> int:
         return max(1, int(value))
     except (TypeError, ValueError):
         return DEFAULT_TELEGRAM_RESULT_LIMIT
+
+
+def _max_concurrent_searches(context) -> int:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY, 1)
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _search_semaphore(context) -> asyncio.Semaphore:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    semaphore = bot_data.get(SEARCH_SEMAPHORE_KEY)
+    if isinstance(semaphore, asyncio.Semaphore):
+        return semaphore
+    semaphore = asyncio.Semaphore(_max_concurrent_searches(context))
+    bot_data[SEARCH_SEMAPHORE_KEY] = semaphore
+    return semaphore
 
 
 def _result_refiner(context) -> RefineResults | None:

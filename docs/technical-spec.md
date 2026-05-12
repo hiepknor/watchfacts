@@ -44,6 +44,7 @@ Expected environment:
 | `TELEGRAM_BOT_TOKEN` | Yes | None | Telegram bot token |
 | `TELEGRAM_ALLOWED_USER_IDS` | No | Empty | Comma-separated owner Telegram user ids; empty allows everyone |
 | `TELEGRAM_RESULT_LIMIT` | No | `5` | Number of results to send per Telegram pagination batch |
+| `TELEGRAM_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum WatchFacts searches running at the same time; extra queries wait with a queue notice |
 | `WATCHFACTS_URL` | Yes | `https://watchfacts.com/simon-match-making` | WatchFacts page to crawl |
 | `HEADLESS` | No | `true` | Browser headless mode |
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
