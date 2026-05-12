@@ -8,14 +8,29 @@ from typing import Iterable, Protocol, TypeVar
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:[./-][a-z0-9]+)*", re.IGNORECASE)
 QUERY_TERM_RE = TOKEN_RE
 LOCAL_MATCH_WINDOW = 12
-SEGMENT_MATCH_WINDOW = 20
+SEGMENT_MATCH_WINDOW = 45
 PRODUCT_BRAND_TOKENS = {
     "audemars",
     "cartier",
     "patek",
+    "philippe",
     "richard",
     "rolex",
     "vacheron",
+}
+CURRENCY_PREFIX_CHARS = {"$", "€", "£", "¥", "💲"}
+LOCAL_PREFIX_WINDOW = 4
+LOCAL_PREFIX_TOKENS = {
+    "ap",
+    "audemars",
+    "like",
+    "new",
+    "patek",
+    "philippe",
+    "piguet",
+    "pp",
+    "rolex",
+    "used",
 }
 
 
@@ -104,7 +119,7 @@ def extract_relevant_listing_text(query: str, listing_text: str) -> str:
             ):
                 continue
 
-            start = token_matches[index].start()
+            start = _matching_segment_start(token_matches, normalized_tokens, index)
             end = _matching_segment_end(
                 listing_text,
                 token_matches,
@@ -114,7 +129,7 @@ def extract_relevant_listing_text(query: str, listing_text: str) -> str:
 
     if fallback is not None:
         index, reference_index = fallback
-        start = token_matches[index].start()
+        start = _matching_segment_start(token_matches, normalized_tokens, index)
         end = _matching_segment_end(listing_text, token_matches, reference_index)
         return _clean_display_text(listing_text[start:end])
 
@@ -201,6 +216,25 @@ def _looks_like_model_or_price_token(token: str) -> bool:
     return any(char.isdigit() for char in token) and len(token) >= 4
 
 
+def _matching_segment_start(
+    token_matches: list[re.Match[str]],
+    normalized_tokens: list[str],
+    reference_start_index: int,
+) -> int:
+    start_index = reference_start_index
+    for index in range(reference_start_index - 1, -1, -1):
+        if reference_start_index - index > LOCAL_PREFIX_WINDOW:
+            break
+
+        token = normalized_tokens[index]
+        next_token = normalized_tokens[index + 1] if index + 1 < len(normalized_tokens) else ""
+        previous_token = normalized_tokens[index - 1] if index > 0 else ""
+        if _looks_like_previous_product_boundary(token, next_token, previous_token):
+            break
+        start_index = index
+    return token_matches[start_index].start()
+
+
 def _matching_segment_end(
     listing_text: str,
     token_matches: list[re.Match[str]],
@@ -215,6 +249,11 @@ def _matching_segment_end(
             break
         next_match = following_matches[offset] if offset < len(following_matches) else None
         next_token = normalize_text(next_match.group(0)) if next_match else ""
+        previous_token = (
+            normalize_text(token_matches[reference_index + offset - 1].group(0))
+            if reference_index + offset - 1 >= 0
+            else ""
+        )
         if _looks_like_next_product_brand(normalized_token, next_token):
             break
         if _looks_like_product_reference_boundary(
@@ -222,9 +261,13 @@ def _matching_segment_end(
             match.start(),
             normalized_token,
             next_token,
+            previous_token,
         ):
             break
-        end = _include_trailing_currency_symbol(listing_text, match.end())
+        end = _include_trailing_non_token_suffix(
+            listing_text,
+            _include_trailing_currency_symbol(listing_text, match.end()),
+        )
     return end
 
 
@@ -233,10 +276,11 @@ def _looks_like_product_reference_boundary(
     token_start: int,
     normalized_token: str,
     next_token: str,
+    previous_token: str,
 ) -> bool:
     if not _looks_like_model_or_price_token(normalized_token):
         return False
-    if token_start > 0 and listing_text[token_start - 1] == "$":
+    if token_start > 0 and listing_text[token_start - 1] in CURRENCY_PREFIX_CHARS:
         return False
     if token_start > 0 and listing_text[token_start - 1] in {"/", "-"}:
         return False
@@ -248,12 +292,18 @@ def _looks_like_product_reference_boundary(
         return False
     if _looks_like_date_or_condition_token(normalized_token):
         return False
+    if _looks_like_descriptor_number_token(normalized_token, next_token):
+        return False
+    if _looks_like_hyphenated_descriptor_number(normalized_token):
+        return False
+    if _looks_like_repeat_reference_detail(normalized_token, next_token, previous_token):
+        return False
     if _looks_like_caliber_token(normalized_token):
         return False
     if _looks_like_size_token(normalized_token):
         return False
     return not any(
-        currency in normalized_token for currency in ("hkd", "usd", "eur", "aed")
+        currency in normalized_token for currency in ("hkd", "usd", "usdt", "eur", "aed", "chf")
     )
 
 
@@ -261,8 +311,40 @@ def _looks_like_next_product_brand(token: str, next_token: str) -> bool:
     return token in PRODUCT_BRAND_TOKENS and _looks_like_model_or_price_token(next_token)
 
 
+def _looks_like_previous_product_boundary(
+    token: str,
+    next_token: str,
+    previous_token: str,
+) -> bool:
+    if token in LOCAL_PREFIX_TOKENS:
+        return False
+    if _looks_like_year_token(token) or _looks_like_date_or_condition_token(token):
+        return False
+    if _looks_like_size_token(token):
+        return False
+    if token in {"full", "set", "only", "watch"}:
+        return False
+    if _looks_like_model_or_price_token(token):
+        if _looks_like_plain_price_before_currency(token, next_token):
+            return True
+        if _looks_like_price_token(token) or any(
+            currency in token for currency in ("hkd", "usd", "usdt", "eur", "aed")
+        ):
+            return True
+        if previous_token in {"hkd", "usd", "usdt", "eur", "aed"}:
+            return True
+        return True
+    return True
+
+
 def _include_trailing_currency_symbol(listing_text: str, end: int) -> int:
-    while end < len(listing_text) and listing_text[end] in {"$", "€", "£", "¥"}:
+    while end < len(listing_text) and listing_text[end] in CURRENCY_PREFIX_CHARS:
+        end += 1
+    return end
+
+
+def _include_trailing_non_token_suffix(listing_text: str, end: int) -> int:
+    while end < len(listing_text) and not listing_text[end].isalnum():
         end += 1
     return end
 
@@ -278,18 +360,47 @@ def _looks_like_price_token(token: str) -> bool:
 
 def _looks_like_date_or_condition_token(token: str) -> bool:
     return bool(
-        re.fullmatch(r"n?\d{1,2}[/-]\d{1,4}y?", token)
+        re.fullmatch(r"n?\d{1,2}[/-]\d{1,4}(?:y|new)?", token)
+        or re.fullmatch(r"\d{1,2}n[/-]\d{1,4}y?", token)
+        or re.fullmatch(r"\d{1,2}[/-]n\d{1,2}", token)
+        or re.fullmatch(r"\d{1,2}[/-]\d{3,4}p?", token)
         or re.fullmatch(r"\d{4}[/-]\d{1,2}", token)
+        or re.fullmatch(r"\d{4}[/-]n\d{1,2}", token)
+        or re.fullmatch(r"\d{1,2}-\d{4}new", token)
         or re.fullmatch(r"\d{4}-\d{4}(?:-\d{4})?", token)
         or re.fullmatch(r"\d{1,2}\.\d{4}", token)
-        or re.fullmatch(r"\d{4}(?:y|year|full)", token)
+        or re.fullmatch(r"\d{4}(?:y|year|full|like)", token)
+        or re.fullmatch(r"[a-z]+\d{4}y?", token)
+    )
+
+
+def _looks_like_descriptor_number_token(token: str, next_token: str) -> bool:
+    return bool(re.fullmatch(r"\d{3,4}", token) and next_token.isalpha())
+
+
+def _looks_like_hyphenated_descriptor_number(token: str) -> bool:
+    return bool(re.fullmatch(r"\d{1,3}-[a-z]+", token))
+
+
+def _looks_like_repeat_reference_detail(
+    token: str,
+    next_token: str,
+    previous_token: str,
+) -> bool:
+    return bool(
+        re.fullmatch(r"\d{4}", token)
+        and previous_token.isalpha()
+        and (
+            _looks_like_year_token(next_token)
+            or _looks_like_date_or_condition_token(next_token)
+        )
     )
 
 
 def _looks_like_plain_price_before_currency(token: str, next_token: str) -> bool:
     return bool(
         re.fullmatch(r"\d{5,8}", token)
-        and next_token in {"hkd", "usd", "usdt", "eur", "aed"}
+        and next_token in {"hkd", "usd", "usdt", "eur", "aed", "chf"}
     )
 
 

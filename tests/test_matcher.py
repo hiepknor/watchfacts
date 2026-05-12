@@ -85,9 +85,7 @@ def test_extract_relevant_listing_text_returns_exact_stock_list_segment() -> Non
 def test_extract_relevant_listing_text_keeps_price_with_currency_suffix() -> None:
     listing_text = "Rolex 228253A choco N2 467000hkd full set"
 
-    assert extract_relevant_listing_text("228253a choco", listing_text) == (
-        "228253A choco N2 467000hkd full set"
-    )
+    assert extract_relevant_listing_text("228253a choco", listing_text) == listing_text
 
 
 def test_extract_relevant_listing_text_handles_compound_reference() -> None:
@@ -145,7 +143,7 @@ def test_extract_relevant_listing_text_keeps_thousands_price_before_currency() -
     )
 
     assert extract_relevant_listing_text("7118/1a grey", listing_text) == (
-        "7118/1A grey New 2/2026 PRICE 590.000 HKD 3 days to Hong Kong"
+        "PP 7118/1A grey New 2/2026 PRICE 590.000 HKD 3 days to Hong Kong"
     )
 
 
@@ -157,7 +155,7 @@ def test_extract_relevant_listing_text_keeps_dot_date_and_price() -> None:
     )
 
     assert extract_relevant_listing_text("7118/1200a blue", listing_text) == (
-        "7118/1200A Blue // New 03.2026 // Price 725K HKD"
+        "Patek 7118/1200A Blue // New 03.2026 // Price 725K HKD"
     )
 
 
@@ -189,7 +187,7 @@ def test_extract_relevant_listing_text_keeps_split_price_and_currency() -> None:
     )
 
     assert extract_relevant_listing_text("5990/1r", listing_text) == (
-        "5990/1R Blue dial Mint condition Complete set $255 000.00 USD + shipping"
+        "2022 PP 5990/1R Blue dial Mint condition Complete set $255 000.00 USD + shipping"
     )
 
 
@@ -197,7 +195,7 @@ def test_extract_relevant_listing_text_keeps_trailing_currency_symbol() -> None:
     listing_text = "Patek 5990/1r - 2022 - German Paper - 217,5€"
 
     assert extract_relevant_listing_text("5990/1r", listing_text) == (
-        "5990/1r - 2022 - German Paper - 217,5€"
+        "Patek 5990/1r - 2022 - German Paper - 217,5€"
     )
 
 
@@ -236,7 +234,7 @@ def test_extract_relevant_listing_text_keeps_compact_year_condition() -> None:
     listing_text = "New 5712/1r 2026full set HKD:2 2.05m"
 
     assert extract_relevant_listing_text("5712/1r", listing_text) == (
-        "5712/1r 2026full set HKD:2 2.05m"
+        "New 5712/1r 2026full set HKD:2 2.05m"
     )
 
 
@@ -244,7 +242,7 @@ def test_extract_relevant_listing_text_keeps_trailing_dollar_symbol() -> None:
     listing_text = "PP 5164A 2022 full set 100$"
 
     assert extract_relevant_listing_text("5164a", listing_text) == (
-        "5164A 2022 full set 100$"
+        "PP 5164A 2022 full set 100$"
     )
 
 
@@ -285,6 +283,101 @@ def test_extract_relevant_listing_text_keeps_plain_number_before_currency() -> N
 
     assert extract_relevant_listing_text("5980/1r", listing_text) == (
         "5980/1R 2021 full set full links New buckle 1630000 HKD 208,000 Usdt"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_local_prefix_before_reference() -> None:
+    listing_text = "New 2026 AP 26240BA Ombre Yellow Fullset $119"
+
+    assert extract_relevant_listing_text("26240ba", listing_text) == (
+        "New 2026 AP 26240BA Ombre Yellow Fullset $119"
+    )
+
+
+def test_extract_relevant_listing_text_does_not_pull_previous_stock_item() -> None:
+    listing_text = (
+        "26239OR full gold blue used 2021 full set HKD 748k "
+        "26240BA Frost gold 2022 Full Set 1,344,000HKD"
+    )
+
+    assert extract_relevant_listing_text("26240ba", listing_text) == (
+        "26240BA Frost gold 2022 Full Set 1,344,000HKD"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_unicode_currency_prefix() -> None:
+    listing_text = "26240BA ALYX 2022💲128.5 + label"
+
+    assert extract_relevant_listing_text("26240ba", listing_text) == (
+        "26240BA ALYX 2022💲128.5 + label"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_numeric_collaboration_descriptor() -> None:
+    listing_text = (
+        "26239OR full gold blue used 2021 full set HKD 748k "
+        "26240BA 1017 ALYX 9SM used 2024 full set HKD 1.05m "
+        "26401RO brown camo used 2019 full set HKD 278k"
+    )
+
+    assert extract_relevant_listing_text("26240ba", listing_text) == (
+        "26240BA 1017 ALYX 9SM used 2024 full set HKD 1.05m"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_compact_new_year_and_price() -> None:
+    listing_text = "AP 26240Ba New2024 $830k Hkd"
+
+    assert extract_relevant_listing_text("26240ba", listing_text) == (
+        "AP 26240Ba New2024 $830k Hkd"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_compact_date_new_suffix() -> None:
+    listing_text = "26240ba 11/25new fullset Adjusted/sized HKD875k USD112.2k"
+
+    assert extract_relevant_listing_text("26240ba", listing_text) == (
+        "26240ba 11/25new fullset Adjusted/sized HKD875k USD112.2k"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_n_marker_date_and_price() -> None:
+    listing_text = "5990/1R 25/N11 HKD2.23m"
+
+    assert extract_relevant_listing_text("5990/1r", listing_text) == (
+        "5990/1R 25/N11 HKD2.23m"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_chf_price_after_typo_date() -> None:
+    listing_text = "AP 26240BA Alix 1/202P 125k chf new fs"
+
+    assert extract_relevant_listing_text("26240ba", listing_text) == (
+        "AP 26240BA Alix 1/202P 125k chf new fs"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_compact_new_year_suffix() -> None:
+    listing_text = "5990/1r new2026y hkd2.31m"
+
+    assert extract_relevant_listing_text("5990/1r", listing_text) == (
+        "5990/1r new2026y hkd2.31m"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_hyphenated_descriptor_number() -> None:
+    listing_text = "Patek Philippe 5164A, single watch, 56-character dial, 76,000 USDT"
+
+    assert extract_relevant_listing_text("5164a", listing_text) == (
+        "Patek Philippe 5164A, single watch, 56-character dial, 76,000 USDT"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_repeat_reference_detail() -> None:
+    listing_text = "5712/1R NAUTILUS 5712 2022 FULL SET RETAIL READY $233K + LABEL"
+
+    assert extract_relevant_listing_text("5712/1r", listing_text) == (
+        "5712/1R NAUTILUS 5712 2022 FULL SET RETAIL READY $233K + LABEL"
     )
 
 

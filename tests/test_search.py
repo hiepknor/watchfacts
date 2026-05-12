@@ -49,7 +49,7 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
 
     assert fetch_calls == [(settings, "228253a choco")]
     assert len(results) == 1
-    assert results[0].listing_text == "228253A choco N2 467000hkd"
+    assert results[0].listing_text == "Rolex 228253A choco N2 467000hkd"
     assert results[0].seller == "HK STOCKS"
     assert results[0].image_url == "https://watchfacts.example/images/228253a.jpg"
 
