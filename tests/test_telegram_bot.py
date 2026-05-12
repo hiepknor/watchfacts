@@ -15,7 +15,7 @@ from app.telegram_bot import (
     UNAUTHORIZED_MESSAGE,
     WORKFLOW_KEY,
     SearchResult,
-    format_result_limit_notice,
+    format_result_summary,
     format_posted_date,
     handle_more_results,
     handle_text_message,
@@ -180,10 +180,39 @@ def test_text_messages_call_search_workflow() -> None:
     )
 
     assert workflow.queries == ["228253a choco"]
-    assert message.replies == []
+    assert message.replies == [format_result_summary(1, DEFAULT_RESULT_LIMIT)]
     assert message.sent_messages[0].text == PROCESSING_MESSAGE
     assert message.sent_messages[0].deleted is True
     assert context.application.bot.chat_actions == [(12345, "typing")]
+    assert message.sent_messages[-1].reply_markup is not None
+    assert message.photos == []
+
+
+def test_results_callback_sends_first_photo_batch() -> None:
+    message = FakeMessage("  228253a choco  ")
+    workflow = FakeWorkflow(
+        [
+            SearchResult(
+                listing_text="228253A choco N2",
+                seller="HK STOCKS",
+                posted_date="April 20, 2026",
+                image_url="https://image-url.jpg",
+            )
+        ]
+    )
+    context = make_context(workflow)
+
+    asyncio.run(
+        handle_text_message(SimpleNamespace(message=message), context)
+    )
+
+    notice_markup = message.sent_messages[-1].reply_markup
+    token = notice_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    callback = FakeCallbackQuery(f"more_results:{token}", message)
+
+    asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
+
+    assert callback.answers == ["Đang gửi thêm kết quả..."]
     assert message.photos == [
         (
             "https://image-url.jpg",
@@ -197,6 +226,7 @@ def test_text_messages_call_search_workflow() -> None:
             ),
         )
     ]
+    assert message.replies[-1] == "✅ Đã gửi hết kết quả."
 
 
 def test_text_messages_send_each_result_as_separate_photo() -> None:
@@ -223,6 +253,13 @@ def test_text_messages_send_each_result_as_separate_photo() -> None:
         handle_text_message(SimpleNamespace(message=message), context)
     )
 
+    assert message.photos == []
+    notice_markup = message.sent_messages[-1].reply_markup
+    token = notice_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    callback = FakeCallbackQuery(f"more_results:{token}", message)
+
+    asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
+
     assert len(message.photos) == 2
     assert message.photos[0] == (
         "https://image-1.jpg",
@@ -238,7 +275,7 @@ def test_text_messages_send_each_result_as_separate_photo() -> None:
     assert message.photos[1][0] == "https://image-2.jpg"
     assert "Forest" in message.photos[1][1]
     assert "23/04/2026" in message.photos[1][1]
-    assert message.replies == []
+    assert message.replies == [format_result_summary(2, DEFAULT_RESULT_LIMIT), "✅ Đã gửi hết kết quả."]
     assert context.application.bot.chat_actions == [(12345, "typing")]
 
 
@@ -263,33 +300,18 @@ def test_text_messages_limit_large_result_sets_to_avoid_spam() -> None:
     assert workflow.queries == ["7118/1a grey"]
     assert message.photos == []
     assert message.replies == [
-        (
-            "🏷️ Thông tin:\n"
-            "7118/1A grey listing 1\n\n"
-            "👤 Người đăng:\n"
-            "Dealer\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
-        ),
-        (
-            "🏷️ Thông tin:\n"
-            "7118/1A grey listing 2\n\n"
-            "👤 Người đăng:\n"
-            "Dealer\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
-        ),
-        (
-            "🏷️ Thông tin:\n"
-            "7118/1A grey listing 3\n\n"
-            "👤 Người đăng:\n"
-            "Dealer\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
-        ),
-        format_result_limit_notice(3, 8),
+        format_result_summary(8, 3),
     ]
+    assert message.replies[0] == (
+        "✅ Đã tìm xong\n\n"
+        "📦 Tổng kết quả: 8\n"
+        "📨 Lượt đầu: 3 kết quả\n\n"
+        "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
+        "💡 Muốn gọn hơn: thêm màu dial, năm, tình trạng hoặc khoảng giá."
+    )
     assert message.sent_messages[-1].reply_markup is not None
+    button = message.sent_messages[-1].reply_markup.inline_keyboard[0][0]
+    assert button.text == "Xem kết quả 3"
     assert message.sent_messages[0].text == PROCESSING_MESSAGE
     assert message.sent_messages[0].deleted is True
 
@@ -322,6 +344,39 @@ def test_more_results_callback_sends_next_batch() -> None:
     assert message.replies[-3:] == [
         (
             "🏷️ Thông tin:\n"
+            "7118/1A grey listing 1\n\n"
+            "👤 Người đăng:\n"
+            "Dealer\n\n"
+            "📅 Ngày đăng:\n"
+            "20/04/2026"
+        ),
+        (
+            "🏷️ Thông tin:\n"
+            "7118/1A grey listing 2\n\n"
+            "👤 Người đăng:\n"
+            "Dealer\n\n"
+            "📅 Ngày đăng:\n"
+            "20/04/2026"
+        ),
+        "📊 Đã hiển thị 2/6 kết quả.\nBấm “Xem thêm” để nhận lượt tiếp theo.",
+    ]
+    assert message.sent_messages[-1].reply_markup.inline_keyboard[0][0].text == "Xem thêm 2"
+
+    second_notice_markup = message.sent_messages[-1].reply_markup
+    second_token = second_notice_markup.inline_keyboard[0][0].callback_data.split(
+        ":",
+        maxsplit=1,
+    )[1]
+    second_callback = FakeCallbackQuery(f"more_results:{second_token}", message)
+
+    asyncio.run(
+        handle_more_results(SimpleNamespace(callback_query=second_callback), context)
+    )
+
+    assert second_callback.answers == ["Đang gửi thêm kết quả..."]
+    assert message.replies[-3:] == [
+        (
+            "🏷️ Thông tin:\n"
             "7118/1A grey listing 3\n\n"
             "👤 Người đăng:\n"
             "Dealer\n\n"
@@ -336,21 +391,21 @@ def test_more_results_callback_sends_next_batch() -> None:
             "📅 Ngày đăng:\n"
             "20/04/2026"
         ),
-        "📊 Đã hiển thị 4/6 kết quả.\nBấm “Xem thêm” để nhận batch tiếp theo.",
+        "📊 Đã hiển thị 4/6 kết quả.\nBấm “Xem thêm” để nhận lượt tiếp theo.",
     ]
 
-    second_notice_markup = message.sent_messages[-1].reply_markup
-    second_token = second_notice_markup.inline_keyboard[0][0].callback_data.split(
+    final_notice_markup = message.sent_messages[-1].reply_markup
+    final_token = final_notice_markup.inline_keyboard[0][0].callback_data.split(
         ":",
         maxsplit=1,
     )[1]
-    second_callback = FakeCallbackQuery(f"more_results:{second_token}", message)
+    final_callback = FakeCallbackQuery(f"more_results:{final_token}", message)
 
     asyncio.run(
-        handle_more_results(SimpleNamespace(callback_query=second_callback), context)
+        handle_more_results(SimpleNamespace(callback_query=final_callback), context)
     )
 
-    assert second_callback.answers == ["Đang gửi thêm kết quả..."]
+    assert final_callback.answers == ["Đang gửi thêm kết quả..."]
     assert message.replies[-3:] == [
         (
             "🏷️ Thông tin:\n"
@@ -412,7 +467,14 @@ def test_text_messages_fallback_to_text_when_image_is_missing() -> None:
     )
 
     assert message.photos == []
-    assert message.replies == [
+    assert message.replies == [format_result_summary(1, DEFAULT_RESULT_LIMIT)]
+    notice_markup = message.sent_messages[-1].reply_markup
+    token = notice_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    callback = FakeCallbackQuery(f"more_results:{token}", message)
+
+    asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
+
+    assert message.replies[-2:] == [
         (
             "🏷️ Thông tin:\n"
             "228253A choco N2\n\n"
@@ -420,7 +482,8 @@ def test_text_messages_fallback_to_text_when_image_is_missing() -> None:
             "HK STOCKS\n\n"
             "📅 Ngày đăng:\n"
             "20/04/2026"
-        )
+        ),
+        "✅ Đã gửi hết kết quả.",
     ]
     assert message.sent_messages[0].text == PROCESSING_MESSAGE
     assert message.sent_messages[0].deleted is True

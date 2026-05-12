@@ -145,22 +145,22 @@ async def send_search_results(
         await _maybe_await(message.reply_text("No matching listings found."))
         return
 
-    visible_results = results[:result_limit]
-    await _send_result_batch(message, visible_results)
-
-    if len(results) > len(visible_results):
-        token = _store_result_page(
-            context,
-            results=results,
-            next_offset=len(visible_results),
-            result_limit=result_limit,
+    token = _store_result_page(
+        context,
+        results=results,
+        next_offset=0,
+        result_limit=result_limit,
+    )
+    await _maybe_await(
+        message.reply_text(
+            format_result_summary(len(results), result_limit),
+            reply_markup=_results_markup(
+                token,
+                min(result_limit, len(results)),
+                label="Xem kết quả",
+            ),
         )
-        await _maybe_await(
-            message.reply_text(
-                format_result_limit_notice(len(visible_results), len(results)),
-                reply_markup=_more_results_markup(token, len(results) - len(visible_results)),
-            )
-        )
+    )
 
 
 async def handle_more_results(update, context) -> None:
@@ -197,7 +197,7 @@ async def handle_more_results(update, context) -> None:
         await _maybe_await(
             message.reply_text(
                 format_more_results_notice(next_offset, len(results)),
-                reply_markup=_more_results_markup(token, remaining),
+                reply_markup=_results_markup(token, min(remaining, limit), label="Xem thêm"),
             )
         )
     else:
@@ -233,19 +233,21 @@ def format_search_result_caption(result: SearchResult) -> str:
     return "\n\n".join(sections)
 
 
-def format_result_limit_notice(visible_count: int, total_count: int) -> str:
+def format_result_summary(total_count: int, result_limit: int) -> str:
+    first_batch_count = min(total_count, result_limit)
     return (
-        f"📊 Tìm thấy {total_count} kết quả.\n"
-        f"Hiển thị {visible_count} kết quả đầu tiên để tránh spam.\n"
-        "Bấm “Xem thêm” nếu muốn nhận thêm kết quả.\n"
-        "Gợi ý: thêm màu dial, năm, tình trạng hoặc khoảng giá để lọc chính xác hơn."
+        "✅ Đã tìm xong\n\n"
+        f"📦 Tổng kết quả: {total_count}\n"
+        f"📨 Lượt đầu: {first_batch_count} kết quả\n\n"
+        "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
+        "💡 Muốn gọn hơn: thêm màu dial, năm, tình trạng hoặc khoảng giá."
     )
 
 
 def format_more_results_notice(visible_count: int, total_count: int) -> str:
     return (
         f"📊 Đã hiển thị {visible_count}/{total_count} kết quả.\n"
-        "Bấm “Xem thêm” để nhận batch tiếp theo."
+        "Bấm “Xem thêm” để nhận lượt tiếp theo."
     )
 
 
@@ -391,14 +393,14 @@ def _remove_result_page(context, token: str) -> None:
     pages.pop(token, None)
 
 
-def _more_results_markup(token: str, remaining_count: int):
+def _results_markup(token: str, count: int, *, label: str):
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    f"Xem thêm {remaining_count}",
+                    f"{label} {count}",
                     callback_data=f"{MORE_RESULTS_PREFIX}{token}",
                 )
             ]

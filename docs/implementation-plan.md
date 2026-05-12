@@ -235,7 +235,7 @@ Acceptance:
 - [x] Telegram query triggers WatchFacts search -> parse -> match -> dedupe -> persist -> format.
 - [x] No-result state is user-friendly.
 - [x] Errors are logged and surfaced without secrets.
-- [x] Large result sets are paginated with Telegram inline "Xem thêm" callbacks.
+- [x] Large result sets show a summary first, then paginate results with Telegram inline callbacks.
 
 Verify:
 

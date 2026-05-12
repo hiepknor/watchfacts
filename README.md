@@ -200,7 +200,7 @@ HK STOCKS
 20/04/2026
 ```
 
-The bot sends up to 5 results first. When more results are available, it sends an inline "Xem thêm" button to request the next batch.
+The bot sends a result summary first. Press "Xem kết quả" to receive the first result batch, then use "Xem thêm" for the next batches.
 
 ## Matching Logic
 
