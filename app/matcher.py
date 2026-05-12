@@ -400,6 +400,8 @@ def _looks_like_product_reference_boundary(
         return False
     if _looks_like_plain_price_before_currency(normalized_token, next_token):
         return False
+    if _looks_like_plain_price_after_currency(normalized_token, previous_token):
+        return False
     if _looks_like_plain_price_after_descriptor(normalized_token, previous_token):
         return False
     if _looks_like_plain_price_after_date(normalized_token, previous_token):
@@ -527,6 +529,13 @@ def _looks_like_plain_price_after_date(token: str, previous_token: str) -> bool:
     )
 
 
+def _looks_like_plain_price_after_currency(token: str, previous_token: str) -> bool:
+    return bool(
+        re.fullmatch(r"\d{5,8}", token)
+        and previous_token in {"hkd", "usd", "usdt", "eur", "aed", "chf"}
+    )
+
+
 def _looks_like_plain_price_after_descriptor(token: str, previous_token: str) -> bool:
     return bool(
         re.fullmatch(r"\d{5,8}", token)
@@ -564,6 +573,7 @@ def _clean_display_text(value: str) -> str:
     cleaned = re.sub(r"\s*[•|]+\s*$", "", cleaned)
     cleaned = re.sub(r"\s*(?:👤|📅|🗓️)\s*$", "", cleaned)
     cleaned = re.sub(r"\s+(?:PP|AP|Patek Philippe|Audemars Piguet)\s*[^\w\s$./-]*$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*[❣❶-❿➊-➓]\ufe0f?\s*$", "", cleaned)
     return re.sub(r"(?:\s*[^\w\s$./-]*\s*new\s*)+$", "", cleaned, flags=re.IGNORECASE)
 
 

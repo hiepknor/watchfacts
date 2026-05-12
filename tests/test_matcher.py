@@ -368,6 +368,29 @@ def test_extract_relevant_listing_text_keeps_plain_number_before_currency() -> N
     )
 
 
+def test_extract_relevant_listing_text_keeps_plain_number_after_currency() -> None:
+    listing_text = (
+        "✅PP ❣️5711R Watch and Service paper, HKD 605000 "
+        "❣️5712R 2016/ HKD 830000 "
+        "❣️5134R Service paper, HKD 130000"
+    )
+
+    assert extract_relevant_listing_text("5712r", listing_text) == (
+        "5712R 2016/ HKD 830000"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_fullset_price_after_currency() -> None:
+    listing_text = (
+        "❶ 5167R Naked 71 series HKD 640000 "
+        "❷ 5712R 2012 fullset HKD 777000"
+    )
+
+    assert extract_relevant_listing_text("5712r", listing_text) == (
+        "5712R 2012 fullset HKD 777000"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_local_prefix_before_reference() -> None:
     listing_text = "New 2026 AP 26240BA Ombre Yellow Fullset $119"
 
