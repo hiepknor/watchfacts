@@ -18,45 +18,59 @@ logger = logging.getLogger(__name__)
 START_MESSAGE = (
     "🔎 Dealer Scan Bot\n\n"
     "Gửi mã đồng hồ hoặc mô tả ngắn để quét WatchFacts.\n"
-    "Bot sẽ trả summary trước, rồi bạn bấm nút để nhận từng lượt kết quả.\n\n"
+    "Bot sẽ gửi tóm tắt trước, rồi bạn bấm nút để nhận từng lượt kết quả.\n\n"
     "Ví dụ nhanh:\n"
     "• 7118/1a grey\n"
     "• 116500 black\n"
     "• 5712 blue\n\n"
-    "Trong group: gọi bot bằng @username hoặc reply vào tin nhắn của bot.\n\n"
+    "Trong nhóm: gọi bot bằng @username hoặc trả lời tin nhắn của bot.\n\n"
     "Gõ /help để xem hướng dẫn đầy đủ."
 )
 HELP_MESSAGE = (
     "📘 Hướng dẫn sử dụng\n\n"
-    "1️⃣ Gửi query\n"
+    "1️⃣ Gửi truy vấn\n"
     "• 7118/1a grey\n"
     "• 116500 black 2023\n"
     "• 228253a choco\n\n"
-    "2️⃣ Nhận summary\n"
+    "2️⃣ Nhận tóm tắt\n"
     "Bot báo tổng số kết quả và số kết quả mỗi lượt.\n\n"
     "3️⃣ Bấm nút\n"
     "• Xem kết quả: nhận lượt đầu\n"
     "• Xem thêm: nhận lượt tiếp theo\n\n"
-    "👥 Trong group\n"
+    "👥 Trong nhóm\n"
     "• @bot_username 7118/1a grey\n"
-    "• Hoặc reply vào tin nhắn của bot với query mới\n\n"
+    "• Hoặc trả lời tin nhắn của bot với truy vấn mới\n\n"
     "🧹 /cancel để xóa các nút kết quả đang chờ.\n"
     "⚙️ /settings để xem cấu hình bot hiện tại."
 )
-EMPTY_QUERY_MESSAGE = "Please send a non-empty WatchFacts search query."
-UNAUTHORIZED_MESSAGE = "Bạn không có quyền sử dụng bot này."
+EMPTY_QUERY_MESSAGE = (
+    "⚠️ Truy vấn đang trống\n\n"
+    "Vui lòng gửi mã đồng hồ hoặc mô tả ngắn để bot tìm trên WatchFacts."
+)
+UNAUTHORIZED_MESSAGE = (
+    "🔒 Không có quyền truy cập\n\n"
+    "Tài khoản Telegram này chưa được phép sử dụng bot."
+)
 CANCEL_MESSAGE = (
     "🧹 Đã dọn phiên kết quả\n\n"
     "Các nút “Xem kết quả” / “Xem thêm” cũ sẽ hết hiệu lực.\n"
-    "Gửi query mới để bắt đầu lại."
+    "Gửi truy vấn mới để bắt đầu lại."
 )
 CANCEL_EMPTY_MESSAGE = (
     "🧹 Không có phiên kết quả nào đang chờ.\n\n"
-    "Gửi query mới để tìm WatchFacts."
+    "Gửi truy vấn mới để tìm WatchFacts."
 )
 PROCESSING_MESSAGE = (
     "🔎 Đang quét WatchFacts\n"
-    "⏳ Bot đang tìm listing phù hợp..."
+    "⏳ Bot đang tìm mẫu tin phù hợp..."
+)
+SEARCH_ERROR_MESSAGE = (
+    "⚠️ Tìm kiếm thất bại\n\n"
+    "Vui lòng thử lại sau hoặc kiểm tra nhật ký bot nếu lỗi tiếp diễn."
+)
+NO_RESULTS_MESSAGE = (
+    "🔍 Không tìm thấy kết quả phù hợp\n\n"
+    "Bạn có thể thử mã khác, thêm/bớt màu mặt số, năm, tình trạng hoặc khoảng giá."
 )
 WORKFLOW_KEY = "search_workflow"
 PROCESSING_MIN_SECONDS_KEY = "processing_min_seconds"
@@ -86,8 +100,8 @@ class PlaceholderSearchWorkflow:
         return [
             SearchResult(
                 listing_text=(
-                    "Search pipeline is not implemented yet. "
-                    f"Received query: {query}"
+                    "Luồng tìm kiếm chưa được cấu hình. "
+                    f"Truy vấn đã nhận: {query}"
                 )
             )
         ]
@@ -166,9 +180,7 @@ async def handle_text_message(update, context) -> None:
             len(query),
         )
         if message is not None:
-            await _maybe_await(
-                message.reply_text("Search failed. Please check the bot logs.")
-            )
+            await _maybe_await(message.reply_text(SEARCH_ERROR_MESSAGE))
         return
 
     if message is not None:
@@ -193,7 +205,7 @@ async def send_search_results(
     result_limit: int = DEFAULT_TELEGRAM_RESULT_LIMIT,
 ) -> None:
     if not results:
-        await _maybe_await(message.reply_text("No matching listings found."))
+        await _maybe_await(message.reply_text(NO_RESULTS_MESSAGE))
         return
 
     token = _store_result_page(
@@ -226,7 +238,7 @@ async def handle_more_results(update, context) -> None:
     token = data.removeprefix(MORE_RESULTS_PREFIX)
     page = _get_result_page(context, token)
     if not token or page is None:
-        await _maybe_await(callback_query.answer("Kết quả đã hết hạn. Vui lòng search lại."))
+        await _maybe_await(callback_query.answer("Kết quả đã hết hạn. Vui lòng tìm lại."))
         return
 
     await _maybe_await(callback_query.answer("Đang gửi thêm kết quả..."))
@@ -258,7 +270,7 @@ async def handle_more_results(update, context) -> None:
 
 def format_search_results(results: list[SearchResult]) -> str:
     if not results:
-        return "No matching listings found."
+        return NO_RESULTS_MESSAGE
 
     formatted: list[str] = []
     for result in results:
@@ -304,14 +316,14 @@ def format_more_results_notice(visible_count: int, total_count: int) -> str:
 
 def format_settings_message(context) -> str:
     allowed_user_ids = _allowed_user_ids(context)
-    access_mode = "Owner-only" if allowed_user_ids else "Public"
+    access_mode = "Chỉ chủ bot" if allowed_user_ids else "Công khai"
     owner_count = len(allowed_user_ids)
     return (
         "⚙️ Cấu hình bot\n\n"
         f"🔐 Quyền truy cập: {access_mode}\n"
-        f"👤 Owner IDs: {owner_count if owner_count else 'Không giới hạn'}\n"
+        f"👤 ID chủ bot: {owner_count if owner_count else 'Không giới hạn'}\n"
         f"📨 Kết quả mỗi lượt: {_result_limit(context)}\n\n"
-        "🔒 Token, cookie và browser state không bao giờ hiển thị ở đây."
+        "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
     )
 
 

@@ -172,10 +172,10 @@ def test_settings_command_returns_safe_runtime_settings() -> None:
     assert message.replies == [
         (
             "⚙️ Cấu hình bot\n\n"
-            "🔐 Quyền truy cập: Owner-only\n"
-            "👤 Owner IDs: 2\n"
+            "🔐 Quyền truy cập: Chỉ chủ bot\n"
+            "👤 ID chủ bot: 2\n"
             "📨 Kết quả mỗi lượt: 7\n\n"
-            "🔒 Token, cookie và browser state không bao giờ hiển thị ở đây."
+            "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
         )
     ]
     assert "token=" not in message.replies[0].lower()
@@ -184,10 +184,10 @@ def test_settings_command_returns_safe_runtime_settings() -> None:
 def test_format_settings_message_shows_public_access() -> None:
     assert format_settings_message(make_context(result_limit=5)) == (
         "⚙️ Cấu hình bot\n\n"
-        "🔐 Quyền truy cập: Public\n"
-        "👤 Owner IDs: Không giới hạn\n"
+        "🔐 Quyền truy cập: Công khai\n"
+        "👤 ID chủ bot: Không giới hạn\n"
         "📨 Kết quả mỗi lượt: 5\n\n"
-        "🔒 Token, cookie và browser state không bao giờ hiển thị ở đây."
+        "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
     )
 
 
@@ -538,7 +538,7 @@ def test_more_results_callback_handles_expired_page() -> None:
 
     asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
 
-    assert callback.answers == ["Kết quả đã hết hạn. Vui lòng search lại."]
+    assert callback.answers == ["Kết quả đã hết hạn. Vui lòng tìm lại."]
     assert message.replies == []
 
 
@@ -611,7 +611,12 @@ def test_search_errors_are_logged_without_query_text(caplog) -> None:
             )
         )
 
-    assert message.replies == ["Search failed. Please check the bot logs."]
+    assert message.replies == [
+        (
+            "⚠️ Tìm kiếm thất bại\n\n"
+            "Vui lòng thử lại sau hoặc kiểm tra nhật ký bot nếu lỗi tiếp diễn."
+        )
+    ]
     assert message.sent_messages[0].text == PROCESSING_MESSAGE
     assert message.sent_messages[0].deleted is True
     assert context.application.bot.chat_actions == [(12345, "typing")]
