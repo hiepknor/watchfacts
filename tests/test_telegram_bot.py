@@ -54,6 +54,7 @@ class FakeMessage:
         user_id: int = 123,
         chat_type: str = "private",
         reply_to_message=None,
+        fail_photos: bool = False,
     ) -> None:
         self.text = text
         self.chat_id = 12345
@@ -63,6 +64,7 @@ class FakeMessage:
         self.replies: list[str] = []
         self.photos: list[tuple[str, str]] = []
         self.sent_messages: list[FakeSentMessage] = []
+        self.fail_photos = fail_photos
 
     async def reply_text(self, text: str, **kwargs) -> FakeSentMessage:
         self.replies.append(text)
@@ -75,6 +77,8 @@ class FakeMessage:
         return sent_message
 
     async def reply_photo(self, photo: str, caption: str) -> None:
+        if self.fail_photos:
+            raise TimeoutError("photo timeout")
         self.photos.append((photo, caption))
 
 
@@ -416,6 +420,46 @@ def test_results_callback_limits_long_photo_caption() -> None:
     caption = message.photos[0][1]
     assert len(caption) == TELEGRAM_PHOTO_CAPTION_LIMIT
     assert caption.endswith("…")
+
+
+def test_results_callback_falls_back_to_text_and_keeps_more_button_on_photo_timeout() -> None:
+    message = FakeMessage("6159G", fail_photos=True)
+    workflow = FakeWorkflow(
+        [
+            SearchResult(
+                listing_text=f"6159G listing {index}",
+                seller="Dealer",
+                posted_date="April 20, 2026",
+                image_url=f"https://image-{index}.jpg",
+            )
+            for index in range(1, 4)
+        ]
+    )
+    context = make_context(workflow, result_limit=2)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    notice_markup = message.sent_messages[-1].reply_markup
+    token = notice_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    callback = FakeCallbackQuery(f"more_results:{token}", message)
+
+    asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
+
+    assert message.photos == []
+    assert message.replies[-3:] == [
+        (
+            "🏷️ 6159G listing 1\n\n"
+            "👤 Dealer\n\n"
+            "📅 20/04/2026"
+        ),
+        (
+            "🏷️ 6159G listing 2\n\n"
+            "👤 Dealer\n\n"
+            "📅 20/04/2026"
+        ),
+        "📊 Đã hiển thị 2/3 kết quả.\nBấm “Xem thêm” để nhận lượt tiếp theo.",
+    ]
+    assert message.sent_messages[-1].reply_markup.inline_keyboard[0][0].text == "Xem thêm 1"
 
 
 def test_text_messages_send_each_result_as_separate_photo() -> None:

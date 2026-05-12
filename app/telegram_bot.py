@@ -549,18 +549,28 @@ async def _send_result_batch(message, results: list[SearchResult]) -> None:
     for result in results:
         caption = format_search_result_caption(result)
         if result.image_url:
-            await _maybe_await(
-                message.reply_photo(
-                    photo=result.image_url,
-                    caption=_limit_telegram_text(caption, TELEGRAM_PHOTO_CAPTION_LIMIT),
+            try:
+                await _maybe_await(
+                    message.reply_photo(
+                        photo=result.image_url,
+                        caption=_limit_telegram_text(
+                            caption,
+                            TELEGRAM_PHOTO_CAPTION_LIMIT,
+                        ),
+                    )
                 )
-            )
-        else:
-            await _maybe_await(
-                message.reply_text(
-                    _limit_telegram_text(caption, TELEGRAM_TEXT_MESSAGE_LIMIT)
+                continue
+            except Exception as exc:
+                logger.info(
+                    "event=telegram.photo_fallback error_type=%s",
+                    exc.__class__.__name__,
                 )
+
+        await _maybe_await(
+            message.reply_text(
+                _limit_telegram_text(caption, TELEGRAM_TEXT_MESSAGE_LIMIT)
             )
+        )
 
 
 def _limit_telegram_text(value: str, limit: int) -> str:
