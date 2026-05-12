@@ -294,12 +294,9 @@ def test_results_callback_sends_first_photo_batch() -> None:
         (
             "https://image-url.jpg",
             (
-                "🏷️ Thông tin:\n"
-                "228253A choco N2\n\n"
-                "👤 Người đăng:\n"
-                "HK STOCKS\n\n"
-                "📅 Ngày đăng:\n"
-                "20/04/2026"
+                "🏷️ 228253A choco N2\n\n"
+                "👤 HK STOCKS\n\n"
+                "📅 20/04/2026"
             ),
         )
     ]
@@ -341,12 +338,9 @@ def test_text_messages_send_each_result_as_separate_photo() -> None:
     assert message.photos[0] == (
         "https://image-1.jpg",
         (
-            "🏷️ Thông tin:\n"
-            "7118/1200A blue 2/2026 $725000\n\n"
-            "👤 Người đăng:\n"
-            "Ella\n\n"
-            "📅 Ngày đăng:\n"
-            "17/04/2026"
+            "🏷️ 7118/1200A blue 2/2026 $725000\n\n"
+            "👤 Ella\n\n"
+            "📅 17/04/2026"
         ),
     )
     assert message.photos[1][0] == "https://image-2.jpg"
@@ -420,20 +414,14 @@ def test_more_results_callback_sends_next_batch() -> None:
     assert callback.answers == ["Đang gửi thêm kết quả..."]
     assert message.replies[-3:] == [
         (
-            "🏷️ Thông tin:\n"
-            "7118/1A grey listing 1\n\n"
-            "👤 Người đăng:\n"
-            "Dealer\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
+            "🏷️ 7118/1A grey listing 1\n\n"
+            "👤 Dealer\n\n"
+            "📅 20/04/2026"
         ),
         (
-            "🏷️ Thông tin:\n"
-            "7118/1A grey listing 2\n\n"
-            "👤 Người đăng:\n"
-            "Dealer\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
+            "🏷️ 7118/1A grey listing 2\n\n"
+            "👤 Dealer\n\n"
+            "📅 20/04/2026"
         ),
         "📊 Đã hiển thị 2/6 kết quả.\nBấm “Xem thêm” để nhận lượt tiếp theo.",
     ]
@@ -453,20 +441,14 @@ def test_more_results_callback_sends_next_batch() -> None:
     assert second_callback.answers == ["Đang gửi thêm kết quả..."]
     assert message.replies[-3:] == [
         (
-            "🏷️ Thông tin:\n"
-            "7118/1A grey listing 3\n\n"
-            "👤 Người đăng:\n"
-            "Dealer\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
+            "🏷️ 7118/1A grey listing 3\n\n"
+            "👤 Dealer\n\n"
+            "📅 20/04/2026"
         ),
         (
-            "🏷️ Thông tin:\n"
-            "7118/1A grey listing 4\n\n"
-            "👤 Người đăng:\n"
-            "Dealer\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
+            "🏷️ 7118/1A grey listing 4\n\n"
+            "👤 Dealer\n\n"
+            "📅 20/04/2026"
         ),
         "📊 Đã hiển thị 4/6 kết quả.\nBấm “Xem thêm” để nhận lượt tiếp theo.",
     ]
@@ -485,20 +467,14 @@ def test_more_results_callback_sends_next_batch() -> None:
     assert final_callback.answers == ["Đang gửi thêm kết quả..."]
     assert message.replies[-3:] == [
         (
-            "🏷️ Thông tin:\n"
-            "7118/1A grey listing 5\n\n"
-            "👤 Người đăng:\n"
-            "Dealer\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
+            "🏷️ 7118/1A grey listing 5\n\n"
+            "👤 Dealer\n\n"
+            "📅 20/04/2026"
         ),
         (
-            "🏷️ Thông tin:\n"
-            "7118/1A grey listing 6\n\n"
-            "👤 Người đăng:\n"
-            "Dealer\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
+            "🏷️ 7118/1A grey listing 6\n\n"
+            "👤 Dealer\n\n"
+            "📅 20/04/2026"
         ),
         "✅ Đã gửi hết kết quả.",
     ]
@@ -553,12 +529,9 @@ def test_text_messages_fallback_to_text_when_image_is_missing() -> None:
 
     assert message.replies[-2:] == [
         (
-            "🏷️ Thông tin:\n"
-            "228253A choco N2\n\n"
-            "👤 Người đăng:\n"
-            "HK STOCKS\n\n"
-            "📅 Ngày đăng:\n"
-            "20/04/2026"
+            "🏷️ 228253A choco N2\n\n"
+            "👤 HK STOCKS\n\n"
+            "📅 20/04/2026"
         ),
         "✅ Đã gửi hết kết quả.",
     ]

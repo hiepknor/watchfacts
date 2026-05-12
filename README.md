@@ -207,14 +207,11 @@ Send a watch query to the bot:
 Example response:
 
 ```text
-🏷️ Thông tin:
-228253A choco N2 467000hkd
+🏷️ 228253A choco N2 467000hkd
 
-👤 Người đăng:
-HK STOCKS
+👤 HK STOCKS
 
-📅 Ngày đăng:
-20/04/2026
+📅 20/04/2026
 ```
 
 The bot sends a result summary first. Press "Xem kết quả" to receive the first result batch, then use "Xem thêm" for the next batches.

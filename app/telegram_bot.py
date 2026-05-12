@@ -259,23 +259,23 @@ def format_search_results(results: list[SearchResult]) -> str:
     for result in results:
         sections: list[str] = []
         if result.image_url:
-            sections.append(f"📸 Ảnh sản phẩm:\n{result.image_url}")
-        sections.append(f"🏷️ Thông tin:\n{result.listing_text}")
+            sections.append(f"📸 {result.image_url}")
+        sections.append(f"🏷️ {result.listing_text}")
         if result.seller:
-            sections.append(f"👤 Người đăng:\n{result.seller}")
+            sections.append(f"👤 {result.seller}")
         if result.posted_date:
-            sections.append(f"📅 Ngày đăng:\n{result.posted_date}")
+            sections.append(f"📅 {result.posted_date}")
         formatted.append("\n\n".join(sections))
 
     return "\n\n".join(formatted)
 
 
 def format_search_result_caption(result: SearchResult) -> str:
-    sections = [f"🏷️ Thông tin:\n{result.listing_text}"]
+    sections = [f"🏷️ {result.listing_text}"]
     if result.seller:
-        sections.append(f"👤 Người đăng:\n{result.seller}")
+        sections.append(f"👤 {result.seller}")
     if result.posted_date:
-        sections.append(f"📅 Ngày đăng:\n{format_posted_date(result.posted_date)}")
+        sections.append(f"📅 {format_posted_date(result.posted_date)}")
     return "\n\n".join(sections)
 
 
