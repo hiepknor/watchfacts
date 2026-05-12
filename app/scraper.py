@@ -26,6 +26,13 @@ class ScrapeResult:
     server_filtered: bool = False
 
 
+@dataclass(frozen=True)
+class BrowserSessionStatus:
+    ok: bool
+    status: str
+    detail: str
+
+
 class Page(Protocol):
     url: str
 
@@ -56,6 +63,69 @@ class Browser(Protocol):
 
     async def close(self) -> None:
         ...
+
+
+async def check_watchfacts_session(
+    settings: Settings,
+    *,
+    playwright_factory=None,
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+) -> BrowserSessionStatus:
+    state_path = settings.browser_state_path
+    if not state_path.exists():
+        return BrowserSessionStatus(
+            ok=False,
+            status="missing",
+            detail="Missing browser session. Run `python scripts/login.py` first.",
+        )
+
+    if playwright_factory is None:
+        from playwright.async_api import async_playwright
+
+        playwright_factory = async_playwright
+
+    try:
+        async with playwright_factory() as playwright:
+            browser = await playwright.chromium.launch(headless=settings.headless)
+            try:
+                context = await browser.new_context(storage_state=state_path)
+                try:
+                    page = await context.new_page()
+                    response = await page.goto(
+                        settings.watchfacts_url,
+                        wait_until="domcontentloaded",
+                        timeout=timeout_ms,
+                    )
+                    if response is not None and response.status >= 400:
+                        return BrowserSessionStatus(
+                            ok=False,
+                            status="http_error",
+                            detail=f"WatchFacts returned HTTP {response.status}.",
+                        )
+
+                    html = await page.content()
+                    final_url = getattr(page, "url", settings.watchfacts_url)
+                    if _looks_unauthenticated(final_url, html):
+                        return BrowserSessionStatus(
+                            ok=False,
+                            status="expired",
+                            detail="Saved browser session appears expired.",
+                        )
+                    return BrowserSessionStatus(
+                        ok=True,
+                        status="valid",
+                        detail="Saved browser session is valid.",
+                    )
+                finally:
+                    await context.close()
+            finally:
+                await browser.close()
+    except Exception as exc:
+        return BrowserSessionStatus(
+            ok=False,
+            status="check_failed",
+            detail=f"Session check failed: {exc.__class__.__name__}.",
+        )
 
 
 async def fetch_watchfacts_html(

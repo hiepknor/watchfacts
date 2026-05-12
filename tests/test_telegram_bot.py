@@ -4,6 +4,7 @@ import asyncio
 import logging
 from types import SimpleNamespace
 
+from app.scraper import BrowserSessionError, BrowserSessionStatus
 from app.telegram_bot import (
     EMPTY_QUERY_MESSAGE,
     ALLOWED_USER_IDS_KEY,
@@ -19,15 +20,20 @@ from app.telegram_bot import (
     TELEGRAM_PHOTO_CAPTION_LIMIT,
     TELEGRAM_TEXT_MESSAGE_LIMIT,
     UNAUTHORIZED_MESSAGE,
+    WATCHFACTS_OWNER_ALERT_MESSAGE,
+    WATCHFACTS_SESSION_CHECKER_KEY,
+    WATCHFACTS_SESSION_ERROR_MESSAGE,
     WORKFLOW_KEY,
     RESULT_REFINER_KEY,
     SearchResult,
     cancel_command,
     format_result_summary,
+    format_health_message,
     format_posted_date,
     format_settings_message,
     handle_more_results,
     handle_text_message,
+    health_command,
     help_command,
     settings_command,
     start_command,
@@ -99,6 +105,11 @@ class FailingWorkflow:
         raise RuntimeError("boom")
 
 
+class ExpiredSessionWorkflow:
+    async def search(self, query: str) -> list[SearchResult]:
+        raise BrowserSessionError("Saved browser session appears expired. cookie=secret")
+
+
 class BlockingWorkflow:
     def __init__(self) -> None:
         self.started = asyncio.Event()
@@ -117,9 +128,13 @@ class FakeBot:
         self.id = 777
         self.username = "DealerScanBot"
         self.chat_actions: list[tuple[int, str]] = []
+        self.sent_messages: list[tuple[int, str]] = []
 
     async def send_chat_action(self, *, chat_id: int, action: str) -> None:
         self.chat_actions.append((chat_id, action))
+
+    async def send_message(self, *, chat_id: int, text: str) -> None:
+        self.sent_messages.append((chat_id, text))
 
 
 class FakeCallbackQuery:
@@ -137,6 +152,7 @@ def make_context(
     workflow=None,
     *,
     refiner=None,
+    session_checker=None,
     result_limit: int | None = None,
     allowed_user_ids: tuple[int, ...] = (),
 ):
@@ -149,6 +165,8 @@ def make_context(
     bot_data[SEARCH_SEMAPHORE_KEY] = asyncio.Semaphore(1)
     if refiner is not None:
         bot_data[RESULT_REFINER_KEY] = refiner
+    if session_checker is not None:
+        bot_data[WATCHFACTS_SESSION_CHECKER_KEY] = session_checker
     bot = FakeBot()
     return SimpleNamespace(bot=bot, application=SimpleNamespace(bot=bot, bot_data=bot_data))
 
@@ -178,6 +196,7 @@ def test_help_command_returns_visual_usage_message() -> None:
     assert message.replies == [HELP_MESSAGE]
     assert "Xem kết quả" in message.replies[0]
     assert "/cancel" in message.replies[0]
+    assert "/health" in message.replies[0]
 
 
 def test_help_command_rejects_unauthorized_user() -> None:
@@ -205,6 +224,57 @@ def test_settings_command_returns_safe_runtime_settings() -> None:
         )
     ]
     assert "token=" not in message.replies[0].lower()
+
+
+def test_health_command_reports_valid_watchfacts_session() -> None:
+    message = FakeMessage()
+
+    async def checker() -> BrowserSessionStatus:
+        return BrowserSessionStatus(ok=True, status="valid", detail="cookie=secret")
+
+    asyncio.run(
+        health_command(
+            SimpleNamespace(message=message),
+            make_context(session_checker=checker),
+        )
+    )
+
+    assert message.replies == [
+        (
+            "🩺 Kiểm tra hệ thống\n\n"
+            "🟢 WatchFacts session: hợp lệ\n"
+            "📨 Bot Telegram: đang phản hồi\n\n"
+            "✅ Bot có thể dùng session hiện tại để quét WatchFacts.\n\n"
+            "🔒 Không hiển thị cookie, token hoặc browser state."
+        )
+    ]
+    assert "cookie=secret" not in message.replies[0]
+
+
+def test_health_command_reports_expired_watchfacts_session() -> None:
+    message = FakeMessage()
+
+    async def checker() -> BrowserSessionStatus:
+        return BrowserSessionStatus(ok=False, status="expired", detail="login page")
+
+    asyncio.run(
+        health_command(
+            SimpleNamespace(message=message),
+            make_context(session_checker=checker),
+        )
+    )
+
+    assert "🟠 WatchFacts session: đã hết hạn" in message.replies[0]
+    assert "Đăng nhập lại WatchFacts" in message.replies[0]
+
+
+def test_format_health_message_handles_missing_checker() -> None:
+    assert format_health_message(None) == (
+        "🩺 Kiểm tra hệ thống\n\n"
+        "⚪ WatchFacts session: chưa cấu hình checker\n"
+        "📨 Bot Telegram: đang phản hồi\n\n"
+        "🔒 Không hiển thị cookie, token hoặc browser state."
+    )
 
 
 def test_format_settings_message_shows_public_access() -> None:
@@ -834,3 +904,40 @@ def test_search_errors_are_logged_without_query_text(caplog) -> None:
     )
     assert "228253a choco" not in caplog.text
     assert "token" not in caplog.text
+
+
+def test_watchfacts_session_error_notifies_owner_in_vietnamese(caplog) -> None:
+    message = FakeMessage("5712r", user_id=123)
+    context = make_context(ExpiredSessionWorkflow(), allowed_user_ids=(123, 456))
+
+    with caplog.at_level(logging.ERROR, logger="app.telegram_bot"):
+        asyncio.run(
+            handle_text_message(
+                SimpleNamespace(message=message),
+                context,
+            )
+        )
+
+    assert message.replies == [WATCHFACTS_SESSION_ERROR_MESSAGE]
+    assert context.application.bot.sent_messages == [
+        (123, WATCHFACTS_OWNER_ALERT_MESSAGE),
+        (456, WATCHFACTS_OWNER_ALERT_MESSAGE),
+    ]
+    assert "🚨 WatchFacts session cần xử lý" in WATCHFACTS_OWNER_ALERT_MESSAGE
+    assert "Đăng nhập lại WatchFacts" in WATCHFACTS_OWNER_ALERT_MESSAGE
+    assert "cookie=secret" not in WATCHFACTS_OWNER_ALERT_MESSAGE
+    assert "event=telegram.watchfacts_session_error" in caplog.text
+    assert "5712r" not in caplog.text
+    assert "cookie=secret" not in caplog.text
+
+
+def test_watchfacts_session_owner_alert_is_debounced() -> None:
+    message = FakeMessage("5712r", user_id=123)
+    context = make_context(ExpiredSessionWorkflow(), allowed_user_ids=(123,))
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert context.application.bot.sent_messages == [
+        (123, WATCHFACTS_OWNER_ALERT_MESSAGE)
+    ]

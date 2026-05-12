@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Protocol
 
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
+from app.scraper import BrowserSessionError, BrowserSessionStatus
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,8 @@ HELP_MESSAGE = (
     "• @bot_username 7118/1a grey\n"
     "• Hoặc trả lời tin nhắn của bot với truy vấn mới\n\n"
     "🧹 /cancel để xóa các nút kết quả đang chờ.\n"
-    "⚙️ /settings để xem cấu hình bot hiện tại."
+    "⚙️ /settings để xem cấu hình bot hiện tại.\n"
+    "🩺 /health để kiểm tra session WatchFacts."
 )
 EMPTY_QUERY_MESSAGE = (
     "⚠️ Truy vấn đang trống\n\n"
@@ -73,6 +75,21 @@ SEARCH_ERROR_MESSAGE = (
     "⚠️ Tìm kiếm thất bại\n\n"
     "Vui lòng thử lại sau hoặc kiểm tra nhật ký bot nếu lỗi tiếp diễn."
 )
+WATCHFACTS_SESSION_ERROR_MESSAGE = (
+    "🔐 WatchFacts cần đăng nhập lại\n\n"
+    "Session WatchFacts của bot đã hết hạn hoặc không còn hợp lệ.\n"
+    "Mình đã báo cho owner để refresh session.\n\n"
+    "⏳ Vui lòng thử lại sau khi owner cập nhật đăng nhập."
+)
+WATCHFACTS_OWNER_ALERT_MESSAGE = (
+    "🚨 WatchFacts session cần xử lý\n\n"
+    "Bot không còn truy cập được WatchFacts bằng session đã lưu.\n\n"
+    "📌 Việc cần làm:\n"
+    "1. Đăng nhập lại WatchFacts để tạo session mới.\n"
+    "2. Cập nhật `data/watchfacts_state.json` trên server nếu login ở máy khác.\n"
+    "3. Restart hoặc deploy lại bot.\n\n"
+    "🔒 Bot không lưu mật khẩu WatchFacts và không tự đăng nhập lại."
+)
 NO_RESULTS_MESSAGE = (
     "🔍 Không tìm thấy kết quả phù hợp\n\n"
     "Bạn có thể thử mã khác, thêm/bớt màu mặt số, năm, tình trạng hoặc khoảng giá."
@@ -84,11 +101,14 @@ TELEGRAM_RESULT_LIMIT_KEY = "telegram_result_limit"
 TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY = "telegram_max_concurrent_searches"
 RESULT_PAGES_KEY = "result_pages"
 RESULT_REFINER_KEY = "result_refiner"
+WATCHFACTS_SESSION_CHECKER_KEY = "watchfacts_session_checker"
+WATCHFACTS_SESSION_ALERT_LAST_SENT_KEY = "watchfacts_session_alert_last_sent"
 SEARCH_SEMAPHORE_KEY = "search_semaphore"
 MORE_RESULTS_PREFIX = "more_results:"
 ALLOWED_USER_IDS_KEY = "allowed_user_ids"
 TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
 TELEGRAM_TEXT_MESSAGE_LIMIT = 4096
+WATCHFACTS_SESSION_ALERT_COOLDOWN_SECONDS = 30 * 60
 
 
 @dataclass(frozen=True)
@@ -107,6 +127,7 @@ class SearchWorkflow(Protocol):
 
 
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
+SessionChecker = Callable[[], Awaitable[BrowserSessionStatus]]
 
 
 class PlaceholderSearchWorkflow:
@@ -143,6 +164,23 @@ async def settings_command(update, context) -> None:
         return
     if message is not None:
         await _maybe_await(message.reply_text(format_settings_message(context)))
+
+
+async def health_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    checker = _watchfacts_session_checker(context)
+    if checker is None:
+        await _maybe_await(message.reply_text(format_health_message(None)))
+        return
+
+    await _send_typing_action(message, context)
+    status = await checker()
+    await _maybe_await(message.reply_text(format_health_message(status)))
 
 
 async def cancel_command(update, context) -> None:
@@ -188,6 +226,21 @@ async def handle_text_message(update, context) -> None:
         async with _search_semaphore(context):
             await _delete_message(queued_message)
             results = await workflow.search(query)
+    except BrowserSessionError as exc:
+        await _delete_processing_message(
+            processing_message,
+            started_at=processing_started_at,
+            min_seconds=_processing_min_seconds(context),
+        )
+        logger.error(
+            "event=telegram.watchfacts_session_error error_type=%s query_length=%d",
+            exc.__class__.__name__,
+            len(query),
+        )
+        await _notify_watchfacts_session_owner(context)
+        if message is not None:
+            await _maybe_await(message.reply_text(WATCHFACTS_SESSION_ERROR_MESSAGE))
+        return
     except Exception as exc:
         await _delete_processing_message(
             processing_message,
@@ -393,6 +446,40 @@ def format_settings_message(context) -> str:
     )
 
 
+def format_health_message(status: BrowserSessionStatus | None) -> str:
+    if status is None:
+        return (
+            "🩺 Kiểm tra hệ thống\n\n"
+            "⚪ WatchFacts session: chưa cấu hình checker\n"
+            "📨 Bot Telegram: đang phản hồi\n\n"
+            "🔒 Không hiển thị cookie, token hoặc browser state."
+        )
+
+    if status.ok:
+        session_line = "🟢 WatchFacts session: hợp lệ"
+        action_line = "✅ Bot có thể dùng session hiện tại để quét WatchFacts."
+    elif status.status == "missing":
+        session_line = "🔴 WatchFacts session: chưa có file đăng nhập"
+        action_line = "📌 Chạy `python scripts/login.py` rồi cập nhật server."
+    elif status.status == "expired":
+        session_line = "🟠 WatchFacts session: đã hết hạn"
+        action_line = "📌 Đăng nhập lại WatchFacts để tạo session mới."
+    elif status.status == "http_error":
+        session_line = "🟠 WatchFacts session: WatchFacts trả lỗi HTTP"
+        action_line = "📌 Kiểm tra WatchFacts hoặc thử lại sau."
+    else:
+        session_line = "🟠 WatchFacts session: chưa kiểm tra được"
+        action_line = "📌 Kiểm tra mạng/server hoặc thử lại sau."
+
+    return (
+        "🩺 Kiểm tra hệ thống\n\n"
+        f"{session_line}\n"
+        "📨 Bot Telegram: đang phản hồi\n\n"
+        f"{action_line}\n\n"
+        "🔒 Không hiển thị cookie, token hoặc browser state."
+    )
+
+
 def format_posted_date(value: str) -> str:
     normalized = value.split("·", maxsplit=1)[0].strip()
     for date_format in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d %H:%M:%S"):
@@ -411,6 +498,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     refiner = _build_result_refiner(settings)
     if refiner is not None:
         application.bot_data[RESULT_REFINER_KEY] = refiner
+    application.bot_data[WATCHFACTS_SESSION_CHECKER_KEY] = _build_session_checker(settings)
     application.bot_data[ALLOWED_USER_IDS_KEY] = settings.telegram_allowed_user_ids
     application.bot_data[TELEGRAM_RESULT_LIMIT_KEY] = settings.telegram_result_limit
     application.bot_data[TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY] = (
@@ -422,6 +510,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("settings", settings_command))
+    application.add_handler(CommandHandler("health", health_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CallbackQueryHandler(handle_more_results, pattern=f"^{MORE_RESULTS_PREFIX}"))
     application.add_handler(
@@ -492,6 +581,13 @@ def _result_refiner(context) -> RefineResults | None:
     application = getattr(context, "application", None)
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     value = bot_data.get(RESULT_REFINER_KEY)
+    return value if callable(value) else None
+
+
+def _watchfacts_session_checker(context) -> SessionChecker | None:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(WATCHFACTS_SESSION_CHECKER_KEY)
     return value if callable(value) else None
 
 
@@ -603,6 +699,42 @@ async def _reject_unauthorized(update, context, message) -> bool:
     if message is not None:
         await _maybe_await(message.reply_text(UNAUTHORIZED_MESSAGE))
     return True
+
+
+async def _notify_watchfacts_session_owner(context) -> None:
+    owner_ids = _allowed_user_ids(context)
+    if not owner_ids:
+        logger.info("event=telegram.watchfacts_session_alert_skipped reason=no_owner")
+        return
+
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    now = time.monotonic()
+    last_sent = float(bot_data.get(WATCHFACTS_SESSION_ALERT_LAST_SENT_KEY, 0.0) or 0.0)
+    if now - last_sent < WATCHFACTS_SESSION_ALERT_COOLDOWN_SECONDS:
+        logger.info("event=telegram.watchfacts_session_alert_skipped reason=cooldown")
+        return
+
+    bot = _context_bot(context)
+    send_message = getattr(bot, "send_message", None)
+    if send_message is None:
+        logger.info("event=telegram.watchfacts_session_alert_skipped reason=no_bot")
+        return
+
+    sent_count = 0
+    for owner_id in owner_ids:
+        try:
+            await _maybe_await(
+                send_message(chat_id=owner_id, text=WATCHFACTS_OWNER_ALERT_MESSAGE)
+            )
+            sent_count += 1
+        except Exception as exc:
+            logger.info(
+                "event=telegram.watchfacts_session_alert_failed error_type=%s",
+                exc.__class__.__name__,
+            )
+    if sent_count:
+        bot_data[WATCHFACTS_SESSION_ALERT_LAST_SENT_KEY] = now
 
 
 async def _send_result_batch(message, results: list[SearchResult]) -> None:
@@ -770,6 +902,15 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
         return await refine_search_results(query, results, settings, database=database)
 
     return refine
+
+
+def _build_session_checker(settings: Settings) -> SessionChecker:
+    from app.scraper import check_watchfacts_session
+
+    async def check() -> BrowserSessionStatus:
+        return await check_watchfacts_session(settings)
+
+    return check
 
 
 def _results_markup(token: str, count: int, *, label: str):
