@@ -89,6 +89,9 @@ Telegram commands:
 | `/settings` | Show safe runtime settings |
 | `/cancel` | Clear pending result buttons |
 
+In group chats, normal text messages are ignored. A search must mention the bot
+at the start of the message or reply to a bot message.
+
 ## Success Criteria
 
 - A user can send a Telegram query and receive matching listings.

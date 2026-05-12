@@ -204,6 +204,14 @@ Send a watch query to the bot:
 228253a choco
 ```
 
+In a group, the bot ignores normal chat messages. Start a group search by
+mentioning the bot at the beginning of the message or by replying to a bot
+message:
+
+```text
+@bot_username 228253a choco
+```
+
 Example response:
 
 ```text

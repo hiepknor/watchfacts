@@ -23,6 +23,7 @@ START_MESSAGE = (
     "• 7118/1a grey\n"
     "• 116500 black\n"
     "• 5712 blue\n\n"
+    "Trong group: gọi bot bằng @username hoặc reply vào tin nhắn của bot.\n\n"
     "Gõ /help để xem hướng dẫn đầy đủ."
 )
 HELP_MESSAGE = (
@@ -36,6 +37,9 @@ HELP_MESSAGE = (
     "3️⃣ Bấm nút\n"
     "• Xem kết quả: nhận lượt đầu\n"
     "• Xem thêm: nhận lượt tiếp theo\n\n"
+    "👥 Trong group\n"
+    "• @bot_username 7118/1a grey\n"
+    "• Hoặc reply vào tin nhắn của bot với query mới\n\n"
     "🧹 /cancel để xóa các nút kết quả đang chờ.\n"
     "⚙️ /settings để xem cấu hình bot hiện tại."
 )
@@ -129,8 +133,9 @@ async def handle_text_message(update, context) -> None:
     if await _reject_unauthorized(update, context, message):
         return
 
-    text = getattr(message, "text", None) if message is not None else None
-    query = text.strip() if text else ""
+    query = _query_text_from_message(update, context, message)
+    if query is None:
+        return
 
     if not query:
         if message is not None:
@@ -412,6 +417,69 @@ def _is_authorized(update, context) -> bool:
 
     user_id = _telegram_user_id(update)
     return user_id in allowed_user_ids
+
+
+def _query_text_from_message(update, context, message) -> str | None:
+    text = getattr(message, "text", None) if message is not None else None
+    query = text.strip() if text else ""
+    if not _is_group_message(message):
+        return query
+
+    mention = _bot_mention(context)
+    normalized_query = query.casefold()
+    if mention and normalized_query.startswith(mention.casefold()):
+        return query[len(mention) :].strip(" \t\n\r:,-")
+
+    if _is_reply_to_bot(context, message):
+        return query
+
+    return None
+
+
+def _is_group_message(message) -> bool:
+    chat = getattr(message, "chat", None)
+    chat_type = getattr(chat, "type", None) or getattr(message, "chat_type", None)
+    return chat_type in {"group", "supergroup"}
+
+
+def _bot_mention(context) -> str | None:
+    bot = _context_bot(context)
+    username = getattr(bot, "username", None)
+    if not username:
+        return None
+    return f"@{str(username).lstrip('@')}"
+
+
+def _is_reply_to_bot(context, message) -> bool:
+    reply_to_message = getattr(message, "reply_to_message", None)
+    if reply_to_message is None:
+        return False
+
+    reply_user = getattr(reply_to_message, "from_user", None)
+    if reply_user is None:
+        return False
+
+    bot = _context_bot(context)
+    bot_id = getattr(bot, "id", None)
+    reply_user_id = getattr(reply_user, "id", None)
+    if bot_id is not None and reply_user_id == bot_id:
+        return True
+
+    bot_username = getattr(bot, "username", None)
+    reply_username = getattr(reply_user, "username", None)
+    return bool(
+        bot_username
+        and reply_username
+        and str(reply_username).casefold() == str(bot_username).casefold()
+    )
+
+
+def _context_bot(context):
+    bot = getattr(context, "bot", None)
+    if bot is not None:
+        return bot
+    application = getattr(context, "application", None)
+    return getattr(application, "bot", None) if application is not None else None
 
 
 async def _reject_unauthorized(update, context, message) -> bool:

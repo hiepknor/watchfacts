@@ -96,6 +96,7 @@ Acceptance:
 - [x] Text messages call a search workflow interface.
 - [x] Optional Telegram user id allowlist restricts bot usage when configured.
 - [x] Telegram pagination result limit can be configured from `.env`.
+- [x] Group chats ignore normal text unless the bot is mentioned or replied to.
 
 Verify:
 

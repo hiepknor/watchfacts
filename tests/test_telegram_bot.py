@@ -44,10 +44,19 @@ class FakeSentMessage:
 
 
 class FakeMessage:
-    def __init__(self, text: str | None = None, *, user_id: int = 123) -> None:
+    def __init__(
+        self,
+        text: str | None = None,
+        *,
+        user_id: int = 123,
+        chat_type: str = "private",
+        reply_to_message=None,
+    ) -> None:
         self.text = text
         self.chat_id = 12345
+        self.chat = SimpleNamespace(type=chat_type)
         self.from_user = SimpleNamespace(id=user_id)
+        self.reply_to_message = reply_to_message
         self.replies: list[str] = []
         self.photos: list[tuple[str, str]] = []
         self.sent_messages: list[FakeSentMessage] = []
@@ -83,6 +92,8 @@ class FailingWorkflow:
 
 class FakeBot:
     def __init__(self) -> None:
+        self.id = 777
+        self.username = "DealerScanBot"
         self.chat_actions: list[tuple[int, str]] = []
 
     async def send_chat_action(self, *, chat_id: int, action: str) -> None:
@@ -112,7 +123,8 @@ def make_context(
         bot_data[TELEGRAM_RESULT_LIMIT_KEY] = result_limit
     if workflow is not None:
         bot_data[WORKFLOW_KEY] = workflow
-    return SimpleNamespace(application=SimpleNamespace(bot=FakeBot(), bot_data=bot_data))
+    bot = FakeBot()
+    return SimpleNamespace(bot=bot, application=SimpleNamespace(bot=bot, bot_data=bot_data))
 
 
 def test_start_command_returns_usage_message() -> None:
@@ -224,6 +236,45 @@ def test_text_messages_are_public_when_allowed_user_ids_are_empty() -> None:
     asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
 
     assert workflow.queries == ["228253a choco"]
+
+
+def test_group_regular_chat_is_ignored() -> None:
+    message = FakeMessage("chơi đi a", chat_type="group")
+    workflow = FakeWorkflow([SearchResult("unused")])
+    context = make_context(workflow)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert workflow.queries == []
+    assert message.replies == []
+    assert context.application.bot.chat_actions == []
+
+
+def test_group_mention_triggers_search_with_mention_removed() -> None:
+    message = FakeMessage("@DealerScanBot 7118/1a grey", chat_type="supergroup")
+    workflow = FakeWorkflow([SearchResult("7118/1A grey")])
+    context = make_context(workflow)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert workflow.queries == ["7118/1a grey"]
+    assert message.replies == [format_result_summary(1, DEFAULT_TELEGRAM_RESULT_LIMIT)]
+
+
+def test_group_reply_to_bot_triggers_search() -> None:
+    bot_message = SimpleNamespace(from_user=SimpleNamespace(id=777, username="DealerScanBot"))
+    message = FakeMessage(
+        "7118/1a grey",
+        chat_type="group",
+        reply_to_message=bot_message,
+    )
+    workflow = FakeWorkflow([SearchResult("7118/1A grey")])
+    context = make_context(workflow)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert workflow.queries == ["7118/1a grey"]
+    assert message.replies == [format_result_summary(1, DEFAULT_TELEGRAM_RESULT_LIMIT)]
 
 
 def test_text_messages_reject_unauthorized_user_before_search() -> None:
