@@ -167,6 +167,42 @@ def test_search_workflow_omits_bundle_images_for_multi_listing_cards(tmp_path) -
     assert results[0].image_url is None
 
 
+def test_search_workflow_scopes_variant_reference_and_omits_bundle_image(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    <html>
+      <body>
+        <div class="product">
+          <a href="/flash-sales/2">
+            <img src="https://watchfacts.example/wrong-first-product.jpg" />
+          </a>
+          <div class="product-description">
+            <a class="title-link" href="/flash-sales/2">
+              PP 7130G-016 Paper of 2022 USD31000
+              PP7010G-013, 2025 model, full set price: US$63,000
+              5726/1A-014 2021 Full Set: US$115,000
+            </a>
+          </div>
+          <span data-field="seller">HL</span>
+          <time data-field="posted-date">May 9, 2026</time>
+        </div>
+      </body>
+    </html>
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("5726/1a"))
+
+    assert len(results) == 1
+    assert results[0].listing_text == "5726/1A-014 2021 Full Set: US$115,000"
+    assert results[0].seller == "HL"
+    assert results[0].image_url is None
+
+
 def test_search_workflow_logs_counts_without_query_or_state_path(tmp_path, caplog) -> None:
     settings = make_settings(tmp_path)
 

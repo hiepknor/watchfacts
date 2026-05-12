@@ -138,6 +138,18 @@ def test_extract_relevant_listing_text_keeps_shorthand_price_and_currency() -> N
     )
 
 
+def test_extract_relevant_listing_text_matches_reference_with_variant_suffix() -> None:
+    listing_text = (
+        "PP 7130G-016 Paper of 2022 USD31000 "
+        "PP7010G-013, 2025 model, full set price: US$63,000 "
+        "5726/1A-014 2021 Full Set: US$115,000"
+    )
+
+    assert extract_relevant_listing_text("5726/1a", listing_text) == (
+        "5726/1A-014 2021 Full Set: US$115,000"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_decimal_price() -> None:
     listing_text = (
         "116500 black 24.5k "

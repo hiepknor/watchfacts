@@ -108,7 +108,7 @@ def extract_relevant_listing_text(query: str, listing_text: str) -> str:
     for reference_term in reference_terms:
         term_length = len(reference_term)
         for index in range(len(normalized_tokens) - term_length + 1):
-            if normalized_tokens[index : index + term_length] != reference_term:
+            if not _reference_term_matches_at(reference_term, normalized_tokens, index):
                 continue
 
             reference_index = index + term_length - 1
@@ -209,9 +209,31 @@ def _find_reference_term_index(
 ) -> int | None:
     term_length = len(reference_term)
     for index in range(len(listing_tokens) - term_length + 1):
-        if listing_tokens[index : index + term_length] == reference_term:
+        if _reference_term_matches_at(reference_term, listing_tokens, index):
             return index
     return None
+
+
+def _reference_term_matches_at(
+    reference_term: list[str],
+    listing_tokens: list[str],
+    index: int,
+) -> bool:
+    listing_slice = listing_tokens[index : index + len(reference_term)]
+    if listing_slice == reference_term:
+        return True
+    if len(reference_term) != 1 or len(listing_slice) != 1:
+        return False
+    return _reference_token_matches(reference_term[0], listing_slice[0])
+
+
+def _reference_token_matches(query_token: str, listing_token: str) -> bool:
+    if listing_token == query_token:
+        return True
+    return (
+        listing_token.startswith(f"{query_token}-")
+        or listing_token.startswith(f"{query_token}.")
+    )
 
 
 def _local_descriptor_tokens(listing_tokens: list[str], reference_index: int) -> list[str]:

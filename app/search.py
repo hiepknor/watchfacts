@@ -19,7 +19,7 @@ PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
 )
-MULTI_LIST_REFERENCE_THRESHOLD = 6
+MULTI_LIST_REFERENCE_THRESHOLD = 1
 
 
 class WatchFactsSearchWorkflow:
