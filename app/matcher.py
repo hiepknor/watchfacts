@@ -8,6 +8,7 @@ from typing import Iterable, Protocol, TypeVar
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:[./-][a-z0-9]+)*", re.IGNORECASE)
 QUERY_TERM_RE = TOKEN_RE
 LOCAL_MATCH_WINDOW = 12
+SEGMENT_MATCH_WINDOW = 20
 PRODUCT_BRAND_TOKENS = {
     "audemars",
     "cartier",
@@ -210,7 +211,7 @@ def _matching_segment_end(
     for offset, match in enumerate(following_matches, start=1):
         token = match.group(0)
         normalized_token = normalize_text(token)
-        if offset > LOCAL_MATCH_WINDOW:
+        if offset > SEGMENT_MATCH_WINDOW:
             break
         next_match = following_matches[offset] if offset < len(following_matches) else None
         next_token = normalize_text(next_match.group(0)) if next_match else ""
@@ -220,6 +221,7 @@ def _matching_segment_end(
             listing_text,
             match.start(),
             normalized_token,
+            next_token,
         ):
             break
         end = _include_trailing_currency_symbol(listing_text, match.end())
@@ -230,6 +232,7 @@ def _looks_like_product_reference_boundary(
     listing_text: str,
     token_start: int,
     normalized_token: str,
+    next_token: str,
 ) -> bool:
     if not _looks_like_model_or_price_token(normalized_token):
         return False
@@ -241,7 +244,13 @@ def _looks_like_product_reference_boundary(
         return False
     if _looks_like_price_token(normalized_token):
         return False
+    if _looks_like_plain_price_before_currency(normalized_token, next_token):
+        return False
     if _looks_like_date_or_condition_token(normalized_token):
+        return False
+    if _looks_like_caliber_token(normalized_token):
+        return False
+    if _looks_like_size_token(normalized_token):
         return False
     return not any(
         currency in normalized_token for currency in ("hkd", "usd", "eur", "aed")
@@ -253,7 +262,7 @@ def _looks_like_next_product_brand(token: str, next_token: str) -> bool:
 
 
 def _include_trailing_currency_symbol(listing_text: str, end: int) -> int:
-    while end < len(listing_text) and listing_text[end] in {"€", "£", "¥"}:
+    while end < len(listing_text) and listing_text[end] in {"$", "€", "£", "¥"}:
         end += 1
     return end
 
@@ -269,10 +278,27 @@ def _looks_like_price_token(token: str) -> bool:
 
 def _looks_like_date_or_condition_token(token: str) -> bool:
     return bool(
-        re.fullmatch(r"n?\d{1,2}[/-]\d{2,4}y?", token)
+        re.fullmatch(r"n?\d{1,2}[/-]\d{1,4}y?", token)
+        or re.fullmatch(r"\d{4}[/-]\d{1,2}", token)
+        or re.fullmatch(r"\d{4}-\d{4}(?:-\d{4})?", token)
         or re.fullmatch(r"\d{1,2}\.\d{4}", token)
-        or re.fullmatch(r"\d{4}y", token)
+        or re.fullmatch(r"\d{4}(?:y|year|full)", token)
     )
+
+
+def _looks_like_plain_price_before_currency(token: str, next_token: str) -> bool:
+    return bool(
+        re.fullmatch(r"\d{5,8}", token)
+        and next_token in {"hkd", "usd", "usdt", "eur", "aed"}
+    )
+
+
+def _looks_like_caliber_token(token: str) -> bool:
+    return bool(re.fullmatch(r"\d{3}[a-z]{1,3}", token))
+
+
+def _looks_like_size_token(token: str) -> bool:
+    return bool(re.fullmatch(r"\d{2,3}mm", token))
 
 
 def _looks_like_year_token(token: str) -> bool:

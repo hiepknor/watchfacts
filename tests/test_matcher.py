@@ -201,6 +201,93 @@ def test_extract_relevant_listing_text_keeps_trailing_currency_symbol() -> None:
     )
 
 
+def test_extract_relevant_listing_text_keeps_one_digit_month_date_and_price() -> None:
+    listing_text = (
+        "5990/1r 25/11 new HKD2.23 "
+        "5712/1r new 25/5 HKD1.98m "
+        "126518ln yml N1/26 HKD490K"
+    )
+
+    assert extract_relevant_listing_text("5712/1r", listing_text) == (
+        "5712/1r new 25/5 HKD1.98m"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_year_month_date_and_price() -> None:
+    listing_text = "126518 Tiffany 2026/3 new 678k hkd"
+
+    assert extract_relevant_listing_text("126518 tiffany", listing_text) == (
+        "126518 Tiffany 2026/3 new 678k hkd"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_year_word_and_price() -> None:
+    listing_text = (
+        "7118/1200A Blue 2023Year Like New $670,000HKD "
+        "5267/200A Green 2023Year Like New $460,000HKD"
+    )
+
+    assert extract_relevant_listing_text("7118/1200a blue", listing_text) == (
+        "7118/1200A Blue 2023Year Like New $670,000HKD"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_compact_year_condition() -> None:
+    listing_text = "New 5712/1r 2026full set HKD:2 2.05m"
+
+    assert extract_relevant_listing_text("5712/1r", listing_text) == (
+        "5712/1r 2026full set HKD:2 2.05m"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_trailing_dollar_symbol() -> None:
+    listing_text = "PP 5164A 2022 full set 100$"
+
+    assert extract_relevant_listing_text("5164a", listing_text) == (
+        "5164A 2022 full set 100$"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_size_before_price() -> None:
+    listing_text = (
+        "116500 PANDA LAST YR PROD. Daytona 40mm SS 2023 Card "
+        "Retail ready Full Links $30,950+ship USDT OK NYC/LA"
+    )
+
+    assert extract_relevant_listing_text("116500 panda", listing_text) == (
+        "116500 PANDA LAST YR PROD. Daytona 40mm SS 2023 Card "
+        "Retail ready Full Links $30,950+ship USDT OK NYC/LA"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_year_range_and_price_range() -> None:
+    listing_text = (
+        "5712/1R 2022-2024 232$-246$ "
+        "5712/1A 2016-2019-2020 "
+        "5990/1A 2016 105,000$"
+    )
+
+    assert extract_relevant_listing_text("5712/1r", listing_text) == (
+        "5712/1R 2022-2024 232$-246$"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_caliber_after_reference() -> None:
+    listing_text = "5164A 330SC 2022 complete $97,000 + label"
+
+    assert extract_relevant_listing_text("5164a", listing_text) == (
+        "5164A 330SC 2022 complete $97,000 + label"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_plain_number_before_currency() -> None:
+    listing_text = "5980/1R 2021 full set full links New buckle 1630000 HKD 208,000 Usdt"
+
+    assert extract_relevant_listing_text("5980/1r", listing_text) == (
+        "5980/1R 2021 full set full links New buckle 1630000 HKD 208,000 Usdt"
+    )
+
+
 def test_extract_relevant_listing_text_drops_next_item_marker() -> None:
     listing_text = (
         "7010R purple N3/2026y 580k hkd "
