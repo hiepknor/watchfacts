@@ -9,6 +9,7 @@
 - BeautifulSoup4 + lxml for HTML parsing
 - SQLite for local cache, dedupe, and query history
 - Docker Compose for deployment
+- Optional llama.cpp service for local LLM experiments
 - Makefile for repeatable local commands
 
 ## Intended Project Structure
@@ -46,6 +47,16 @@ Expected environment:
 | `WATCHFACTS_URL` | Yes | `https://watchfacts.com/simon-match-making` | WatchFacts page to crawl |
 | `HEADLESS` | No | `true` | Browser headless mode |
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
+| `LOCAL_LLM_ENABLED` | No | `false` | Enables local LLM experiment code paths when explicitly implemented |
+| `LOCAL_LLM_BASE_URL` | No | `http://localhost:8080` | Local llama.cpp server URL |
+| `LOCAL_LLM_MODEL` | No | `gemma-4-E2B-it-Q8_0.gguf` | Local model identifier sent to the chat API |
+| `LOCAL_LLM_TIMEOUT_SECONDS` | No | `30` | Local LLM HTTP timeout for experiments |
+| `LLAMA_CPP_IMAGE` | No | `ghcr.io/ggml-org/llama.cpp:server` | Docker image for the experimental llama.cpp service |
+| `LLAMA_CPP_PORT` | No | `8080` | Host port for llama.cpp |
+| `LLAMA_CPP_MODELS_DIR` | No | `./models` | Host directory containing GGUF files; ignored by git |
+| `LLAMA_CPP_MODEL_FILE` | No | `gemma-4-E2B-it-Q8_0.gguf` | GGUF filename mounted under `/models` |
+| `LLAMA_CPP_CTX_SIZE` | No | `4096` | llama.cpp context size |
+| `LLAMA_CPP_PREDICT` | No | `256` | llama.cpp max generated token count |
 
 Configuration rules:
 
@@ -55,6 +66,7 @@ Configuration rules:
 - Treat boolean env values case-insensitively.
 - Restrict Telegram handlers to configured user ids when `TELEGRAM_ALLOWED_USER_IDS` is non-empty.
 - Validate Telegram result limit as a positive integer.
+- Keep local LLM settings optional and disabled by default.
 
 ## Runtime Architecture
 

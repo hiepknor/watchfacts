@@ -19,6 +19,7 @@ The bot receives a short watch query, searches WatchFacts through the logged-in 
 - Docker deployment
 - Fully async architecture
 - No LLM required
+- Optional local LLM experiment through llama.cpp
 - Free and self-hosted
 
 ## Stack
@@ -103,6 +104,10 @@ make deploy
 | `make shell` | Open a shell in the bot container |
 | `make run` | Run the bot locally on the host |
 | `make login` | Run the WatchFacts browser login locally on the host |
+| `make llm-up` | Start the experimental llama.cpp service |
+| `make llm-down` | Stop the experimental llama.cpp service |
+| `make llm-logs` | Follow experimental llama.cpp logs |
+| `make llm-smoke` | Call the local LLM chat endpoint |
 | `make check` | Run lightweight repository checks |
 | `python scripts/login.py` | Open Chromium for manual WatchFacts login and save browser state |
 | `python -m app.main` | Run the Telegram bot locally |
@@ -171,6 +176,20 @@ data/watchfacts_state.json
 ```
 
 The bot reuses this session automatically when crawling WatchFacts.
+
+## Local LLM Experiment
+
+The bot remains deterministic by default. To test a local Gemma GGUF model with
+llama.cpp, place the model file under `models/`, set `LLAMA_CPP_MODEL_FILE` in
+`.env`, then run:
+
+```bash
+make llm-up
+make llm-smoke
+```
+
+Use `make llm-down` to stop the service. Model files under `models/` are ignored
+by git.
 
 ## Telegram Usage
 

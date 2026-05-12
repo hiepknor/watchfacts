@@ -4,6 +4,9 @@ import pytest
 
 from app.config import (
     ConfigError,
+    DEFAULT_LOCAL_LLM_BASE_URL,
+    DEFAULT_LOCAL_LLM_MODEL,
+    DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
     DEFAULT_WATCHFACTS_URL,
     load_settings,
@@ -73,6 +76,10 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.watchfacts_url == DEFAULT_WATCHFACTS_URL
     assert settings.headless is True
     assert settings.enable_crawl4ai is True
+    assert settings.local_llm_enabled is False
+    assert settings.local_llm_base_url == DEFAULT_LOCAL_LLM_BASE_URL
+    assert settings.local_llm_model == DEFAULT_LOCAL_LLM_MODEL
+    assert settings.local_llm_timeout_seconds == DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS
     assert settings.data_dir == tmp_path / "data"
     assert settings.logs_dir == tmp_path / "logs"
     assert settings.db_path == tmp_path / "data" / "bot.db"
@@ -101,3 +108,21 @@ def test_load_settings_reads_telegram_result_limit(tmp_path: Path) -> None:
     )
 
     assert settings.telegram_result_limit == 12
+
+
+def test_load_settings_reads_local_llm_options(tmp_path: Path) -> None:
+    settings = load_settings(
+        env={
+            "TELEGRAM_BOT_TOKEN": "token",
+            "LOCAL_LLM_ENABLED": "true",
+            "LOCAL_LLM_BASE_URL": "http://llama-cpp:8080",
+            "LOCAL_LLM_MODEL": "gemma4-e2b-q4",
+            "LOCAL_LLM_TIMEOUT_SECONDS": "45",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.local_llm_enabled is True
+    assert settings.local_llm_base_url == "http://llama-cpp:8080"
+    assert settings.local_llm_model == "gemma4-e2b-q4"
+    assert settings.local_llm_timeout_seconds == 45

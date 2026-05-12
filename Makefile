@@ -7,7 +7,7 @@ SKIP_PULL ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build deploy update up down restart logs ps shell run login check clean
+.PHONY: help init verify-env pull build deploy update up down restart logs ps shell run login llm-up llm-down llm-logs llm-smoke check clean
 
 help:
 	@printf "%s\n" "watchfacts-bot commands"
@@ -26,6 +26,10 @@ help:
 	@printf "%s\n" "  make shell    Open a shell in the bot container"
 	@printf "%s\n" "  make run      Run bot locally on the host"
 	@printf "%s\n" "  make login    Run WatchFacts browser login locally on the host"
+	@printf "%s\n" "  make llm-up   Start experimental llama.cpp service"
+	@printf "%s\n" "  make llm-down Stop experimental llama.cpp service"
+	@printf "%s\n" "  make llm-logs Follow experimental llama.cpp logs"
+	@printf "%s\n" "  make llm-smoke Call the local LLM chat endpoint"
 	@printf "%s\n" "  make check    Run lightweight repository checks"
 	@printf "%s\n" "  make clean    Remove local Python caches"
 
@@ -77,6 +81,19 @@ run:
 
 login:
 	python scripts/login.py
+
+llm-up: init
+	COMPOSE_PROFILES=llm $(COMPOSE) up -d llama-cpp
+
+llm-down:
+	COMPOSE_PROFILES=llm $(COMPOSE) stop llama-cpp
+	COMPOSE_PROFILES=llm $(COMPOSE) rm -f llama-cpp
+
+llm-logs:
+	COMPOSE_PROFILES=llm $(COMPOSE) logs -f llama-cpp
+
+llm-smoke:
+	python scripts/smoke_local_llm.py
 
 check:
 	git diff --check

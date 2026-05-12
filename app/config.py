@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 
 DEFAULT_WATCHFACTS_URL = "https://watchfacts.com/simon-match-making"
 DEFAULT_TELEGRAM_RESULT_LIMIT = 5
+DEFAULT_LOCAL_LLM_BASE_URL = "http://localhost:8080"
+DEFAULT_LOCAL_LLM_MODEL = "gemma-4-E2B-it-Q8_0.gguf"
+DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS = 30
 
 
 class ConfigError(ValueError):
@@ -29,6 +32,10 @@ class Settings:
     logs_dir: Path
     db_path: Path
     browser_state_path: Path
+    local_llm_enabled: bool = False
+    local_llm_base_url: str = DEFAULT_LOCAL_LLM_BASE_URL
+    local_llm_model: str = DEFAULT_LOCAL_LLM_MODEL
+    local_llm_timeout_seconds: int = DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS
 
 
 def parse_bool(value: str, *, name: str) -> bool:
@@ -105,6 +112,20 @@ def load_settings(
         source.get("ENABLE_CRAWL4AI", "true"),
         name="ENABLE_CRAWL4AI",
     )
+    local_llm_enabled = parse_bool(
+        source.get("LOCAL_LLM_ENABLED", "false"),
+        name="LOCAL_LLM_ENABLED",
+    )
+    local_llm_base_url = source.get("LOCAL_LLM_BASE_URL", DEFAULT_LOCAL_LLM_BASE_URL).strip()
+    if not local_llm_base_url:
+        raise ConfigError("LOCAL_LLM_BASE_URL must not be empty")
+    local_llm_model = source.get("LOCAL_LLM_MODEL", DEFAULT_LOCAL_LLM_MODEL).strip()
+    if not local_llm_model:
+        raise ConfigError("LOCAL_LLM_MODEL must not be empty")
+    local_llm_timeout_seconds = parse_positive_int(
+        source.get("LOCAL_LLM_TIMEOUT_SECONDS", str(DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS)),
+        name="LOCAL_LLM_TIMEOUT_SECONDS",
+    )
 
     data_dir = root / "data"
     logs_dir = root / "logs"
@@ -116,6 +137,10 @@ def load_settings(
         watchfacts_url=watchfacts_url,
         headless=headless,
         enable_crawl4ai=enable_crawl4ai,
+        local_llm_enabled=local_llm_enabled,
+        local_llm_base_url=local_llm_base_url,
+        local_llm_model=local_llm_model,
+        local_llm_timeout_seconds=local_llm_timeout_seconds,
         project_root=root,
         data_dir=data_dir,
         logs_dir=logs_dir,

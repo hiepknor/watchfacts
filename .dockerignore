@@ -6,4 +6,5 @@ __pycache__
 .env
 data
 logs
+models
 .DS_Store

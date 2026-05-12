@@ -102,6 +102,51 @@ Status:
 make ps
 ```
 
+## Local LLM Experiment
+
+This branch includes an optional llama.cpp service for testing a local Gemma GGUF
+model. The bot does not call the model by default; `LOCAL_LLM_ENABLED=false`
+keeps production matching deterministic.
+
+Place the GGUF file outside git, for example:
+
+```bash
+mkdir -p models
+# put Gemma4 E2B GGUF here, matching LLAMA_CPP_MODEL_FILE in .env
+```
+
+Set or adjust these `.env` values:
+
+```bash
+LOCAL_LLM_ENABLED=true
+LOCAL_LLM_BASE_URL=http://localhost:8080
+LOCAL_LLM_MODEL=gemma-4-E2B-it-Q8_0.gguf
+LLAMA_CPP_MODELS_DIR=./models
+LLAMA_CPP_MODEL_FILE=gemma-4-E2B-it-Q8_0.gguf
+```
+
+Start only the local LLM service:
+
+```bash
+make llm-up
+```
+
+Run a smoke request against the OpenAI-compatible chat endpoint:
+
+```bash
+make llm-smoke
+```
+
+Inspect or stop it:
+
+```bash
+make llm-logs
+make llm-down
+```
+
+The Compose service uses the official llama.cpp server image and mounts
+`LLAMA_CPP_MODELS_DIR` read-only at `/models`. Do not commit model files.
+
 ## Logs
 
 Follow logs:
