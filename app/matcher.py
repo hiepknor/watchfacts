@@ -222,7 +222,7 @@ def _matching_segment_end(
             normalized_token,
         ):
             break
-        end = match.end()
+        end = _include_trailing_currency_symbol(listing_text, match.end())
     return end
 
 
@@ -252,10 +252,17 @@ def _looks_like_next_product_brand(token: str, next_token: str) -> bool:
     return token in PRODUCT_BRAND_TOKENS and _looks_like_model_or_price_token(next_token)
 
 
+def _include_trailing_currency_symbol(listing_text: str, end: int) -> int:
+    while end < len(listing_text) and listing_text[end] in {"€", "£", "¥"}:
+        end += 1
+    return end
+
+
 def _looks_like_price_token(token: str) -> bool:
     return bool(
         re.fullmatch(r"\d+(?:\.\d+)?(?:k|m)", token)
         or re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:\.\d+)?", token)
+        or re.fullmatch(r"\d{3}\.\d{2}", token)
         or re.fullmatch(r"n?\d+[/-]\d+(?:\.\d+)?(?:k|m)", token)
     )
 
@@ -264,6 +271,7 @@ def _looks_like_date_or_condition_token(token: str) -> bool:
     return bool(
         re.fullmatch(r"n?\d{1,2}[/-]\d{2,4}y?", token)
         or re.fullmatch(r"\d{1,2}\.\d{4}", token)
+        or re.fullmatch(r"\d{4}y", token)
     )
 
 

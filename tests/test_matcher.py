@@ -174,6 +174,33 @@ def test_extract_relevant_listing_text_keeps_condition_prefixed_price() -> None:
     )
 
 
+def test_extract_relevant_listing_text_keeps_year_suffix_and_price() -> None:
+    listing_text = "5990/1r 2021y full used hkd1.98k"
+
+    assert extract_relevant_listing_text("5990/1r", listing_text) == (
+        "5990/1r 2021y full used hkd1.98k"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_split_price_and_currency() -> None:
+    listing_text = (
+        "2022 PP 5990/1R Blue dial Mint condition "
+        "Complete set $255 000.00 USD + shipping"
+    )
+
+    assert extract_relevant_listing_text("5990/1r", listing_text) == (
+        "5990/1R Blue dial Mint condition Complete set $255 000.00 USD + shipping"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_trailing_currency_symbol() -> None:
+    listing_text = "Patek 5990/1r - 2022 - German Paper - 217,5€"
+
+    assert extract_relevant_listing_text("5990/1r", listing_text) == (
+        "5990/1r - 2022 - German Paper - 217,5€"
+    )
+
+
 def test_extract_relevant_listing_text_drops_next_item_marker() -> None:
     listing_text = (
         "7010R purple N3/2026y 580k hkd "
