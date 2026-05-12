@@ -29,7 +29,14 @@ def test_initialize_creates_database_and_tables(tmp_path) -> None:
             )
         }
 
-    assert {"queries", "listings", "query_results", "llm_refinements"} <= tables
+    assert {
+        "queries",
+        "listings",
+        "query_results",
+        "llm_refinements",
+        "result_feedback",
+        "suspicious_results",
+    } <= tables
 
 
 def test_record_query_results_persists_query_listing_and_relationship(tmp_path) -> None:
@@ -121,3 +128,74 @@ def test_llm_refinement_cache_round_trips_by_query_listing_and_model(tmp_path) -
         == "refined listing"
     )
     assert database.get_llm_refinement("fpj elegante", "raw listing", "q8") is None
+
+
+def test_result_feedback_records_and_dedupes_reports(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    first_id = database.record_result_feedback(
+        query_text="5712r",
+        result_rank=26,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+        seller="AM.Timepiece TONY",
+        posted_date="February 14, 2026",
+        source_url="/flash-sales/9927122",
+        telegram_user_id=123,
+    )
+    second_id = database.record_result_feedback(
+        query_text="5712r",
+        result_rank=26,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+        seller="AM.Timepiece TONY",
+        source_url="/flash-sales/9927122",
+        telegram_user_id=123,
+    )
+
+    assert second_id == first_id
+    issue = database.get_issue(first_id)
+
+    assert issue is not None
+    assert issue.issue_type == "feedback"
+    assert issue.reason == "missing_info"
+    assert issue.report_count == 2
+    assert issue.raw_listing_text == "5712R 2016/ HKD 830000"
+    assert issue.source_url == "/flash-sales/9927122"
+
+
+def test_suspicious_result_records_and_exports_open_issues(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    database.record_suspicious_result(
+        query_text="5712r",
+        result_rank=26,
+        reason="ends_with_currency",
+        severity=3,
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+        source_url="/flash-sales/9927122",
+    )
+    database.record_suspicious_result(
+        query_text="5712r",
+        result_rank=26,
+        reason="ends_with_currency",
+        severity=2,
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+        source_url="/flash-sales/9927122",
+    )
+
+    issues = database.list_open_issues()
+    exported = database.export_open_issues()
+
+    assert len(issues) == 1
+    assert issues[0].issue_type == "suspicious"
+    assert issues[0].reason == "ends_with_currency"
+    assert issues[0].severity == 3
+    assert exported[0]["shown_text"] == "5712R 2016/ HKD"
+    assert exported[0]["raw_text"] == "5712R 2016/ HKD 830000"

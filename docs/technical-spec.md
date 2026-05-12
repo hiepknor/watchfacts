@@ -24,7 +24,7 @@ app/
   dedupe.py        # listing identity and duplicate filtering
   db.py            # SQLite schema and persistence
   config.py        # environment/config loading
-  # future: feedback.py or issue_review.py for result feedback and issue commands
+  issues.py        # suspicious-result heuristics for issue collection
 scripts/
   login.py         # manual WatchFacts login and browser state creation
 data/
@@ -80,7 +80,7 @@ Telegram update
   -> parser extracts listing candidates from JSON response or HTML fallback
   -> matcher filters or scopes listings by query tokens
   -> dedupe removes repeated latest reposts
-  -> future suspicious-result detector records likely extraction issues
+  -> suspicious-result detector records likely extraction issues
   -> db records query/cache/dedupe state
   -> telegram_bot sends a summary first, then paginated result batches
 ```
@@ -109,7 +109,7 @@ Responsibilities:
 - Provide `/health` to check WatchFacts session validity without exposing browser state.
 - Ignore normal group chat messages unless the bot is mentioned or replied to.
 - Protect Telegram sends by limiting photo captions to 1024 characters and text messages to 4096 characters.
-- Future: attach feedback callbacks to results, handle feedback issue callbacks, and provide owner issue review commands.
+- Attach feedback callbacks to results, handle feedback issue callbacks, and provide owner issue review commands.
 
 ### `scraper.py`
 
@@ -181,7 +181,7 @@ Responsibilities:
 - Manage SQLite connection lifecycle.
 - Create schema if missing.
 - Persist query history and dedupe/cache data.
-- Future: persist result feedback, suspicious-result flags, issue review status, and fixture export metadata.
+- Persist result feedback, suspicious-result flags, issue review status, and fixture export metadata.
 - Use parameterized SQL only.
 
 ## Data Model
@@ -221,7 +221,7 @@ SQLite tables:
 | `listing_id` | integer | References `listings.id` |
 | `rank` | integer | Result order |
 
-### Future `result_feedback`
+### `result_feedback`
 
 See [Continuous Improvement Spec](continuous-improvement.md) for the full schema. The table should persist one-tap user feedback against the exact Telegram result shown to the user.
 
@@ -239,7 +239,7 @@ Minimum fields:
 | `source_url` | text nullable | WatchFacts source URL |
 | `issue_status` | text | `open`, `reviewed`, `fixed`, `ignored` |
 
-### Future `suspicious_results`
+### `suspicious_results`
 
 This table should persist deterministic auto-flags for results that look likely to be incomplete, such as text ending with a standalone currency token.
 

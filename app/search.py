@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from app.config import Settings
 from app.db import Database
 from app.dedupe import unique_latest_by_text, unique_latest_listings
+from app.issues import detect_suspicious_result
 from app.matcher import extract_relevant_listing_text, filter_matching_listings
 from app.parser import ListingCandidate, parse_listings
 from app.scraper import ScrapeResult, fetch_watchfacts_html
@@ -53,6 +54,7 @@ class WatchFactsSearchWorkflow:
             unique = group_similar_results(unique, query=query)
 
             self.database.record_query_results(query, unique)
+            self._record_suspicious_results(query, unique)
             logger.info(
                 "event=query.end parsed_count=%d matched_count=%d result_count=%d",
                 len(parsed),
@@ -76,6 +78,32 @@ class WatchFactsSearchWorkflow:
             return await self.refine_results(query, results)
         return results
 
+    def _record_suspicious_results(
+        self,
+        query: str,
+        results: list[SearchResult],
+    ) -> None:
+        for rank, result in enumerate(results, start=1):
+            for issue in detect_suspicious_result(
+                listing_text=result.listing_text,
+                raw_listing_text=result.raw_listing_text,
+            ):
+                try:
+                    self.database.record_suspicious_result(
+                        query_text=query,
+                        result_rank=rank,
+                        reason=issue.reason,
+                        severity=issue.severity,
+                        listing_text=result.listing_text,
+                        raw_listing_text=result.raw_listing_text,
+                        source_url=result.source_url,
+                    )
+                except Exception as exc:
+                    logger.info(
+                        "event=query.suspicious_record_failed error_type=%s",
+                        exc.__class__.__name__,
+                    )
+
 
 def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:
     listing_text = extract_relevant_listing_text(query, listing.listing_text)
@@ -85,6 +113,7 @@ def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:
         posted_date=listing.posted_date,
         image_url=_product_image_url(listing),
         source_url=listing.source_url,
+        raw_listing_text=listing.listing_text,
     )
 
 

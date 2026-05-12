@@ -114,7 +114,7 @@ Exit criteria:
 
 ## Milestone 6: Continuous Improvement Loop
 
-Status: planned.
+Status: baseline complete.
 
 Goal: make result-quality issues observable and reviewable without requiring the operator to manually explain every bad query to a maintainer.
 
@@ -134,12 +134,14 @@ Deliverables:
 
 Exit criteria:
 
-- An authorized user can report a result as missing information or wrong from Telegram.
-- Owner can list and inspect open issue cases.
-- Bot can auto-flag suspicious extracted results without blocking result delivery.
-- Exported cases contain enough context to create matcher/parser tests.
-- No secrets, cookies, browser state, or full page HTML are exposed in issue records or exports.
-- `python -m pytest` and `make check` pass.
+- [x] An authorized user can report a result as missing information or wrong from Telegram.
+- [x] Owner can list and inspect open issue cases.
+- [x] Bot can auto-flag suspicious extracted results without blocking result delivery.
+- [x] Exported cases contain enough context to create matcher/parser tests.
+- [x] No secrets, cookies, browser state, or full page HTML are exposed in issue records or exports.
+- [ ] Add status mutation commands such as `/issue_done` and `/issue_ignore`.
+- [ ] Add fixture generation script from exported issues.
+- [ ] `python -m pytest` and `make check` pass for every implementation change.
 
 Detailed spec:
 

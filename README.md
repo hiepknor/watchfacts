@@ -16,6 +16,7 @@ The bot receives a short watch query, searches WatchFacts through the logged-in 
 - Summary-first Telegram pagination with "Xem kết quả" / "Xem thêm"
 - Telegram message length guards for long listings
 - WatchFacts session health check and owner alert when login state expires
+- One-tap result feedback and owner issue review commands
 - SQLite local cache
 - Docker deployment
 - Fully async architecture
@@ -230,6 +231,9 @@ Bot commands:
 | `/help` | Show search flow, examples, and pagination actions |
 | `/settings` | Show safe runtime settings without secrets |
 | `/health` | Check WatchFacts session health without exposing cookies or browser state |
+| `/issues` | List open feedback and suspicious result issues |
+| `/issue F<id>` or `/issue S<id>` | Show one feedback or suspicious issue in detail |
+| `/issues_export` | Export open issues as JSON for regression tests |
 | `/cancel` | Clear pending result buttons |
 
 Send a watch query to the bot:

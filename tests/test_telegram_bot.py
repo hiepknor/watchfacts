@@ -4,6 +4,7 @@ import asyncio
 import logging
 from types import SimpleNamespace
 
+from app.db import Database
 from app.scraper import BrowserSessionError, BrowserSessionStatus
 from app.telegram_bot import (
     EMPTY_QUERY_MESSAGE,
@@ -11,6 +12,7 @@ from app.telegram_bot import (
     CANCEL_EMPTY_MESSAGE,
     CANCEL_MESSAGE,
     HELP_MESSAGE,
+    ISSUE_DATABASE_KEY,
     PROCESSING_MIN_SECONDS_KEY,
     PROCESSING_MESSAGE,
     QUEUED_MESSAGE,
@@ -29,11 +31,17 @@ from app.telegram_bot import (
     cancel_command,
     format_result_summary,
     format_health_message,
+    format_issue_detail,
+    format_issues_message,
     format_posted_date,
     format_settings_message,
     handle_more_results,
+    handle_feedback,
     handle_text_message,
     health_command,
+    issue_command,
+    issues_command,
+    issues_export_command,
     help_command,
     settings_command,
     start_command,
@@ -84,7 +92,7 @@ class FakeMessage:
         self.sent_messages.append(sent_message)
         return sent_message
 
-    async def reply_photo(self, photo: str, caption: str) -> None:
+    async def reply_photo(self, photo: str, caption: str, **kwargs) -> None:
         if self.fail_photos:
             raise TimeoutError("photo timeout")
         self.photos.append((photo, caption))
@@ -151,6 +159,7 @@ class FakeCallbackQuery:
 def make_context(
     workflow=None,
     *,
+    db_path=None,
     refiner=None,
     session_checker=None,
     result_limit: int | None = None,
@@ -167,6 +176,8 @@ def make_context(
         bot_data[RESULT_REFINER_KEY] = refiner
     if session_checker is not None:
         bot_data[WATCHFACTS_SESSION_CHECKER_KEY] = session_checker
+    if db_path is not None:
+        bot_data[ISSUE_DATABASE_KEY] = Database(db_path)
     bot = FakeBot()
     return SimpleNamespace(bot=bot, application=SimpleNamespace(bot=bot, bot_data=bot_data))
 
@@ -275,6 +286,79 @@ def test_format_health_message_handles_missing_checker() -> None:
         "📨 Bot Telegram: đang phản hồi\n\n"
         "🔒 Không hiển thị cookie, token hoặc browser state."
     )
+
+
+def test_issues_command_lists_open_issues(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    issue_id = database.record_result_feedback(
+        query_text="5712r",
+        result_rank=26,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+        seller="AM.Timepiece TONY",
+        source_url="/flash-sales/9927122",
+        telegram_user_id=123,
+    )
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+
+    asyncio.run(issues_command(SimpleNamespace(message=message), context))
+
+    assert f"#F{issue_id} ⚠️ Thiếu thông tin" in message.replies[0]
+    assert "🔎 Query: 5712r" in message.replies[0]
+    assert "🏷️ Bot gửi: 5712R 2016/ HKD" in message.replies[0]
+    assert "cookie" not in message.replies[0].casefold()
+
+
+def test_issue_command_shows_issue_detail(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    issue_id = Database(db_path).record_result_feedback(
+        query_text="5712r",
+        result_rank=26,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+        seller="AM.Timepiece TONY",
+        source_url="/flash-sales/9927122",
+        telegram_user_id=123,
+    )
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+    context.args = [f"F{issue_id}"]
+
+    asyncio.run(issue_command(SimpleNamespace(message=message), context))
+
+    assert f"🧾 Issue #F{issue_id}" in message.replies[0]
+    assert "5712R 2016/ HKD 830000" in message.replies[0]
+    assert "🔒 Không hiển thị cookie" in message.replies[0]
+
+
+def test_issues_export_command_returns_json(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    Database(db_path).record_result_feedback(
+        query_text="5712r",
+        result_rank=26,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+        seller="AM.Timepiece TONY",
+        source_url="/flash-sales/9927122",
+        telegram_user_id=123,
+    )
+    message = FakeMessage()
+
+    asyncio.run(
+        issues_export_command(
+            SimpleNamespace(message=message),
+            make_context(db_path=db_path, allowed_user_ids=(123,)),
+        )
+    )
+
+    assert "📤 Export issue regression" in message.replies[0]
+    assert '"query": "5712r"' in message.replies[0]
+    assert '"raw_text": "5712R 2016/ HKD 830000"' in message.replies[0]
 
 
 def test_format_settings_message_shows_public_access() -> None:
@@ -803,6 +887,55 @@ def test_more_results_callback_rejects_unauthorized_user() -> None:
 
     assert callback.answers == [UNAUTHORIZED_MESSAGE]
     assert message.replies == []
+
+
+def test_feedback_callback_records_missing_info(tmp_path) -> None:
+    message = FakeMessage("5712r")
+    workflow = FakeWorkflow(
+        [
+            SearchResult(
+                "5712R 2016/ HKD",
+                seller="AM.Timepiece TONY",
+                posted_date="February 14, 2026",
+                source_url="/flash-sales/9927122",
+                raw_listing_text="5712R 2016/ HKD 830000",
+            )
+        ]
+    )
+    db_path = tmp_path / "data" / "bot.db"
+    context = make_context(workflow, db_path=db_path, allowed_user_ids=(123,))
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+    result_token = message.sent_messages[-1].reply_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    asyncio.run(
+        handle_more_results(
+            SimpleNamespace(callback_query=FakeCallbackQuery(f"more_results:{result_token}", message)),
+            context,
+        )
+    )
+    feedback_data = message.sent_messages[-2].reply_markup.inline_keyboard[0][0].callback_data
+    callback = FakeCallbackQuery(feedback_data, message)
+
+    asyncio.run(handle_feedback(SimpleNamespace(callback_query=callback), context))
+
+    assert callback.answers == [
+        "📝 Đã ghi nhận. Mình đã lưu case này để owner review sau."
+    ]
+    issue = Database(db_path).list_open_issues()[0]
+    assert issue.reason == "missing_info"
+    assert issue.query_text == "5712r"
+    assert issue.listing_text == "5712R 2016/ HKD"
+    assert issue.raw_listing_text == "5712R 2016/ HKD 830000"
+
+
+def test_feedback_callback_rejects_unauthorized_user(tmp_path) -> None:
+    message = FakeMessage("5712r")
+    context = make_context(db_path=tmp_path / "data" / "bot.db", allowed_user_ids=(123,))
+    callback = FakeCallbackQuery("feedback:missing:missing_info", message, user_id=999)
+
+    asyncio.run(handle_feedback(SimpleNamespace(callback_query=callback), context))
+
+    assert callback.answers == [UNAUTHORIZED_MESSAGE]
 
 
 def test_text_messages_fallback_to_text_when_image_is_missing() -> None:

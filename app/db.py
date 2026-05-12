@@ -51,6 +51,41 @@ CREATE TABLE IF NOT EXISTS llm_refinements (
     last_used_at TEXT NOT NULL,
     UNIQUE(normalized_query, listing_hash, model)
 );
+
+CREATE TABLE IF NOT EXISTS result_feedback (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    query_text TEXT NOT NULL,
+    normalized_query TEXT NOT NULL,
+    result_rank INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    report_count INTEGER NOT NULL,
+    telegram_user_id INTEGER,
+    listing_text TEXT NOT NULL,
+    raw_listing_text TEXT,
+    seller TEXT,
+    posted_date TEXT,
+    source_url TEXT,
+    issue_status TEXT NOT NULL,
+    review_notes TEXT,
+    UNIQUE(normalized_query, result_rank, reason, telegram_user_id, listing_text)
+);
+
+CREATE TABLE IF NOT EXISTS suspicious_results (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    query_text TEXT NOT NULL,
+    normalized_query TEXT NOT NULL,
+    result_rank INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    severity INTEGER NOT NULL,
+    listing_text TEXT NOT NULL,
+    raw_listing_text TEXT,
+    source_url TEXT,
+    reviewed_at TEXT,
+    UNIQUE(normalized_query, result_rank, reason, listing_text)
+);
 """
 
 
@@ -68,6 +103,23 @@ class QueryRecord:
     query_text: str
     normalized_query: str
     result_count: int
+
+
+@dataclass(frozen=True)
+class IssueRecord:
+    id: int
+    issue_type: str
+    query_text: str
+    result_rank: int
+    reason: str
+    listing_text: str
+    raw_listing_text: str | None
+    seller: str | None
+    posted_date: str | None
+    source_url: str | None
+    report_count: int
+    severity: int | None
+    issue_status: str
 
 
 class Database:
@@ -196,6 +248,261 @@ class Database:
                 ),
             )
 
+    def record_result_feedback(
+        self,
+        *,
+        query_text: str,
+        result_rank: int,
+        reason: str,
+        listing_text: str,
+        raw_listing_text: str | None = None,
+        seller: str | None = None,
+        posted_date: str | None = None,
+        source_url: str | None = None,
+        telegram_user_id: int | None = None,
+    ) -> int:
+        now = _utc_now()
+        normalized_query = normalize_text(query_text)
+
+        with self.connect() as connection:
+            connection.executescript(SCHEMA)
+            connection.execute(
+                """
+                INSERT INTO result_feedback (
+                    created_at,
+                    updated_at,
+                    query_text,
+                    normalized_query,
+                    result_rank,
+                    reason,
+                    report_count,
+                    telegram_user_id,
+                    listing_text,
+                    raw_listing_text,
+                    seller,
+                    posted_date,
+                    source_url,
+                    issue_status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 'open')
+                ON CONFLICT(
+                    normalized_query,
+                    result_rank,
+                    reason,
+                    telegram_user_id,
+                    listing_text
+                ) DO UPDATE SET
+                    updated_at = excluded.updated_at,
+                    report_count = result_feedback.report_count + 1,
+                    raw_listing_text = COALESCE(excluded.raw_listing_text, result_feedback.raw_listing_text),
+                    seller = COALESCE(excluded.seller, result_feedback.seller),
+                    posted_date = COALESCE(excluded.posted_date, result_feedback.posted_date),
+                    source_url = COALESCE(excluded.source_url, result_feedback.source_url)
+                """,
+                (
+                    now,
+                    now,
+                    query_text,
+                    normalized_query,
+                    result_rank,
+                    reason,
+                    telegram_user_id,
+                    listing_text,
+                    raw_listing_text,
+                    seller,
+                    posted_date,
+                    source_url,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT id
+                FROM result_feedback
+                WHERE normalized_query = ?
+                  AND result_rank = ?
+                  AND reason = ?
+                  AND telegram_user_id IS ?
+                  AND listing_text = ?
+                """,
+                (
+                    normalized_query,
+                    result_rank,
+                    reason,
+                    telegram_user_id,
+                    listing_text,
+                ),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("Failed to load feedback issue after upsert")
+        return int(row[0])
+
+    def record_suspicious_result(
+        self,
+        *,
+        query_text: str,
+        result_rank: int,
+        reason: str,
+        severity: int,
+        listing_text: str,
+        raw_listing_text: str | None = None,
+        source_url: str | None = None,
+    ) -> None:
+        now = _utc_now()
+        normalized_query = normalize_text(query_text)
+
+        with self.connect() as connection:
+            connection.executescript(SCHEMA)
+            connection.execute(
+                """
+                INSERT INTO suspicious_results (
+                    created_at,
+                    query_text,
+                    normalized_query,
+                    result_rank,
+                    reason,
+                    severity,
+                    listing_text,
+                    raw_listing_text,
+                    source_url
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(normalized_query, result_rank, reason, listing_text)
+                DO UPDATE SET
+                    severity = max(suspicious_results.severity, excluded.severity),
+                    raw_listing_text = COALESCE(excluded.raw_listing_text, suspicious_results.raw_listing_text),
+                    source_url = COALESCE(excluded.source_url, suspicious_results.source_url)
+                """,
+                (
+                    now,
+                    query_text,
+                    normalized_query,
+                    result_rank,
+                    reason,
+                    severity,
+                    listing_text,
+                    raw_listing_text,
+                    source_url,
+                ),
+            )
+
+    def list_open_issues(self, *, limit: int = 10) -> list[IssueRecord]:
+        with self.connect() as connection:
+            connection.executescript(SCHEMA)
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    'feedback' AS issue_type,
+                    query_text,
+                    result_rank,
+                    reason,
+                    listing_text,
+                    raw_listing_text,
+                    seller,
+                    posted_date,
+                    source_url,
+                    report_count,
+                    NULL AS severity,
+                    issue_status
+                FROM result_feedback
+                WHERE issue_status = 'open'
+                UNION ALL
+                SELECT
+                    id,
+                    'suspicious' AS issue_type,
+                    query_text,
+                    result_rank,
+                    reason,
+                    listing_text,
+                    raw_listing_text,
+                    NULL AS seller,
+                    NULL AS posted_date,
+                    source_url,
+                    1 AS report_count,
+                    severity,
+                    CASE WHEN reviewed_at IS NULL THEN 'open' ELSE 'reviewed' END AS issue_status
+                FROM suspicious_results
+                WHERE reviewed_at IS NULL
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [_issue_record_from_row(row) for row in rows]
+
+    def get_issue(self, issue_id: int, *, issue_type: str | None = None) -> IssueRecord | None:
+        with self.connect() as connection:
+            connection.executescript(SCHEMA)
+            feedback = None
+            if issue_type in {None, "feedback"}:
+                feedback = connection.execute(
+                    """
+                    SELECT
+                        id,
+                        'feedback' AS issue_type,
+                        query_text,
+                        result_rank,
+                        reason,
+                        listing_text,
+                        raw_listing_text,
+                        seller,
+                        posted_date,
+                        source_url,
+                        report_count,
+                        NULL AS severity,
+                        issue_status
+                    FROM result_feedback
+                    WHERE id = ?
+                    """,
+                    (issue_id,),
+                ).fetchone()
+                if feedback is not None:
+                    return _issue_record_from_row(feedback)
+
+            suspicious = None
+            if issue_type in {None, "suspicious"}:
+                suspicious = connection.execute(
+                    """
+                    SELECT
+                        id,
+                        'suspicious' AS issue_type,
+                        query_text,
+                        result_rank,
+                        reason,
+                        listing_text,
+                        raw_listing_text,
+                        NULL AS seller,
+                        NULL AS posted_date,
+                        source_url,
+                        1 AS report_count,
+                        severity,
+                        CASE WHEN reviewed_at IS NULL THEN 'open' ELSE 'reviewed' END AS issue_status
+                    FROM suspicious_results
+                    WHERE id = ?
+                    """,
+                    (issue_id,),
+                ).fetchone()
+        return _issue_record_from_row(suspicious) if suspicious is not None else None
+
+    def export_open_issues(self, *, limit: int = 50) -> list[dict[str, object]]:
+        return [
+            {
+                "id": issue.id,
+                "type": issue.issue_type,
+                "query": issue.query_text,
+                "reason": issue.reason,
+                "shown_text": issue.listing_text,
+                "raw_text": issue.raw_listing_text,
+                "seller": issue.seller,
+                "posted_date": issue.posted_date,
+                "source_url": issue.source_url,
+                "report_count": issue.report_count,
+                "severity": issue.severity,
+                "status": issue.issue_status,
+            }
+            for issue in self.list_open_issues(limit=limit)
+        ]
+
 
 def _upsert_listing(
     connection: sqlite3.Connection,
@@ -260,3 +567,21 @@ def _utc_now() -> str:
 
 def _listing_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _issue_record_from_row(row) -> IssueRecord:
+    return IssueRecord(
+        id=int(row[0]),
+        issue_type=str(row[1]),
+        query_text=str(row[2]),
+        result_rank=int(row[3]),
+        reason=str(row[4]),
+        listing_text=str(row[5]),
+        raw_listing_text=str(row[6]) if row[6] is not None else None,
+        seller=str(row[7]) if row[7] is not None else None,
+        posted_date=str(row[8]) if row[8] is not None else None,
+        source_url=str(row[9]) if row[9] is not None else None,
+        report_count=int(row[10]),
+        severity=int(row[11]) if row[11] is not None else None,
+        issue_status=str(row[12]),
+    )

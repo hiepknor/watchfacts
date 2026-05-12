@@ -41,6 +41,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Accept plain-text Telegram messages as search queries.
 - Support `/start`, `/help`, `/settings`, and `/cancel`.
 - Support `/health` for checking whether the saved WatchFacts session is valid.
+- Support owner issue commands `/issues`, `/issue <id>`, and `/issues_export`.
 - Ignore normal group chat messages unless the bot is mentioned at the start or the user replies to a bot message.
 - Support optional Telegram user-id allowlist.
 - Normalize query text for case-insensitive matching.
@@ -59,7 +60,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
 - Limit Telegram photo captions and text messages to platform-safe lengths.
 - Notify the owner in Vietnamese when WatchFacts browser session state is missing or expired.
-- Future continuous-improvement features should support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
+- Support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
 
 ## Non-Functional Requirements
 
@@ -106,6 +107,9 @@ Telegram commands:
 | `/help` | Show usage flow and pagination actions |
 | `/settings` | Show safe runtime settings |
 | `/health` | Check WatchFacts browser-session health |
+| `/issues` | List open feedback and suspicious result issues |
+| `/issue F<id>` or `/issue S<id>` | Show one feedback or suspicious issue in detail |
+| `/issues_export` | Export open issues as JSON for regression tests |
 | `/cancel` | Clear pending result buttons |
 
 In group chats, normal text messages are ignored. A search must mention the bot

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import inspect
 import logging
 import secrets
@@ -11,6 +12,7 @@ from datetime import datetime
 from typing import Protocol
 
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
+from app.db import Database, IssueRecord
 from app.scraper import BrowserSessionError, BrowserSessionStatus
 
 
@@ -101,14 +103,19 @@ TELEGRAM_RESULT_LIMIT_KEY = "telegram_result_limit"
 TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY = "telegram_max_concurrent_searches"
 RESULT_PAGES_KEY = "result_pages"
 RESULT_REFINER_KEY = "result_refiner"
+ISSUE_DATABASE_KEY = "issue_database"
+FEEDBACK_CONTEXTS_KEY = "feedback_contexts"
 WATCHFACTS_SESSION_CHECKER_KEY = "watchfacts_session_checker"
 WATCHFACTS_SESSION_ALERT_LAST_SENT_KEY = "watchfacts_session_alert_last_sent"
 SEARCH_SEMAPHORE_KEY = "search_semaphore"
 MORE_RESULTS_PREFIX = "more_results:"
+FEEDBACK_PREFIX = "feedback:"
 ALLOWED_USER_IDS_KEY = "allowed_user_ids"
 TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
 TELEGRAM_TEXT_MESSAGE_LIMIT = 4096
 WATCHFACTS_SESSION_ALERT_COOLDOWN_SECONDS = 30 * 60
+MAX_FEEDBACK_CONTEXTS = 500
+ISSUES_EXPORT_LIMIT = 30
 
 
 @dataclass(frozen=True)
@@ -119,6 +126,7 @@ class SearchResult:
     image_url: str | None = None
     source_url: str | None = None
     similar_results: tuple["SearchResult", ...] = ()
+    raw_listing_text: str | None = None
 
 
 class SearchWorkflow(Protocol):
@@ -181,6 +189,60 @@ async def health_command(update, context) -> None:
     await _send_typing_action(message, context)
     status = await checker()
     await _maybe_await(message.reply_text(format_health_message(status)))
+
+
+async def issues_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    database = _issue_database(context)
+    issues = database.list_open_issues(limit=10)
+    await _maybe_await(message.reply_text(format_issues_message(issues)))
+
+
+async def issue_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    issue_ref = _first_issue_arg(context)
+    if issue_ref is None:
+        await _maybe_await(
+            message.reply_text(
+                "🧾 Xem issue\n\n"
+                "Vui lòng dùng dạng `/issue F1` hoặc `/issue S1`."
+            )
+        )
+        return
+
+    issue_type, issue_id = issue_ref
+    issue = _issue_database(context).get_issue(issue_id, issue_type=issue_type)
+    await _maybe_await(message.reply_text(format_issue_detail(issue)))
+
+
+async def issues_export_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    payload = _issue_database(context).export_open_issues(limit=ISSUES_EXPORT_LIMIT)
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    await _maybe_await(
+        message.reply_text(
+            _limit_telegram_text(
+                "📤 Export issue regression\n\n"
+                f"```json\n{text}\n```",
+                TELEGRAM_TEXT_MESSAGE_LIMIT,
+            )
+        )
+    )
 
 
 async def cancel_command(update, context) -> None:
@@ -332,7 +394,13 @@ async def handle_more_results(update, context) -> None:
     next_results = await _refined_page_results(context, page, offset)
     next_offset = offset + len(next_results)
 
-    await _send_result_batch(message, next_results)
+    await _send_result_batch(
+        context,
+        message,
+        next_results,
+        query=str(page["query"]),
+        start_rank=offset + 1,
+    )
 
     remaining = len(results) - next_offset
     if remaining > 0:
@@ -347,6 +415,54 @@ async def handle_more_results(update, context) -> None:
     else:
         _remove_result_page(context, token)
         await _maybe_await(message.reply_text("✅ Đã gửi hết kết quả."))
+
+
+async def handle_feedback(update, context) -> None:
+    callback_query = getattr(update, "callback_query", None)
+    if callback_query is None:
+        return
+    if not _is_authorized(update, context):
+        await _maybe_await(callback_query.answer(UNAUTHORIZED_MESSAGE))
+        return
+
+    data = getattr(callback_query, "data", "") or ""
+    try:
+        token, reason = data.removeprefix(FEEDBACK_PREFIX).split(":", maxsplit=1)
+    except ValueError:
+        await _maybe_await(callback_query.answer("Feedback không hợp lệ."))
+        return
+
+    feedback_context = _get_feedback_context(context, token)
+    if feedback_context is None:
+        await _maybe_await(callback_query.answer("Feedback đã hết hạn. Vui lòng tìm lại."))
+        return
+
+    result = feedback_context["result"]
+    try:
+        _issue_database(context).record_result_feedback(
+            query_text=str(feedback_context["query"]),
+            result_rank=int(feedback_context["rank"]),
+            reason=reason,
+            listing_text=result.listing_text,
+            raw_listing_text=result.raw_listing_text,
+            seller=result.seller,
+            posted_date=result.posted_date,
+            source_url=result.source_url,
+            telegram_user_id=_telegram_user_id(update),
+        )
+    except Exception as exc:
+        logger.info(
+            "event=telegram.feedback_failed error_type=%s",
+            exc.__class__.__name__,
+        )
+        await _maybe_await(callback_query.answer("Chưa lưu được feedback. Thử lại sau."))
+        return
+
+    await _maybe_await(
+        callback_query.answer(
+            "📝 Đã ghi nhận. Mình đã lưu case này để owner review sau."
+        )
+    )
 
 
 def format_search_results(results: list[SearchResult]) -> str:
@@ -446,6 +562,71 @@ def format_settings_message(context) -> str:
     )
 
 
+def format_issues_message(issues: list[IssueRecord]) -> str:
+    if not issues:
+        return (
+            "🧾 Issue cần review\n\n"
+            "✅ Chưa có issue mở.\n"
+            "Bot sẽ lưu feedback và các kết quả đáng nghi ở đây."
+        )
+
+    lines = ["🧾 Issue cần review", ""]
+    for issue in issues:
+        icon = _issue_icon(issue.reason, issue.issue_type)
+        lines.extend(
+            [
+                f"#{_issue_key(issue)} {icon} {_issue_reason_label(issue.reason)}",
+                f"🔎 Query: {issue.query_text}",
+                f"🏷️ Bot gửi: {_limit_inline(issue.listing_text, 120)}",
+            ]
+        )
+        if issue.seller:
+            lines.append(f"👤 Seller: {issue.seller}")
+        if issue.source_url:
+            lines.append(f"🔗 Source: {issue.source_url}")
+        if issue.severity is not None:
+            lines.append(f"🧪 Severity: {issue.severity}")
+        else:
+            lines.append(f"📊 Report: {issue.report_count} lượt")
+        lines.append("")
+    lines.append("Dùng `/issue F1` hoặc `/issue S1` để xem chi tiết; `/issues_export` để export.")
+    return "\n".join(lines).strip()
+
+
+def format_issue_detail(issue: IssueRecord | None) -> str:
+    if issue is None:
+        return (
+            "🧾 Issue không tồn tại\n\n"
+            "Kiểm tra lại ID bằng `/issues`."
+        )
+
+    sections = [
+        f"🧾 Issue #{_issue_key(issue)}",
+        "",
+        f"{_issue_icon(issue.reason, issue.issue_type)} Loại: {_issue_reason_label(issue.reason)}",
+        f"📌 Trạng thái: {issue.issue_status}",
+        f"🔎 Query: {issue.query_text}",
+        f"📍 Rank: {issue.result_rank}",
+        "",
+        f"🏷️ Bot gửi:\n{issue.listing_text}",
+    ]
+    if issue.raw_listing_text:
+        sections.extend(["", f"🧾 Raw candidate:\n{issue.raw_listing_text}"])
+    if issue.seller:
+        sections.append(f"👤 Seller: {issue.seller}")
+    if issue.posted_date:
+        sections.append(f"📅 Date: {issue.posted_date}")
+    if issue.source_url:
+        sections.append(f"🔗 Source: {issue.source_url}")
+    if issue.severity is not None:
+        sections.append(f"🧪 Severity: {issue.severity}")
+    else:
+        sections.append(f"📊 Report: {issue.report_count} lượt")
+    sections.append("")
+    sections.append("🔒 Không hiển thị cookie, token hoặc browser state.")
+    return _limit_telegram_text("\n".join(sections), TELEGRAM_TEXT_MESSAGE_LIMIT)
+
+
 def format_health_message(status: BrowserSessionStatus | None) -> str:
     if status is None:
         return (
@@ -499,6 +680,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     if refiner is not None:
         application.bot_data[RESULT_REFINER_KEY] = refiner
     application.bot_data[WATCHFACTS_SESSION_CHECKER_KEY] = _build_session_checker(settings)
+    application.bot_data[ISSUE_DATABASE_KEY] = Database(settings.db_path)
     application.bot_data[ALLOWED_USER_IDS_KEY] = settings.telegram_allowed_user_ids
     application.bot_data[TELEGRAM_RESULT_LIMIT_KEY] = settings.telegram_result_limit
     application.bot_data[TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY] = (
@@ -511,8 +693,12 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("settings", settings_command))
     application.add_handler(CommandHandler("health", health_command))
+    application.add_handler(CommandHandler("issues", issues_command))
+    application.add_handler(CommandHandler("issue", issue_command))
+    application.add_handler(CommandHandler("issues_export", issues_export_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CallbackQueryHandler(handle_more_results, pattern=f"^{MORE_RESULTS_PREFIX}"))
+    application.add_handler(CallbackQueryHandler(handle_feedback, pattern=f"^{FEEDBACK_PREFIX}"))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
     )
@@ -584,6 +770,15 @@ def _result_refiner(context) -> RefineResults | None:
     return value if callable(value) else None
 
 
+def _issue_database(context) -> Database:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    database = bot_data.get(ISSUE_DATABASE_KEY)
+    if isinstance(database, Database):
+        return database
+    raise RuntimeError("Issue database is not configured")
+
+
 def _watchfacts_session_checker(context) -> SessionChecker | None:
     application = getattr(context, "application", None)
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
@@ -598,6 +793,55 @@ def _allowed_user_ids(context) -> tuple[int, ...]:
     if value is None:
         return ()
     return tuple(int(user_id) for user_id in value)
+
+
+def _first_issue_arg(context) -> tuple[str | None, int] | None:
+    args = getattr(context, "args", None) or []
+    if not args:
+        return None
+    raw = str(args[0]).strip().lstrip("#")
+    issue_type: str | None = None
+    if raw[:1].casefold() == "f":
+        issue_type = "feedback"
+        raw = raw[1:]
+    elif raw[:1].casefold() == "s":
+        issue_type = "suspicious"
+        raw = raw[1:]
+    try:
+        return issue_type, int(raw)
+    except ValueError:
+        return None
+
+
+def _issue_key(issue: IssueRecord) -> str:
+    prefix = "F" if issue.issue_type == "feedback" else "S"
+    return f"{prefix}{issue.id}"
+
+
+def _issue_icon(reason: str, issue_type: str) -> str:
+    if reason == "missing_info":
+        return "⚠️"
+    if reason == "wrong_result":
+        return "❌"
+    if issue_type == "suspicious":
+        return "🧪"
+    return "📝"
+
+
+def _issue_reason_label(reason: str) -> str:
+    return {
+        "missing_info": "Thiếu thông tin",
+        "wrong_result": "Sai kết quả",
+        "correct": "Đúng",
+        "ends_with_currency": "Có thể thiếu giá sau currency",
+        "ends_with_price_marker": "Có thể thiếu giá sau ký hiệu giá",
+        "raw_much_longer": "Raw dài hơn nhiều so với kết quả",
+        "missing_price_after_currency": "Thiếu số tiền sau currency",
+    }.get(reason, reason)
+
+
+def _limit_inline(value: str, limit: int) -> str:
+    return _limit_telegram_text(" ".join(value.split()), limit)
 
 
 def _telegram_user_id(update) -> int | None:
@@ -737,9 +981,18 @@ async def _notify_watchfacts_session_owner(context) -> None:
         bot_data[WATCHFACTS_SESSION_ALERT_LAST_SENT_KEY] = now
 
 
-async def _send_result_batch(message, results: list[SearchResult]) -> None:
-    for result in results:
+async def _send_result_batch(
+    context,
+    message,
+    results: list[SearchResult],
+    *,
+    query: str,
+    start_rank: int,
+) -> None:
+    for offset, result in enumerate(results):
+        rank = start_rank + offset
         caption = format_search_result_caption(result)
+        reply_markup = _feedback_markup(context, query=query, result=result, rank=rank)
         if result.image_url:
             try:
                 await _maybe_await(
@@ -749,6 +1002,7 @@ async def _send_result_batch(message, results: list[SearchResult]) -> None:
                             caption,
                             TELEGRAM_PHOTO_CAPTION_LIMIT,
                         ),
+                        reply_markup=reply_markup,
                     )
                 )
                 continue
@@ -760,7 +1014,8 @@ async def _send_result_batch(message, results: list[SearchResult]) -> None:
 
         await _maybe_await(
             message.reply_text(
-                _limit_telegram_text(caption, TELEGRAM_TEXT_MESSAGE_LIMIT)
+                _limit_telegram_text(caption, TELEGRAM_TEXT_MESSAGE_LIMIT),
+                reply_markup=reply_markup,
             )
         )
 
@@ -771,6 +1026,26 @@ def _limit_telegram_text(value: str, limit: int) -> str:
     if limit <= 1:
         return value[:limit]
     return f"{value[: limit - 1].rstrip()}…"
+
+
+def _feedback_markup(context, *, query: str, result: SearchResult, rank: int):
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    token = _store_feedback_context(context, query=query, result=result, rank=rank)
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "⚠️ Thiếu thông tin",
+                    callback_data=f"{FEEDBACK_PREFIX}{token}:missing_info",
+                ),
+                InlineKeyboardButton(
+                    "❌ Sai kết quả",
+                    callback_data=f"{FEEDBACK_PREFIX}{token}:wrong_result",
+                ),
+            ]
+        ]
+    )
 
 
 def _store_result_page(
@@ -808,6 +1083,35 @@ def _remove_result_page(context, token: str) -> None:
     pages = bot_data.get(RESULT_PAGES_KEY, {})
     page = pages.pop(token, None)
     _cancel_prefetch_task(page)
+
+
+def _store_feedback_context(
+    context,
+    *,
+    query: str,
+    result: SearchResult,
+    rank: int,
+) -> str:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    contexts = bot_data.setdefault(FEEDBACK_CONTEXTS_KEY, {})
+    while len(contexts) >= MAX_FEEDBACK_CONTEXTS:
+        oldest_key = next(iter(contexts))
+        contexts.pop(oldest_key, None)
+    token = secrets.token_urlsafe(8)
+    contexts[token] = {
+        "query": query,
+        "result": result,
+        "rank": rank,
+    }
+    return token
+
+
+def _get_feedback_context(context, token: str):
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    contexts = bot_data.get(FEEDBACK_CONTEXTS_KEY, {})
+    return contexts.get(token)
 
 
 def _clear_result_pages(context) -> int:

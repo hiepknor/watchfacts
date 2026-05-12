@@ -168,6 +168,48 @@ def test_search_workflow_omits_bundle_images_for_multi_listing_cards(tmp_path) -
     assert results[0].image_url is None
 
 
+def test_search_workflow_records_suspicious_incomplete_results(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    <html>
+      <body>
+        <div class="product">
+          <div class="product-description">
+            <a class="title-link" href="/flash-sales/9927122">
+              ✅PP ❣️5711R Watch and Service paper, HKD 605000
+              ❣️5712R 2016/ HKD
+              ❣️5134R Service paper, HKD 130000
+            </a>
+          </div>
+          <span data-field="seller">AM.Timepiece TONY</span>
+          <time data-field="posted-date">February 14, 2026</time>
+        </div>
+      </body>
+    </html>
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    database = Database(settings.db_path)
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=database,
+        fetch_html=fetch_html,
+    )
+
+    results = asyncio.run(workflow.search("5712r"))
+    issues = database.list_open_issues()
+
+    assert results[0].listing_text == "5712R 2016/ HKD"
+    assert {issue.issue_type for issue in issues} == {"suspicious"}
+    assert {issue.reason for issue in issues} >= {
+        "ends_with_currency",
+        "missing_price_after_currency",
+    }
+    assert {issue.listing_text for issue in issues} == {"5712R 2016/ HKD"}
+
+
 def test_search_workflow_scopes_variant_reference_and_omits_bundle_image(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """
