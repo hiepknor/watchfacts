@@ -79,6 +79,8 @@ TELEGRAM_RESULT_LIMIT_KEY = "telegram_result_limit"
 RESULT_PAGES_KEY = "result_pages"
 MORE_RESULTS_PREFIX = "more_results:"
 ALLOWED_USER_IDS_KEY = "allowed_user_ids"
+TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
+TELEGRAM_TEXT_MESSAGE_LIMIT = 4096
 
 
 @dataclass(frozen=True)
@@ -506,9 +508,26 @@ async def _send_result_batch(message, results: list[SearchResult]) -> None:
     for result in results:
         caption = format_search_result_caption(result)
         if result.image_url:
-            await _maybe_await(message.reply_photo(photo=result.image_url, caption=caption))
+            await _maybe_await(
+                message.reply_photo(
+                    photo=result.image_url,
+                    caption=_limit_telegram_text(caption, TELEGRAM_PHOTO_CAPTION_LIMIT),
+                )
+            )
         else:
-            await _maybe_await(message.reply_text(caption))
+            await _maybe_await(
+                message.reply_text(
+                    _limit_telegram_text(caption, TELEGRAM_TEXT_MESSAGE_LIMIT)
+                )
+            )
+
+
+def _limit_telegram_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    if limit <= 1:
+        return value[:limit]
+    return f"{value[: limit - 1].rstrip()}…"
 
 
 def _store_result_page(

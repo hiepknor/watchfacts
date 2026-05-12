@@ -14,6 +14,8 @@ from app.telegram_bot import (
     PROCESSING_MESSAGE,
     START_MESSAGE,
     TELEGRAM_RESULT_LIMIT_KEY,
+    TELEGRAM_PHOTO_CAPTION_LIMIT,
+    TELEGRAM_TEXT_MESSAGE_LIMIT,
     UNAUTHORIZED_MESSAGE,
     WORKFLOW_KEY,
     SearchResult,
@@ -354,6 +356,33 @@ def test_results_callback_sends_first_photo_batch() -> None:
     assert message.replies[-1] == "✅ Đã gửi hết kết quả."
 
 
+def test_results_callback_limits_long_photo_caption() -> None:
+    message = FakeMessage("5164a")
+    workflow = FakeWorkflow(
+        [
+            SearchResult(
+                listing_text="5164A " + ("retail ready full set " * 80),
+                seller="BP",
+                posted_date="April 9, 2026",
+                image_url="https://image-url.jpg",
+            )
+        ]
+    )
+    context = make_context(workflow)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    notice_markup = message.sent_messages[-1].reply_markup
+    token = notice_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    callback = FakeCallbackQuery(f"more_results:{token}", message)
+
+    asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
+
+    caption = message.photos[0][1]
+    assert len(caption) == TELEGRAM_PHOTO_CAPTION_LIMIT
+    assert caption.endswith("…")
+
+
 def test_text_messages_send_each_result_as_separate_photo() -> None:
     message = FakeMessage("7118/1200a blue")
     workflow = FakeWorkflow(
@@ -589,6 +618,32 @@ def test_text_messages_fallback_to_text_when_image_is_missing() -> None:
     assert message.sent_messages[0].text == PROCESSING_MESSAGE
     assert message.sent_messages[0].deleted is True
     assert context.application.bot.chat_actions == [(12345, "typing")]
+
+
+def test_results_callback_limits_long_text_message() -> None:
+    message = FakeMessage("5164a")
+    workflow = FakeWorkflow(
+        [
+            SearchResult(
+                listing_text="5164A " + ("retail ready full set " * 250),
+                seller="BP",
+                posted_date="April 9, 2026",
+            )
+        ]
+    )
+    context = make_context(workflow)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    notice_markup = message.sent_messages[-1].reply_markup
+    token = notice_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    callback = FakeCallbackQuery(f"more_results:{token}", message)
+
+    asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
+
+    result_message = message.replies[-2]
+    assert len(result_message) == TELEGRAM_TEXT_MESSAGE_LIMIT
+    assert result_message.endswith("…")
 
 
 def test_format_posted_date_handles_reposted_suffix() -> None:
