@@ -108,7 +108,7 @@ Boundaries:
 
 Responsibilities:
 
-- Parse HTML with BeautifulSoup/lxml.
+- Parse WatchFacts JSON search responses and fallback HTML with BeautifulSoup/lxml.
 - Extract listing candidate objects.
 - Normalize missing fields to `None` or empty strings consistently.
 - Keep extraction deterministic and unit-testable with HTML fixtures.
@@ -120,12 +120,14 @@ Responsibilities:
 - Normalize user query and listing text.
 - Tokenize query text.
 - Apply case-insensitive all-token matching.
-- Optionally use regex for robust model/reference matching.
+- Use regex for robust model/reference matching, including compound references.
+- Extract the relevant product segment from stock-list cards that contain multiple listings.
 
-Initial matching rule:
+Matching rule:
 
 ```text
-listing matches query if every normalized query token appears in normalized listing text
+listing matches query if every normalized query token appears in the relevant listing text,
+with stricter handling for model/reference tokens
 ```
 
 ### `dedupe.py`
@@ -138,7 +140,8 @@ Responsibilities:
 normalized_text + seller + posted_date
 ```
 
-- Remove duplicates within a result set.
+- Remove exact duplicates within a persisted result set.
+- Remove repost duplicates in the Telegram result set by grouping normalized listing text and seller, then keeping the newest posted date.
 - Provide deterministic normalization helpers.
 
 ### `db.py`

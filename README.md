@@ -2,17 +2,18 @@
 
 Telegram bot for searching watch listings from WatchFacts using an authenticated browser session.
 
-The bot receives a watch query from Telegram, crawls the WatchFacts trading page, extracts matching listings, removes duplicates, and returns formatted results with product image, listing information, seller, and posted date.
+The bot receives a watch query from Telegram, searches WatchFacts with an authenticated browser session, removes duplicate reposts, and returns formatted results with product image, listing information, seller, and posted date.
 
 ## Features
 
 - Telegram bot integration
-- WatchFacts authenticated crawling
+- WatchFacts authenticated search
 - Playwright browser automation
 - Optional Crawl4AI extraction layer
 - BeautifulSoup + lxml HTML parsing
 - Regex and token-based matching
 - Duplicate listing filtering
+- Telegram result pagination with "Xem thêm"
 - SQLite local cache
 - Docker deployment
 - Fully async architecture
@@ -72,11 +73,21 @@ Run the bot locally:
 python -m app.main
 ```
 
+Or run it with Docker:
+
+```bash
+make init
+make deploy
+```
+
 ## Commands
 
 | Command | Description |
 | --- | --- |
 | `make init` | Create `data/`, `logs/`, and `.env` from `.env.example` when missing |
+| `make verify-env` | Check `.env` and `data/watchfacts_state.json` before deploy |
+| `make deploy` | Pull latest code, build, recreate the bot, and show startup logs |
+| `make deploy SKIP_PULL=1` | Deploy local unpushed changes |
 | `make build` | Build the Docker image |
 | `make up` | Start the bot with Docker Compose |
 | `make down` | Stop Docker Compose services |
@@ -163,9 +174,6 @@ Send a watch query to the bot:
 Example response:
 
 ```text
-📸 Ảnh sản phẩm:
-https://image-url.jpg
-
 🏷️ Thông tin:
 228253A choco N2 467000hkd
 
@@ -173,8 +181,10 @@ https://image-url.jpg
 HK STOCKS
 
 📅 Ngày đăng:
-April 20, 2026
+20/04/2026
 ```
+
+The bot sends up to 5 results first. When more results are available, it sends an inline "Xem thêm" button to request the next batch.
 
 ## Matching Logic
 
@@ -196,10 +206,12 @@ Matching is:
 - Case-insensitive
 - Token-based
 - Regex-assisted
+- Strict for model/reference tokens, including compound references such as `7118/1200A`
+- Scoped to the relevant product segment when a WatchFacts card contains multiple listings
 
 ## Deduplication
 
-Listings are deduplicated with:
+Persistent listing identity is stored with:
 
 ```text
 normalized_text + seller + posted_date
@@ -211,6 +223,8 @@ Normalization includes:
 - Trimming spaces
 - Collapsing repeated whitespace
 - Normalizing punctuation
+
+Search results also run a latest-repost pass that groups by normalized listing text and seller, ignores repost date for that grouping, and keeps the newest posted date when the same seller reposts the same item.
 
 ## Crawl4AI
 

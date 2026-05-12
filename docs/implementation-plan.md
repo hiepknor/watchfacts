@@ -114,6 +114,7 @@ Acceptance:
 - [x] Query normalization is case-insensitive.
 - [x] All query tokens are required.
 - [x] Tests cover model/reference and descriptor examples.
+- [x] Compound references and multi-listing card segments are handled deterministically.
 
 Verify:
 
@@ -132,6 +133,7 @@ Acceptance:
 
 - [x] Dedupe key uses normalized text, seller, and posted date.
 - [x] Repeated listings are removed deterministically.
+- [x] Reposted duplicates from the same seller keep the latest posted date in search results.
 - [x] Tests cover whitespace/case/punctuation normalization.
 
 Verify:
@@ -229,9 +231,10 @@ Likely files:
 
 Acceptance:
 
-- [x] Telegram query triggers scrape -> parse -> match -> dedupe -> persist -> format.
+- [x] Telegram query triggers WatchFacts search -> parse -> match -> dedupe -> persist -> format.
 - [x] No-result state is user-friendly.
 - [x] Errors are logged and surfaced without secrets.
+- [x] Large result sets are paginated with Telegram inline "Xem thêm" callbacks.
 
 Verify:
 
