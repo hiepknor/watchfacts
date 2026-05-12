@@ -303,3 +303,69 @@ def test_search_workflow_refines_results_with_local_llm_when_enabled(tmp_path) -
 
     assert refine_calls
     assert results[0].listing_text == "FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd"
+
+
+def test_search_workflow_dedupes_again_after_local_llm_refine(tmp_path) -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
+        telegram_result_limit=5,
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+        headless=True,
+        enable_crawl4ai=True,
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+        db_path=tmp_path / "data" / "bot.db",
+        browser_state_path=tmp_path / "data" / "watchfacts_state.json",
+        local_llm_enabled=True,
+    )
+    html = """
+    {
+      "listings": [
+        {
+          "title": "FPJ Elegante Titanium White 48mm 2022 Used Fullset 119,000usd - [ ] FPJ Rose Gold CS opendate watch",
+          "companyName": "Member 9058",
+          "repostedAt": "2026-03-22 10:00:00",
+          "number": 10
+        },
+        {
+          "title": "FPJ quantieme perpetuel platinum - [ ] FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd - [ ] FPJ Rose Gold CS",
+          "companyName": "Member 9058",
+          "repostedAt": "2026-03-28 10:00:00",
+          "number": 11
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    async def refine_results(_: str, results: list[SearchResult]) -> list[SearchResult]:
+        return [
+            SearchResult(
+                listing_text="FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd",
+                seller=result.seller,
+                posted_date=result.posted_date,
+                image_url=result.image_url,
+                source_url=result.source_url,
+            )
+            for result in results
+        ]
+
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        fetch_html=fetch_html,
+        refine_results=refine_results,
+    )
+
+    results = asyncio.run(workflow.search("Fpj Elegante Titanium"))
+
+    assert len(results) == 1
+    assert results[0].posted_date == "March 28, 2026"
+    assert results[0].source_url == "/flash-sales/11"

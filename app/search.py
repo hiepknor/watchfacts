@@ -47,6 +47,7 @@ class WatchFactsSearchWorkflow:
             results = [_to_search_result(query, listing) for listing in matched]
             unique = unique_latest_listings(results)
             unique = await self._refine_results(query, unique)
+            unique = unique_latest_listings(unique)
 
             self.database.record_query_results(query, unique)
             logger.info(
