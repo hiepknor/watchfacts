@@ -400,7 +400,7 @@ def _looks_like_product_reference_boundary(
         return False
     if _looks_like_plain_price_before_currency(normalized_token, next_token):
         return False
-    if _looks_like_plain_price_after_set(normalized_token, previous_token):
+    if _looks_like_plain_price_after_descriptor(normalized_token, previous_token):
         return False
     if _looks_like_plain_price_after_date(normalized_token, previous_token):
         return False
@@ -527,10 +527,10 @@ def _looks_like_plain_price_after_date(token: str, previous_token: str) -> bool:
     )
 
 
-def _looks_like_plain_price_after_set(token: str, previous_token: str) -> bool:
+def _looks_like_plain_price_after_descriptor(token: str, previous_token: str) -> bool:
     return bool(
         re.fullmatch(r"\d{5,8}", token)
-        and previous_token in {"full", "set", "fullset"}
+        and previous_token in {"full", "set", "fullset", "used", "new", "nos", "likenew"}
     )
 
 
@@ -539,7 +539,7 @@ def _looks_like_caliber_token(token: str) -> bool:
 
 
 def _looks_like_size_token(token: str) -> bool:
-    return bool(re.fullmatch(r"\d{2,3}mm", token))
+    return bool(re.fullmatch(r"\d{2,3}mm(?:\d{4})?", token))
 
 
 def _looks_like_reference_detail_after_size(

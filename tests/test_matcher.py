@@ -127,6 +127,20 @@ def test_extract_relevant_listing_text_keeps_plain_price_after_full_set() -> Non
     )
 
 
+def test_extract_relevant_listing_text_keeps_compact_size_year_detail() -> None:
+    listing_text = (
+        "FPJ Elegante titanium ti 48mm2019 used 780000\n"
+        "RM029 RG 2017 used Fullset \n"
+        "HK$1090000\n\n"
+        "G0A23172 10/2025 680000\n"
+        "642.OX.0118.Lr.0999 1/2026 410000"
+    )
+
+    assert extract_relevant_listing_text("Fpj Elegante Titanium", listing_text) == (
+        "FPJ Elegante titanium ti 48mm2019 used 780000"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_price_with_currency_suffix() -> None:
     listing_text = "Rolex 228253A choco N2 467000hkd full set"
 
