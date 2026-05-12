@@ -221,6 +221,15 @@ Recommended workflow:
 6. Full test suite runs before commit and deploy.
 7. Issue is marked `fixed` or `ignored`.
 
+Generate a draft matcher regression test from an exported JSON payload:
+
+```bash
+python scripts/generate_issue_fixtures.py issues.json > /tmp/test_exported_issues.py
+```
+
+The script also accepts the Telegram `/issues_export` message from stdin, including
+the surrounding Markdown code fence.
+
 The benchmark corpus should include:
 
 - Query.

@@ -140,7 +140,7 @@ Exit criteria:
 - [x] Exported cases contain enough context to create matcher/parser tests.
 - [x] No secrets, cookies, browser state, or full page HTML are exposed in issue records or exports.
 - [x] Add status mutation commands such as `/issue_done` and `/issue_ignore`.
-- [ ] Add fixture generation script from exported issues.
+- [x] Add fixture generation script from exported issues.
 - [ ] `python -m pytest` and `make check` pass for every implementation change.
 
 Detailed spec:

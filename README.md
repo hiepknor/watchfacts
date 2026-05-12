@@ -238,6 +238,12 @@ Bot commands:
 | `/issues_export` | Export open issues as JSON for regression tests |
 | `/cancel` | Clear pending result buttons |
 
+Generate a draft matcher regression test from exported issues:
+
+```bash
+python scripts/generate_issue_fixtures.py issues.json > /tmp/test_exported_issues.py
+```
+
 Send a watch query to the bot:
 
 ```text

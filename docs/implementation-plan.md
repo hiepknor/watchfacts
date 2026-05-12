@@ -425,6 +425,7 @@ Acceptance:
 - [x] Exported issue fixture includes query, raw text, shown text, seller, and source URL.
 - [x] Export is stable across runs and suitable for copying into test fixtures.
 - [x] Documentation explains how to convert exported issues into `tests/test_matcher.py`, parser fixtures, or benchmark cases.
+- [x] Script can generate draft matcher regression tests from `/issues_export` JSON.
 - [x] Maintainers can mark exported issues as fixed or ignored.
 
 Verify:
