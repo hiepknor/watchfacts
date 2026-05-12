@@ -23,6 +23,10 @@ def test_tokenize_query_extracts_model_reference_and_descriptor() -> None:
     assert tokenize_query("7118/1200A 25.5k") == ["7118/1200a", "25.5k"]
 
 
+def test_normalize_text_compacts_keycap_digit_prices() -> None:
+    assert normalize_text("5164a Watch Only $8️⃣0️⃣k") == "5164a watch only 80k"
+
+
 def test_listing_matches_requires_all_query_tokens() -> None:
     assert listing_matches("228253a choco", "Rolex 228253A dial CHOCO full set")
     assert not listing_matches("228253a choco", "Rolex 228253A silver dial full set")
@@ -35,6 +39,16 @@ def test_listing_matches_reference_tokens_across_punctuation() -> None:
 def test_listing_matches_decimal_price_as_single_token() -> None:
     assert listing_matches("25.5k", "116500 blk2023 glass scratch 25.5k")
     assert not listing_matches("25.5k", "116500 Black Used USD25,460")
+
+
+def test_listing_matches_keycap_digit_price_descriptor() -> None:
+    assert listing_matches("5164a 80k", "5164a Watch Only $8️⃣0️⃣k")
+
+
+def test_listing_matches_treats_query_year_as_descriptor() -> None:
+    listing_text = "🏷️ 26240BA new 2024 💎💫👑✨ 👤 member 932184 📅 25/03/2026"
+
+    assert listing_matches("26240ba new 2024", listing_text)
 
 
 def test_listing_matches_requires_descriptors_near_reference_token() -> None:
@@ -151,6 +165,17 @@ def test_extract_relevant_listing_text_keeps_dot_date_and_price() -> None:
     listing_text = (
         "Brand new // Deal in HK "
         "Patek 7118/1200A Blue // New 03.2026 // Price 725K HKD "
+        "Rolex 126518 Tiffany // New 02.2026 // Price 685K HKD"
+    )
+
+    assert extract_relevant_listing_text("7118/1200a blue", listing_text) == (
+        "Patek 7118/1200A Blue // New 03.2026 // Price 725K HKD"
+    )
+
+
+def test_extract_relevant_listing_text_strips_trailing_bullet_separator() -> None:
+    listing_text = (
+        "Patek 7118/1200A Blue // New 03.2026 // Price 725K HKD • "
         "Rolex 126518 Tiffany // New 02.2026 // Price 685K HKD"
     )
 
@@ -354,6 +379,14 @@ def test_extract_relevant_listing_text_keeps_chf_price_after_typo_date() -> None
 
     assert extract_relevant_listing_text("26240ba", listing_text) == (
         "AP 26240BA Alix 1/202P 125k chf new fs"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_member_metadata() -> None:
+    listing_text = "🏷️ 26240BA new 2024 💎💫👑✨ 👤 member 932184 📅 25/03/2026 11:14"
+
+    assert extract_relevant_listing_text("26240ba new 2024", listing_text) == (
+        "26240BA new 2024 💎💫👑✨"
     )
 
 

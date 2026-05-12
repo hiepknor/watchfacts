@@ -46,7 +46,9 @@ def normalize_text(value: str | None) -> str:
         return ""
 
     normalized = unicodedata.normalize("NFKD", value).casefold()
-    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    normalized = "".join(
+        char for char in normalized if not unicodedata.category(char).startswith("M")
+    )
     tokens = TOKEN_RE.findall(normalized)
     return " ".join(tokens)
 
@@ -143,11 +145,22 @@ def _parse_query_terms(query: str) -> tuple[list[list[str]], list[str]]:
         parts = normalize_text(match.group(0)).split()
         if not parts:
             continue
-        if any(_looks_like_reference_token(part) for part in parts):
+        if any(_looks_like_reference_token(part) for part in parts) and not all(
+            _looks_like_query_descriptor_token(part) for part in parts
+        ):
             reference_terms.append(parts)
         else:
             descriptor_tokens.extend(parts)
     return reference_terms, descriptor_tokens
+
+
+def _looks_like_query_descriptor_token(token: str) -> bool:
+    return (
+        _looks_like_year_token(token)
+        or _looks_like_price_token(token)
+        or _looks_like_date_or_condition_token(token)
+        or _looks_like_plain_price_before_currency(token, "")
+    )
 
 
 def _looks_like_reference_token(token: str) -> bool:
@@ -206,6 +219,9 @@ def _local_descriptor_tokens(listing_tokens: list[str], reference_index: int) ->
     for token in listing_tokens[reference_index + 1 :]:
         if len(local) >= LOCAL_MATCH_WINDOW:
             break
+        if _looks_like_query_descriptor_token(token):
+            local.append(token)
+            continue
         if _looks_like_model_or_price_token(token):
             break
         local.append(token)
@@ -256,6 +272,8 @@ def _matching_segment_end(
         )
         if _looks_like_next_product_brand(normalized_token, next_token):
             break
+        if _looks_like_metadata_boundary(normalized_token, next_token):
+            break
         if _looks_like_product_reference_boundary(
             listing_text,
             match.start(),
@@ -269,6 +287,12 @@ def _matching_segment_end(
             _include_trailing_currency_symbol(listing_text, match.end()),
         )
     return end
+
+
+def _looks_like_metadata_boundary(token: str, next_token: str) -> bool:
+    return token in {"member", "seller", "dealer"} and bool(
+        re.fullmatch(r"\d{3,}", next_token)
+    )
 
 
 def _looks_like_product_reference_boundary(
@@ -421,6 +445,8 @@ def _looks_like_year_token(token: str) -> bool:
 
 def _clean_display_text(value: str) -> str:
     cleaned = " ".join(value.split())
+    cleaned = re.sub(r"\s*[•|]+\s*$", "", cleaned)
+    cleaned = re.sub(r"\s*(?:👤|📅|🗓️)\s*$", "", cleaned)
     return re.sub(r"(?:\s*[^\w\s$./-]*\s*new\s*)+$", "", cleaned, flags=re.IGNORECASE)
 
 
