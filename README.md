@@ -190,6 +190,7 @@ make llm-smoke
 
 Use `make llm-down` to stop the service. Model files under `models/` are ignored
 by git.
+For Docker bot trials, set `LOCAL_LLM_BASE_URL=http://llama-cpp:8080` in `.env`.
 
 ## Telegram Usage
 

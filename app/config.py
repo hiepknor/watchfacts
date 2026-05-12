@@ -13,6 +13,7 @@ DEFAULT_TELEGRAM_RESULT_LIMIT = 5
 DEFAULT_LOCAL_LLM_BASE_URL = "http://localhost:8080"
 DEFAULT_LOCAL_LLM_MODEL = "gemma-4-E2B-it-Q8_0.gguf"
 DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS = 30
+DEFAULT_LOCAL_LLM_MAX_REFINES = 3
 
 
 class ConfigError(ValueError):
@@ -36,6 +37,7 @@ class Settings:
     local_llm_base_url: str = DEFAULT_LOCAL_LLM_BASE_URL
     local_llm_model: str = DEFAULT_LOCAL_LLM_MODEL
     local_llm_timeout_seconds: int = DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS
+    local_llm_max_refines: int = DEFAULT_LOCAL_LLM_MAX_REFINES
 
 
 def parse_bool(value: str, *, name: str) -> bool:
@@ -126,6 +128,10 @@ def load_settings(
         source.get("LOCAL_LLM_TIMEOUT_SECONDS", str(DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS)),
         name="LOCAL_LLM_TIMEOUT_SECONDS",
     )
+    local_llm_max_refines = parse_positive_int(
+        source.get("LOCAL_LLM_MAX_REFINES", str(DEFAULT_LOCAL_LLM_MAX_REFINES)),
+        name="LOCAL_LLM_MAX_REFINES",
+    )
 
     data_dir = root / "data"
     logs_dir = root / "logs"
@@ -141,6 +147,7 @@ def load_settings(
         local_llm_base_url=local_llm_base_url,
         local_llm_model=local_llm_model,
         local_llm_timeout_seconds=local_llm_timeout_seconds,
+        local_llm_max_refines=local_llm_max_refines,
         project_root=root,
         data_dir=data_dir,
         logs_dir=logs_dir,

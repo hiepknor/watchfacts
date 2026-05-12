@@ -9,6 +9,7 @@ from app.config import Settings
 from app.db import Database
 from app.scraper import ScrapeResult
 from app.search import WatchFactsSearchWorkflow
+from app.telegram_bot import SearchResult
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "watchfacts_listing.html"
@@ -241,3 +242,64 @@ def test_search_workflow_logs_error_type_without_query_or_state_path(tmp_path, c
     assert "228253a choco" not in log_text
     assert str(settings.browser_state_path) not in log_text
     assert settings.telegram_bot_token not in log_text
+
+
+def test_search_workflow_refines_results_with_local_llm_when_enabled(tmp_path) -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
+        telegram_result_limit=5,
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+        headless=True,
+        enable_crawl4ai=True,
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+        db_path=tmp_path / "data" / "bot.db",
+        browser_state_path=tmp_path / "data" / "watchfacts_state.json",
+        local_llm_enabled=True,
+    )
+    html = """
+    <html>
+      <body>
+        <div class="product">
+          <div class="product-description">
+            <a class="title-link" href="/flash-sales/3">
+              FPJ quantieme perpetuel platinum 2022 used Fullset $298,500USD - [ ]
+              FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd - [ ]
+              FPJ Rose Gold CS opendate watch with card $130,000USD
+            </a>
+          </div>
+          <span data-field="seller">Member 9058</span>
+          <time data-field="posted-date">March 28, 2026</time>
+        </div>
+      </body>
+    </html>
+    """
+    refine_calls: list[tuple[str, list[SearchResult]]] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    async def refine_results(query: str, results: list[SearchResult]) -> list[SearchResult]:
+        refine_calls.append((query, results))
+        return [
+            SearchResult(
+                listing_text="FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd",
+                seller=results[0].seller,
+                posted_date=results[0].posted_date,
+                image_url=results[0].image_url,
+                source_url=results[0].source_url,
+            )
+        ]
+
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        fetch_html=fetch_html,
+        refine_results=refine_results,
+    )
+
+    results = asyncio.run(workflow.search("Fpj Elegante Titanium"))
+
+    assert refine_calls
+    assert results[0].listing_text == "FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd"

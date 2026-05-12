@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from app.config import Settings
 from app.db import Database
 from app.dedupe import unique_latest_listings
+from app.llm_matcher import refine_search_results
 from app.matcher import extract_relevant_listing_text, filter_matching_listings
 from app.parser import ListingCandidate, parse_listings
 from app.scraper import ScrapeResult, fetch_watchfacts_html
@@ -14,6 +15,7 @@ from app.telegram_bot import SearchResult
 
 
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
+RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
@@ -29,10 +31,12 @@ class WatchFactsSearchWorkflow:
         *,
         database: Database | None = None,
         fetch_html: FetchHtml | None = None,
+        refine_results: RefineResults | None = None,
     ) -> None:
         self.settings = settings
         self.database = database or Database(settings.db_path)
         self.fetch_html = fetch_html or fetch_watchfacts_html
+        self.refine_results = refine_results
 
     async def search(self, query: str) -> list[SearchResult]:
         logger.info("event=query.start query_length=%d", len(query))
@@ -42,6 +46,7 @@ class WatchFactsSearchWorkflow:
             matched = parsed if scrape_result.server_filtered else filter_matching_listings(query, parsed)
             results = [_to_search_result(query, listing) for listing in matched]
             unique = unique_latest_listings(results)
+            unique = await self._refine_results(query, unique)
 
             self.database.record_query_results(query, unique)
             logger.info(
@@ -57,6 +62,15 @@ class WatchFactsSearchWorkflow:
                 exc.__class__.__name__,
             )
             raise
+
+    async def _refine_results(
+        self,
+        query: str,
+        results: list[SearchResult],
+    ) -> list[SearchResult]:
+        if self.refine_results is not None:
+            return await self.refine_results(query, results)
+        return await refine_search_results(query, results, self.settings)
 
 
 def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:

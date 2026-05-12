@@ -119,8 +119,10 @@ Set or adjust these `.env` values:
 
 ```bash
 LOCAL_LLM_ENABLED=true
-LOCAL_LLM_BASE_URL=http://localhost:8080
+LOCAL_LLM_BASE_URL=http://llama-cpp:8080
 LOCAL_LLM_MODEL=gemma-4-E2B-it-Q8_0.gguf
+LOCAL_LLM_TIMEOUT_SECONDS=8
+LOCAL_LLM_MAX_REFINES=3
 LLAMA_CPP_MODELS_DIR=./models
 LLAMA_CPP_MODEL_FILE=gemma-4-E2B-it-Q8_0.gguf
 ```
@@ -136,6 +138,10 @@ Run a smoke request against the OpenAI-compatible chat endpoint:
 ```bash
 make llm-smoke
 ```
+
+`make llm-smoke` runs from the host and uses `http://localhost:8080` unless
+`LOCAL_LLM_SMOKE_BASE_URL` is set. The bot container should use
+`LOCAL_LLM_BASE_URL=http://llama-cpp:8080`.
 
 Inspect or stop it:
 

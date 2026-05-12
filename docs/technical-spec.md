@@ -48,9 +48,10 @@ Expected environment:
 | `HEADLESS` | No | `true` | Browser headless mode |
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
 | `LOCAL_LLM_ENABLED` | No | `false` | Enables local LLM experiment code paths when explicitly implemented |
-| `LOCAL_LLM_BASE_URL` | No | `http://localhost:8080` | Local llama.cpp server URL |
+| `LOCAL_LLM_BASE_URL` | No | `http://localhost:8080` | Local llama.cpp server URL; use `http://llama-cpp:8080` inside Docker Compose |
 | `LOCAL_LLM_MODEL` | No | `gemma-4-E2B-it-Q8_0.gguf` | Local model identifier sent to the chat API |
-| `LOCAL_LLM_TIMEOUT_SECONDS` | No | `30` | Local LLM HTTP timeout for experiments |
+| `LOCAL_LLM_TIMEOUT_SECONDS` | No | `30` | Local LLM HTTP timeout for experiments; `8` is recommended for bot trials with CPU inference |
+| `LOCAL_LLM_MAX_REFINES` | No | `3` | Maximum snippets refined by the local LLM per query |
 | `LLAMA_CPP_IMAGE` | No | `ghcr.io/ggml-org/llama.cpp:server` | Docker image for the experimental llama.cpp service |
 | `LLAMA_CPP_PORT` | No | `8080` | Host port for llama.cpp |
 | `LLAMA_CPP_MODELS_DIR` | No | `./models` | Host directory containing GGUF files; ignored by git |

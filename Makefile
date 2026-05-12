@@ -93,7 +93,7 @@ llm-logs:
 	COMPOSE_PROFILES=llm $(COMPOSE) logs -f llama-cpp
 
 llm-smoke:
-	python scripts/smoke_local_llm.py
+	LOCAL_LLM_BASE_URL=$${LOCAL_LLM_SMOKE_BASE_URL:-http://localhost:8080} LOCAL_LLM_TIMEOUT_SECONDS=$${LOCAL_LLM_SMOKE_TIMEOUT_SECONDS:-120} python scripts/smoke_local_llm.py
 
 check:
 	git diff --check
