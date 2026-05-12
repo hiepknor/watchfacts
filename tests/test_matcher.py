@@ -104,7 +104,26 @@ def test_extract_relevant_listing_text_scopes_descriptor_only_query() -> None:
     )
 
     assert extract_relevant_listing_text("Fpj Elegante Titanium", stock_list) == (
-        "FPJ Elegante titanium ti 48mm"
+        "FPJ Elegante titanium ti 48mm G0A23172 10/2025 680000"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_fpj_elegante_price_and_drops_trailing_brand_alias() -> None:
+    listing_text = "FPJ Elegante Titanium 48mm White Used 2022 Fullset HKD895,000 / USD116,300 PP ⚡"
+
+    assert extract_relevant_listing_text("Fpj Elegante Titanium", listing_text) == (
+        "FPJ Elegante Titanium 48mm White Used 2022 Fullset HKD895,000 / USD116,300"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_plain_price_after_full_set() -> None:
+    listing_text = (
+        "FPJ Elegante Titanium 48mm 2019 full set 780000 "
+        "G0A23172 10/2025 680000 642.OX.0118.Lr.0999 1/2026 420000"
+    )
+
+    assert extract_relevant_listing_text("Fpj Elegante Titanium", listing_text) == (
+        "FPJ Elegante Titanium 48mm 2019 full set 780000"
     )
 
 

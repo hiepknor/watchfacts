@@ -400,6 +400,10 @@ def _looks_like_product_reference_boundary(
         return False
     if _looks_like_plain_price_before_currency(normalized_token, next_token):
         return False
+    if _looks_like_plain_price_after_set(normalized_token, previous_token):
+        return False
+    if _looks_like_plain_price_after_date(normalized_token, previous_token):
+        return False
     if _looks_like_date_or_condition_token(normalized_token):
         return False
     if _looks_like_descriptor_number_token(normalized_token, next_token):
@@ -411,6 +415,8 @@ def _looks_like_product_reference_boundary(
     if _looks_like_caliber_token(normalized_token):
         return False
     if _looks_like_size_token(normalized_token):
+        return False
+    if _looks_like_reference_detail_after_size(normalized_token, next_token, previous_token):
         return False
     return not any(
         currency in normalized_token for currency in ("hkd", "usd", "usdt", "eur", "aed", "chf")
@@ -514,12 +520,36 @@ def _looks_like_plain_price_before_currency(token: str, next_token: str) -> bool
     )
 
 
+def _looks_like_plain_price_after_date(token: str, previous_token: str) -> bool:
+    return bool(
+        re.fullmatch(r"\d{5,8}", token)
+        and _looks_like_date_or_condition_token(previous_token)
+    )
+
+
+def _looks_like_plain_price_after_set(token: str, previous_token: str) -> bool:
+    return bool(
+        re.fullmatch(r"\d{5,8}", token)
+        and previous_token in {"full", "set", "fullset"}
+    )
+
+
 def _looks_like_caliber_token(token: str) -> bool:
     return bool(re.fullmatch(r"\d{3}[a-z]{1,3}", token))
 
 
 def _looks_like_size_token(token: str) -> bool:
     return bool(re.fullmatch(r"\d{2,3}mm", token))
+
+
+def _looks_like_reference_detail_after_size(
+    token: str,
+    next_token: str,
+    previous_token: str,
+) -> bool:
+    if not previous_token or not _looks_like_size_token(previous_token):
+        return False
+    return "/" in token or _looks_like_date_or_condition_token(next_token)
 
 
 def _looks_like_year_token(token: str) -> bool:
@@ -533,6 +563,7 @@ def _clean_display_text(value: str) -> str:
     cleaned = " ".join(value.split())
     cleaned = re.sub(r"\s*[•|]+\s*$", "", cleaned)
     cleaned = re.sub(r"\s*(?:👤|📅|🗓️)\s*$", "", cleaned)
+    cleaned = re.sub(r"\s+(?:PP|AP|Patek Philippe|Audemars Piguet)\s*[^\w\s$./-]*$", "", cleaned, flags=re.IGNORECASE)
     return re.sub(r"(?:\s*[^\w\s$./-]*\s*new\s*)+$", "", cleaned, flags=re.IGNORECASE)
 
 
