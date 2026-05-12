@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Iterable, Protocol, TypeVar
 
@@ -13,6 +14,25 @@ class HasDedupeFields(Protocol):
 
 
 T = TypeVar("T", bound=HasDedupeFields)
+
+PRODUCT_REFERENCE_RE = re.compile(
+    r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:[./-][A-Za-z0-9]+)*\b",
+    re.IGNORECASE,
+)
+PRICE_RE = re.compile(
+    r"""
+    (?:
+        [$€£¥💲]\s*\d+(?:[,\s.]\d+)*(?:[km])?\s*(?:hkd|usd|usdt|eur|aed|chf)?
+        |
+        \b(?:hkd|usd|usdt|eur|aed|chf)\s*(?:\d{3,}(?:[,\s.]\d+)*(?:[km])?|\d+(?:\.\d+)?[km])
+        |
+        \b\d{1,3}(?:[,\s.]\d{3})+(?:\.\d+)?\s*(?:hkd|usd|usdt|eur|aed|chf)?\b
+        |
+        \b\d+(?:\.\d+)?[km]\b
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 
 def dedupe_key(
@@ -65,7 +85,42 @@ def unique_latest_listings(listings: Iterable[T]) -> list[T]:
 
 
 def latest_dedupe_key(listing_text: str, seller: str | None = None) -> str:
-    return "|".join([normalize_text(listing_text), normalize_text(seller)])
+    return "|".join([_latest_listing_signature(listing_text), normalize_text(seller)])
+
+
+def _latest_listing_signature(listing_text: str) -> str:
+    references = [
+        normalize_text(match.group(0))
+        for match in PRODUCT_REFERENCE_RE.finditer(listing_text)
+        if _looks_like_product_reference(match.group(0))
+    ]
+    prices = [_compact_value(match.group(0)) for match in PRICE_RE.finditer(listing_text)]
+    if references and prices:
+        return " ".join([*dict.fromkeys(references), *dict.fromkeys(prices)])
+    if references:
+        return " ".join(dict.fromkeys(references))
+    return normalize_text(listing_text)
+
+
+def _looks_like_product_reference(token: str) -> bool:
+    normalized = normalize_text(token)
+    if re.fullmatch(r"n?\d{1,2}[/-]\d{2,4}y?", normalized):
+        return False
+    if re.fullmatch(r"\d+(?:\.\d+)?[km]", normalized):
+        return False
+    if normalized.isdigit() and len(normalized) == 4:
+        year = int(normalized)
+        if 1900 <= year <= 2099:
+            return False
+    if any(currency in normalized for currency in ("hkd", "usd", "usdt", "eur", "aed", "chf")):
+        return False
+    if len(normalized) < 4 and "/" not in normalized:
+        return False
+    return True
+
+
+def _compact_value(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.casefold())
 
 
 def _is_newer(candidate_date: str | None, current_date: str | None) -> bool:

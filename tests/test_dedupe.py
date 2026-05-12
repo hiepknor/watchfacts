@@ -38,7 +38,27 @@ def test_unique_listings_treats_missing_fields_consistently() -> None:
 
 def test_latest_dedupe_key_ignores_posted_date() -> None:
     assert latest_dedupe_key("Rolex 228253A choco", seller="HK STOCKS") == (
-        "rolex 228253a choco|hk stocks"
+        "228253a|hk stocks"
+    )
+
+
+def test_latest_dedupe_key_uses_reference_and_price_signature() -> None:
+    assert latest_dedupe_key(
+        "6159G New 4/2025 $888,000 HKD 2 days to HK",
+        seller="Mr.Din",
+    ) == latest_dedupe_key(
+        "6159G New 4/2025 888 000 HKD 3 days to Hong Kong",
+        seller="Mr.Din",
+    )
+
+
+def test_latest_dedupe_key_falls_back_to_reference_signature_without_price() -> None:
+    assert latest_dedupe_key(
+        "15510ST white dial brand new full set, contact for price",
+        seller="Dealer",
+    ) == latest_dedupe_key(
+        "Audemars Piguet Royal Oak 15510ST white full stickers, DM price",
+        seller="Dealer",
     )
 
 
@@ -76,3 +96,33 @@ def test_unique_latest_listings_keeps_same_seller_product_with_different_price()
         older_lower_price,
         newer_higher_price,
     ]
+
+
+def test_unique_latest_listings_collapses_same_seller_reference_price_reposts() -> None:
+    older = Listing(
+        "6159G New 4/2025 $888,000 HKD 2 days to HK",
+        "Mr.Din",
+        "May 8, 2026",
+    )
+    newer = Listing(
+        "6159G New 4/2025 888 000 HKD 3 days to Hong Kong",
+        "Mr.Din",
+        "May 9, 2026",
+    )
+
+    assert unique_latest_listings([older, newer]) == [newer]
+
+
+def test_unique_latest_listings_collapses_same_seller_reference_reposts_without_price() -> None:
+    older = Listing(
+        "15510ST white dial brand new full set, contact for price",
+        "Dealer",
+        "May 8, 2026",
+    )
+    newer = Listing(
+        "Audemars Piguet Royal Oak 15510ST white full stickers, DM price",
+        "Dealer",
+        "May 9, 2026",
+    )
+
+    assert unique_latest_listings([older, newer]) == [newer]
