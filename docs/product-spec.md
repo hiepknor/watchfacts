@@ -2,9 +2,9 @@
 
 ## Objective
 
-Build a self-hosted Telegram bot that lets an authorized user search WatchFacts trading listings by sending natural watch search text such as `228253a choco`.
+Maintain a self-hosted Telegram bot that lets an authorized user search WatchFacts trading listings by sending natural watch search text such as `228253a choco`.
 
-The bot should use an authenticated browser session, extract listings from WatchFacts, match listings deterministically, deduplicate results, and return concise Telegram-friendly listing summaries.
+The bot uses an authenticated browser session, extracts listings from WatchFacts JSON/HTML responses, matches listings deterministically, deduplicates latest reposts, and returns concise Telegram-friendly summaries plus paginated result batches.
 
 ## Users
 
@@ -26,17 +26,22 @@ The bot should use an authenticated browser session, extract listings from Watch
 2. Bot validates and normalizes the query.
 3. Bot loads or reuses an authenticated WatchFacts browser state.
 4. Bot crawls the configured WatchFacts URL.
-5. Bot extracts listing candidates from HTML.
-6. Bot matches listings against query tokens.
-7. Bot removes duplicates.
+5. Bot extracts listing candidates from JSON search responses or HTML fallback.
+6. Bot matches or scopes listings against query tokens.
+7. Bot removes repeated latest reposts.
 8. Bot stores query/cache/dedupe data in SQLite.
-9. Bot returns formatted Telegram messages with listing details.
+9. Bot returns a summary with an inline "Xem kết quả" button.
+10. User requests batches with "Xem kết quả" / "Xem thêm".
 
 ## Functional Requirements
 
 - Accept plain-text Telegram messages as search queries.
+- Support `/start`, `/help`, `/settings`, and `/cancel`.
+- Ignore normal group chat messages unless the bot is mentioned at the start or the user replies to a bot message.
+- Support optional Telegram user-id allowlist.
 - Normalize query text for case-insensitive matching.
 - Require all query tokens to appear in a listing unless a later spec defines advanced operators.
+- Handle messy watch listing text with emoji, keycap digits, compact dates, compound references, seller/member metadata, and multi-product stock-list cards.
 - Extract listing fields when available:
   - image URL
   - listing text
@@ -44,9 +49,11 @@ The bot should use an authenticated browser session, extract listings from Watch
   - posted date
   - source URL or stable listing identifier if available
 - Deduplicate listings by normalized listing text, seller, and posted date.
+- Deduplicate same-seller reposts in search output by keeping the newest posted date.
 - Persist local cache, query history, and dedupe records in SQLite.
 - Reuse `data/watchfacts_state.json` for authenticated browser state.
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
+- Limit Telegram photo captions and text messages to platform-safe lengths.
 
 ## Non-Functional Requirements
 
@@ -56,6 +63,7 @@ The bot should use an authenticated browser session, extract listings from Watch
 - Secrets and browser session files must never be committed.
 - The bot must fail clearly when configuration or login state is missing.
 - The bot should log operational events without leaking secrets, cookies, tokens, or full session state.
+- Long WatchFacts listings should not cause Telegram batch sending failures.
 
 ## Non-Goals
 
@@ -79,6 +87,8 @@ The bot should use an authenticated browser session, extract listings from Watch
 | Run lightweight checks | `make check` |
 | Run bot locally | `python -m app.main` |
 | Run login locally | `python scripts/login.py` |
+| Deploy latest code | `make deploy` |
+| Deploy local unpushed code | `make deploy SKIP_PULL=1` |
 
 Telegram commands:
 
@@ -95,6 +105,7 @@ at the start of the message or reply to a bot message.
 ## Success Criteria
 
 - A user can send a Telegram query and receive matching listings.
+- A user gets a result summary first, then explicit paginated batches.
 - Matching is case-insensitive, token-based, and covered by tests.
 - Duplicate listings are suppressed across a single search result set.
 - Missing config or missing browser state produces actionable operator errors.
@@ -104,8 +115,7 @@ at the start of the message or reply to a bot message.
 
 ## Open Questions
 
-- Should matching support optional terms, quoted phrases, or negative filters?
-- What maximum number of results should the bot return per query?
+- Should the bot add query operators for optional terms, quoted phrases, or negative filters?
 - Should query history be retained forever or pruned by age/count?
-- Should image URLs be sent as Telegram photos or plain text links?
-- Should the bot support multiple authorized Telegram users or one operator-only chat?
+- Should price normalization support currency conversion or numeric sorting?
+- Should multi-page crawling be enabled beyond the current WatchFacts search response?

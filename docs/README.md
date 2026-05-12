@@ -33,6 +33,6 @@ Agents should read documents selectively:
 - For infrastructure changes: read `operations.md`, `security-compliance.md`, and ADR-004.
 - For crawler changes: read `technical-spec.md`, `security-compliance.md`, and ADR-002.
 - For matching/parser changes: read `technical-spec.md` and ADR-001.
-- For commits: follow `AGENT.md` and `./.skills/git-workflow-and-versioning/SKILL.md`.
+- For commits: follow `AGENT.md` and the workflow in `contributing.md`.
 
 Do not load every document into context by default. Load the smallest set that applies to the task.

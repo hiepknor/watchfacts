@@ -12,6 +12,7 @@
 6. Inspect startup with `make logs` if needed.
 
 The bot expects `data/watchfacts_state.json` to exist before the first real search.
+`make deploy` also checks for `.env` and browser state before it pulls/builds.
 
 ## Local Setup
 
@@ -34,6 +35,13 @@ Access control:
 - Multiple owner ids can be comma-separated.
 - `TELEGRAM_RESULT_LIMIT=5` controls how many results each Telegram button click sends.
 
+Telegram behavior:
+
+- The bot sends a summary first, not the full result list.
+- Use the "Xem kết quả" and "Xem thêm" buttons to send result batches.
+- Photo captions are limited to Telegram's caption size; long text fallback messages are also truncated safely.
+- In group chats, normal messages are ignored unless the bot is mentioned at the beginning or the user replies to a bot message.
+
 ## Docker Build
 
 ```bash
@@ -45,6 +53,13 @@ The image installs:
 - Python 3.11 runtime
 - Python dependencies from `requirements.txt`
 - Playwright Chromium and browser dependencies
+
+Run the normal checks before building when code changed:
+
+```bash
+.venv/bin/python -m pytest -q
+make check
+```
 
 ## Start And Stop
 
@@ -112,6 +127,8 @@ Useful event names:
 - `event=telegram.search_error`
 
 Query logs include lengths and result counts, not the raw Telegram query text.
+
+Telegram send failures should be rare because result text is capped before sending. If they appear, inspect the error type rather than pasting full listing text or secrets into logs.
 
 ## Browser Login State
 

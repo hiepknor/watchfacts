@@ -61,7 +61,8 @@ Logs must not include:
 ## Telegram Safety
 
 - Treat every Telegram message as user input.
-- Validate empty and oversized messages.
+- Validate empty messages.
+- Cap outbound photo captions and text messages before sending to Telegram.
 - Avoid echoing untrusted HTML as Markdown without escaping.
 - Avoid sending too many messages for one query.
 

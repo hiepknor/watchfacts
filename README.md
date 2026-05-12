@@ -1,19 +1,20 @@
 # WatchFacts Telegram Bot
 
-Telegram bot for searching watch listings from WatchFacts using an authenticated browser session.
+Self-hosted Telegram bot for searching WatchFacts listings with an authenticated browser session.
 
-The bot receives a watch query from Telegram, searches WatchFacts with an authenticated browser session, removes duplicate reposts, and returns formatted results with product image, listing information, seller, and posted date.
+The bot receives a short watch query, searches WatchFacts through the logged-in browser session, parses the returned listings, matches deterministically, removes latest repost duplicates, stores query history in SQLite, and returns Telegram-friendly results with product image, listing text, seller, and posted date.
 
 ## Features
 
 - Telegram bot integration
 - WatchFacts authenticated search
 - Playwright browser automation
-- Optional Crawl4AI extraction layer
+- WatchFacts JSON search response parsing with HTML fallback
 - BeautifulSoup + lxml HTML parsing
 - Regex and token-based matching
 - Duplicate listing filtering
-- Telegram result pagination with "Xem thêm"
+- Summary-first Telegram pagination with "Xem kết quả" / "Xem thêm"
+- Telegram message length guards for long listings
 - SQLite local cache
 - Docker deployment
 - Fully async architecture
@@ -25,7 +26,6 @@ The bot receives a watch query from Telegram, searches WatchFacts with an authen
 - Python
 - python-telegram-bot
 - Playwright
-- Crawl4AI
 - BeautifulSoup4
 - lxml
 - Regex
@@ -43,7 +43,7 @@ The bot receives a watch query from Telegram, searches WatchFacts with an authen
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourusername/watchfacts-bot.git
+git clone https://github.com/hiepknor/watchfacts-bot.git
 cd watchfacts-bot
 
 python3 -m venv .venv
@@ -93,11 +93,16 @@ make deploy
 | `make verify-env` | Check `.env` and `data/watchfacts_state.json` before deploy |
 | `make deploy` | Pull latest code, build, recreate the bot, and show startup logs |
 | `make deploy SKIP_PULL=1` | Deploy local unpushed changes |
+| `make pull` | Pull latest git changes unless `SKIP_PULL=1` |
 | `make build` | Build the Docker image |
 | `make up` | Start the bot with Docker Compose |
 | `make down` | Stop Docker Compose services |
+| `make restart` | Restart the bot service |
 | `make logs` | Follow bot logs |
+| `make ps` | Show Compose service status |
 | `make shell` | Open a shell in the bot container |
+| `make run` | Run the bot locally on the host |
+| `make login` | Run the WatchFacts browser login locally on the host |
 | `make check` | Run lightweight repository checks |
 | `python scripts/login.py` | Open Chromium for manual WatchFacts login and save browser state |
 | `python -m app.main` | Run the Telegram bot locally |
@@ -117,8 +122,7 @@ watchfacts-bot/
 │   ├── matcher.py
 │   ├── dedupe.py
 │   ├── db.py
-│   ├── config.py
-│   └── utils.py
+│   └── config.py
 ├── scripts/
 │   └── login.py
 ├── data/
@@ -224,7 +228,7 @@ Example response:
 
 The bot sends a result summary first. Press "Xem kết quả" to receive the first result batch, then use "Xem thêm" for the next batches.
 
-## Matching Logic
+## Search And Matching Logic
 
 The bot uses deterministic matching. No AI or LLM is used.
 
@@ -246,6 +250,7 @@ Matching is:
 - Regex-assisted
 - Strict for model/reference tokens, including compound references such as `7118/1200A`
 - Scoped to the relevant product segment when a WatchFacts card contains multiple listings
+- Tolerant of common WatchFacts/Telegram listing quirks such as emoji, keycap digit prices, compact dates, year descriptors, and seller metadata boundaries
 
 ## Deduplication
 
@@ -264,12 +269,6 @@ Normalization includes:
 
 Search results also run a latest-repost pass that groups by normalized listing text and seller, ignores repost date for that grouping, and keeps the newest posted date when the same seller reposts the same item.
 
-## Crawl4AI
-
-Crawl4AI is optional. It can provide cleaner markdown extraction, easier debugging, and a fallback extraction layer.
-
-Playwright remains the primary crawler.
-
 ## Database
 
 SQLite database location:
@@ -280,9 +279,9 @@ data/bot.db
 
 Used for:
 
-- Cache
-- Dedupe
 - Query history
+- Listing history
+- Dedupe
 
 ## Docker Deployment
 
@@ -318,7 +317,7 @@ services:
 
 ## Dependencies
 
-Expected `requirements.txt`:
+Current `requirements.txt`:
 
 ```text
 python-telegram-bot[job-queue]
@@ -327,7 +326,10 @@ crawl4ai
 beautifulsoup4
 lxml
 python-dotenv
+pytest
 ```
+
+`ENABLE_CRAWL4AI` remains in config as a compatibility flag. Current production search uses WatchFacts JSON responses and HTML parsing.
 
 ## Ignored Files
 
@@ -377,7 +379,6 @@ Recommended:
 - Scheduled refresh jobs
 - Dealer filtering
 - Price normalization
-- Telegram inline buttons
 - Image caching
 - Export results
 - Multiple watch sources

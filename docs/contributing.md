@@ -3,24 +3,20 @@
 ## Workflow
 
 1. Read `AGENT.md`.
-2. Select relevant workflow skills from `./.skills`.
-3. Read only the docs and source files relevant to the task.
-4. Make a narrow change.
-5. Run verification.
-6. Commit atomically with an English conventional-style message.
+2. Read only the docs and source files relevant to the task.
+3. Make a narrow change.
+4. Run verification.
+5. Commit atomically with an English conventional-style message.
 
-## Skill Usage
+## Work Style
 
-Use:
+Use the smallest workflow that fits:
 
-- `spec-driven-development` for new features or unclear requirements.
-- `planning-and-task-breakdown` for multi-step work.
-- `incremental-implementation` for multi-file implementation.
-- `test-driven-development` for matching/parser/dedupe/database behavior.
-- `debugging-and-error-recovery` for failures.
-- `security-and-hardening` for secrets, auth, browser state, or input handling.
-- `git-workflow-and-versioning` for commits and pushes.
-- `documentation-and-adrs` for docs and architectural decisions.
+- For unclear features, update or add a focused spec before implementation.
+- For matcher/parser/dedupe/database behavior, prefer regression tests first.
+- For security, auth, browser state, or input handling, review `docs/security-compliance.md` before editing.
+- For architecture changes, update or add an ADR.
+- For docs, keep README, specs, operations, and roadmap consistent with code.
 
 ## Coding Principles
 
@@ -37,6 +33,7 @@ For docs-only changes:
 
 ```bash
 git diff --check
+make check
 ```
 
 For Python code:
@@ -44,6 +41,7 @@ For Python code:
 ```bash
 python -m compileall app scripts
 python -m pytest
+make check
 ```
 
 For Docker/runtime changes:

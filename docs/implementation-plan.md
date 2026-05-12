@@ -2,7 +2,9 @@
 
 ## Overview
 
-Build the bot in small, verifiable phases. Each phase should leave the repo in a working state and should be committed separately.
+The initial implementation phases are complete. Keep this document as the project baseline and use it to verify that future changes preserve the intended architecture.
+
+For new work, add a focused task under "Future Work" before implementing if the change affects behavior, data retention, scraping strategy, or deployment.
 
 ## Phase 0: Foundation
 
@@ -97,6 +99,7 @@ Acceptance:
 - [x] Optional Telegram user id allowlist restricts bot usage when configured.
 - [x] Telegram pagination result limit can be configured from `.env`.
 - [x] Group chats ignore normal text unless the bot is mentioned or replied to.
+- [x] Long photo captions and text fallback messages are capped before sending to Telegram.
 
 Verify:
 
@@ -119,6 +122,7 @@ Acceptance:
 - [x] All query tokens are required.
 - [x] Tests cover model/reference and descriptor examples.
 - [x] Compound references and multi-listing card segments are handled deterministically.
+- [x] Messy live-listing cases are covered, including emoji, keycap digit prices, compact dates, year descriptors, and member/seller metadata boundaries.
 
 Verify:
 
@@ -197,6 +201,7 @@ Acceptance:
 
 - [x] Scraper loads existing browser state.
 - [x] Scraper navigates to configured WatchFacts URL.
+- [x] Scraper posts the WatchFacts search form when available and marks server-filtered results.
 - [x] Missing/expired session produces a clear error.
 
 Verify:
@@ -239,6 +244,7 @@ Acceptance:
 - [x] No-result state is user-friendly.
 - [x] Errors are logged and surfaced without secrets.
 - [x] Large result sets show a summary first, then paginate results with Telegram inline callbacks.
+- [x] Server-filtered WatchFacts JSON responses are parsed without over-filtering relevant results.
 
 Verify:
 
@@ -284,12 +290,26 @@ Verify:
 git diff --check
 ```
 
+## Future Work
+
+Each item needs a focused spec before implementation:
+
+- Multi-page crawling beyond the current search response.
+- Scheduled refresh jobs and proactive alerts.
+- Dealer/seller filters.
+- Price normalization, currency handling, and numeric sorting.
+- Image caching.
+- Exporting result sets.
+- Additional watch sources.
+- Query operators such as optional terms, quoted phrases, or negative filters.
+
 ## Checkpoints
 
 After each phase:
 
-- [ ] `make check` passes.
-- [ ] Relevant tests pass.
+- [x] Baseline phases 0-5 complete.
+- [ ] `make check` passes for every change.
+- [ ] Relevant tests pass for every code change.
 - [ ] Docker build passes when runtime files changed.
 - [ ] No secrets are staged.
-- [ ] README/AGENT/docs are updated when commands or architecture change.
+- [ ] README and docs are updated when commands or architecture change.

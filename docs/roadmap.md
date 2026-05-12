@@ -7,7 +7,6 @@ Status: complete.
 Scope:
 
 - README and AGENT context.
-- Local skills vendored in `./.skills`.
 - Dockerfile, Docker Compose, Makefile, `.env.example`, ignore files.
 - Documentation baseline and ADRs.
 
@@ -103,9 +102,9 @@ Deliverables:
 
 - Structured logging.
 - Retry/timeouts for browser navigation.
-- Result limit and message splitting.
+- Summary-first result pagination.
+- Telegram message length guards.
 - Backup/restore guidance for `data/`.
-- CI workflow if desired.
 
 Exit criteria:
 
@@ -119,9 +118,10 @@ Exit criteria:
 - Scheduled refresh jobs.
 - Dealer filtering.
 - Price normalization.
-- Telegram inline buttons.
 - Image caching.
 - Export results.
 - Multiple watch sources.
+- Query operators.
+- CI workflow.
 
 Each later idea needs a focused spec before implementation.

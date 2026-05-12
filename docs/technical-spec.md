@@ -5,7 +5,7 @@
 - Python 3.11+
 - `python-telegram-bot[job-queue]` for Telegram integration
 - Playwright Chromium for authenticated browser automation
-- Crawl4AI as an optional extraction/debugging layer
+- WatchFacts authenticated JSON search response parsing with HTML fallback
 - BeautifulSoup4 + lxml for HTML parsing
 - SQLite for local cache, dedupe, and query history
 - Docker Compose for deployment
@@ -23,7 +23,6 @@ app/
   dedupe.py        # listing identity and duplicate filtering
   db.py            # SQLite schema and persistence
   config.py        # environment/config loading
-  utils.py         # small shared helpers only
 scripts/
   login.py         # manual WatchFacts login and browser state creation
 data/
@@ -33,7 +32,7 @@ logs/
 docs/
 ```
 
-The repository may be scaffolded before all modules exist. Agents must inspect the filesystem before editing.
+The repository is implemented through the production-hardening milestone. Agents must still inspect the filesystem before editing because behavior changes quickly.
 
 ## Configuration
 
@@ -46,7 +45,7 @@ Expected environment:
 | `TELEGRAM_RESULT_LIMIT` | No | `5` | Number of results to send per Telegram pagination batch |
 | `WATCHFACTS_URL` | Yes | `https://watchfacts.com/simon-match-making` | WatchFacts page to crawl |
 | `HEADLESS` | No | `true` | Browser headless mode |
-| `ENABLE_CRAWL4AI` | No | `true` | Enable optional Crawl4AI extraction layer |
+| `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
 
 Configuration rules:
 
@@ -62,13 +61,12 @@ Configuration rules:
 ```text
 Telegram update
   -> telegram_bot handler
-  -> query normalization
-  -> scraper fetches WatchFacts HTML with saved browser state
-  -> parser extracts listing candidates
-  -> matcher filters listings by query tokens
-  -> dedupe removes repeated listings
+  -> scraper loads saved browser state and posts the WatchFacts search form when available
+  -> parser extracts listing candidates from JSON response or HTML fallback
+  -> matcher filters or scopes listings by query tokens
+  -> dedupe removes repeated latest reposts
   -> db records query/cache/dedupe state
-  -> telegram_bot formats and sends results
+  -> telegram_bot sends a summary first, then paginated result batches
 ```
 
 ## Module Contracts
@@ -91,6 +89,8 @@ Responsibilities:
 - Call the search workflow asynchronously.
 - Format listing results for Telegram.
 - Catch user-facing errors and return clear messages.
+- Ignore normal group chat messages unless the bot is mentioned or replied to.
+- Protect Telegram sends by limiting photo captions to 1024 characters and text messages to 4096 characters.
 
 ### `scraper.py`
 
@@ -100,7 +100,8 @@ Responsibilities:
 - Load `data/watchfacts_state.json`.
 - Navigate to `WATCHFACTS_URL`.
 - Wait for stable page content.
-- Return raw HTML and optional debug metadata.
+- Submit the WatchFacts search form when present.
+- Return search response text plus metadata indicating whether the server already filtered results.
 
 Boundaries:
 
@@ -126,6 +127,9 @@ Responsibilities:
 - Apply case-insensitive all-token matching.
 - Use regex for robust model/reference matching, including compound references.
 - Extract the relevant product segment from stock-list cards that contain multiple listings.
+- Treat year/date/price-like numeric query tokens as descriptors instead of independent references.
+- Normalize Unicode mark characters so keycap digit prices such as `$8️⃣0️⃣k` match normal price queries.
+- Stop product segment extraction before seller/member metadata boundaries.
 
 Matching rule:
 
@@ -133,6 +137,8 @@ Matching rule:
 listing matches query if every normalized query token appears in the relevant listing text,
 with stricter handling for model/reference tokens
 ```
+
+When WatchFacts returns server-filtered JSON search results, the workflow keeps those results and only uses the matcher to scope display text. This avoids over-filtering server matches that are relevant but do not contain every local descriptor in the same form.
 
 ### `dedupe.py`
 
@@ -159,7 +165,7 @@ Responsibilities:
 
 ## Data Model
 
-Initial SQLite tables should cover:
+SQLite tables:
 
 ### `queries`
 
@@ -209,7 +215,7 @@ User-facing messages should be concise. Logs should include enough detail for op
 
 ## Testing Strategy
 
-Preferred tests once code exists:
+Preferred tests:
 
 - Unit tests for `matcher.py`, `dedupe.py`, and parser fixtures.
 - Integration tests for SQLite schema and query/listing persistence.
@@ -219,8 +225,8 @@ Preferred tests once code exists:
 Recommended commands:
 
 ```bash
-python -m pytest
-python -m compileall app scripts
+.venv/bin/python -m pytest
+make check
 make build
 ```
 
