@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 DEFAULT_WATCHFACTS_URL = "https://watchfacts.com/simon-match-making"
 DEFAULT_TELEGRAM_RESULT_LIMIT = 5
 DEFAULT_LOCAL_LLM_BASE_URL = "http://localhost:8080"
-DEFAULT_LOCAL_LLM_MODEL = "gemma-4-E2B-it-Q8_0.gguf"
+DEFAULT_LOCAL_LLM_MODEL = "gemma-4-e2b-Q4_K_M.gguf"
 DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS = 30
 DEFAULT_LOCAL_LLM_MAX_REFINES = 3
 
