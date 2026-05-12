@@ -139,10 +139,12 @@ Add owner-only Telegram commands.
 | `/issue_ignore <id>` | Ignore a false positive |
 | `/issues_export` | Export open issue cases as JSON or text |
 
-Initial implementation can support a smaller set:
+Implemented command set:
 
 - `/issues`
 - `/issue <id>`
+- `/issue_done <id>`
+- `/issue_ignore <id>`
 - `/issues_export`
 
 Owner command output should be Vietnamese and visual:

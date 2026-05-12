@@ -233,6 +233,8 @@ Bot commands:
 | `/health` | Check WatchFacts session health without exposing cookies or browser state |
 | `/issues` | List open feedback and suspicious result issues |
 | `/issue F<id>` or `/issue S<id>` | Show one feedback or suspicious issue in detail |
+| `/issue_done F<id>` or `/issue_done S<id>` | Mark an issue as fixed/reviewed |
+| `/issue_ignore F<id>` or `/issue_ignore S<id>` | Ignore a false positive issue |
 | `/issues_export` | Export open issues as JSON for regression tests |
 | `/cancel` | Clear pending result buttons |
 

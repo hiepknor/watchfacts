@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS suspicious_results (
     raw_listing_text TEXT,
     source_url TEXT,
     reviewed_at TEXT,
+    issue_status TEXT NOT NULL DEFAULT 'open',
+    review_notes TEXT,
     UNIQUE(normalized_query, result_rank, reason, listing_text)
 );
 """
@@ -134,7 +136,7 @@ class Database:
 
     def initialize(self) -> None:
         with self.connect() as connection:
-            connection.executescript(SCHEMA)
+            _ensure_schema(connection)
 
     def record_query_results(
         self,
@@ -146,7 +148,7 @@ class Database:
         normalized_query = normalize_text(query_text)
 
         with self.connect() as connection:
-            connection.executescript(SCHEMA)
+            _ensure_schema(connection)
             cursor = connection.execute(
                 """
                 INSERT INTO queries (query_text, normalized_query, created_at, result_count)
@@ -184,7 +186,7 @@ class Database:
         listing_hash = _listing_hash(listing_text)
 
         with self.connect() as connection:
-            connection.executescript(SCHEMA)
+            _ensure_schema(connection)
             row = connection.execute(
                 """
                 SELECT refined_text
@@ -219,7 +221,7 @@ class Database:
         listing_hash = _listing_hash(listing_text)
 
         with self.connect() as connection:
-            connection.executescript(SCHEMA)
+            _ensure_schema(connection)
             connection.execute(
                 """
                 INSERT INTO llm_refinements (
@@ -265,7 +267,7 @@ class Database:
         normalized_query = normalize_text(query_text)
 
         with self.connect() as connection:
-            connection.executescript(SCHEMA)
+            _ensure_schema(connection)
             connection.execute(
                 """
                 INSERT INTO result_feedback (
@@ -297,7 +299,9 @@ class Database:
                     raw_listing_text = COALESCE(excluded.raw_listing_text, result_feedback.raw_listing_text),
                     seller = COALESCE(excluded.seller, result_feedback.seller),
                     posted_date = COALESCE(excluded.posted_date, result_feedback.posted_date),
-                    source_url = COALESCE(excluded.source_url, result_feedback.source_url)
+                    source_url = COALESCE(excluded.source_url, result_feedback.source_url),
+                    issue_status = 'open',
+                    review_notes = NULL
                 """,
                 (
                     now,
@@ -351,7 +355,7 @@ class Database:
         normalized_query = normalize_text(query_text)
 
         with self.connect() as connection:
-            connection.executescript(SCHEMA)
+            _ensure_schema(connection)
             connection.execute(
                 """
                 INSERT INTO suspicious_results (
@@ -370,7 +374,19 @@ class Database:
                 DO UPDATE SET
                     severity = max(suspicious_results.severity, excluded.severity),
                     raw_listing_text = COALESCE(excluded.raw_listing_text, suspicious_results.raw_listing_text),
-                    source_url = COALESCE(excluded.source_url, suspicious_results.source_url)
+                    source_url = COALESCE(excluded.source_url, suspicious_results.source_url),
+                    issue_status = CASE
+                        WHEN suspicious_results.issue_status = 'ignored' THEN 'ignored'
+                        ELSE 'open'
+                    END,
+                    reviewed_at = CASE
+                        WHEN suspicious_results.issue_status = 'ignored' THEN suspicious_results.reviewed_at
+                        ELSE NULL
+                    END,
+                    review_notes = CASE
+                        WHEN suspicious_results.issue_status = 'ignored' THEN suspicious_results.review_notes
+                        ELSE NULL
+                    END
                 """,
                 (
                     now,
@@ -387,7 +403,7 @@ class Database:
 
     def list_open_issues(self, *, limit: int = 10) -> list[IssueRecord]:
         with self.connect() as connection:
-            connection.executescript(SCHEMA)
+            _ensure_schema(connection)
             rows = connection.execute(
                 """
                 SELECT
@@ -420,9 +436,9 @@ class Database:
                     source_url,
                     1 AS report_count,
                     severity,
-                    CASE WHEN reviewed_at IS NULL THEN 'open' ELSE 'reviewed' END AS issue_status
+                    issue_status
                 FROM suspicious_results
-                WHERE reviewed_at IS NULL
+                WHERE issue_status = 'open'
                 ORDER BY id DESC
                 LIMIT ?
                 """,
@@ -432,7 +448,7 @@ class Database:
 
     def get_issue(self, issue_id: int, *, issue_type: str | None = None) -> IssueRecord | None:
         with self.connect() as connection:
-            connection.executescript(SCHEMA)
+            _ensure_schema(connection)
             feedback = None
             if issue_type in {None, "feedback"}:
                 feedback = connection.execute(
@@ -476,13 +492,59 @@ class Database:
                         source_url,
                         1 AS report_count,
                         severity,
-                        CASE WHEN reviewed_at IS NULL THEN 'open' ELSE 'reviewed' END AS issue_status
+                        issue_status
                     FROM suspicious_results
                     WHERE id = ?
                     """,
                     (issue_id,),
                 ).fetchone()
         return _issue_record_from_row(suspicious) if suspicious is not None else None
+
+    def mark_issue_status(
+        self,
+        issue_id: int,
+        *,
+        issue_type: str | None = None,
+        status: str,
+        notes: str | None = None,
+    ) -> IssueRecord | None:
+        if status not in {"open", "fixed", "ignored"}:
+            raise ValueError(f"Unsupported issue status: {status}")
+
+        now = _utc_now()
+        updated_type: str | None = None
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            if issue_type in {None, "feedback"}:
+                cursor = connection.execute(
+                    """
+                    UPDATE result_feedback
+                    SET issue_status = ?,
+                        review_notes = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (status, notes, now, issue_id),
+                )
+                if cursor.rowcount:
+                    updated_type = "feedback"
+
+            if updated_type is None and issue_type in {None, "suspicious"}:
+                reviewed_at = None if status == "open" else now
+                cursor = connection.execute(
+                    """
+                    UPDATE suspicious_results
+                    SET issue_status = ?,
+                        review_notes = ?,
+                        reviewed_at = ?
+                    WHERE id = ?
+                    """,
+                    (status, notes, reviewed_at, issue_id),
+                )
+                if cursor.rowcount:
+                    updated_type = "suspicious"
+
+        return self.get_issue(issue_id, issue_type=updated_type) if updated_type else None
 
     def export_open_issues(self, *, limit: int = 50) -> list[dict[str, object]]:
         return [
@@ -563,6 +625,34 @@ def _upsert_listing(
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _ensure_schema(connection: sqlite3.Connection) -> None:
+    connection.executescript(SCHEMA)
+    _add_column_if_missing(
+        connection,
+        "suspicious_results",
+        "issue_status",
+        "TEXT NOT NULL DEFAULT 'open'",
+    )
+    _add_column_if_missing(
+        connection,
+        "suspicious_results",
+        "review_notes",
+        "TEXT",
+    )
+
+
+def _add_column_if_missing(
+    connection: sqlite3.Connection,
+    table: str,
+    column: str,
+    definition: str,
+) -> None:
+    rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
+    if column in {str(row[1]) for row in rows}:
+        return
+    connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def _listing_hash(value: str) -> str:

@@ -371,7 +371,7 @@ Acceptance:
 - [x] `/issues` lists open feedback and suspicious cases with concise Vietnamese formatting.
 - [x] `/issue F<id>` and `/issue S<id>` show one issue with query, shown text, raw text when available, seller, date, source URL, and report count.
 - [x] `/issues_export` returns deterministic JSON or text suitable for regression fixtures.
-- [ ] Future status commands can mark issues `reviewed`, `fixed`, or `ignored`.
+- [x] Future status commands can mark issues `fixed` or `ignored`.
 - [x] Owner commands require `TELEGRAM_ALLOWED_USER_IDS`.
 - [x] Outputs never include cookies, Telegram tokens, browser state, or full page HTML.
 
@@ -425,7 +425,7 @@ Acceptance:
 - [x] Exported issue fixture includes query, raw text, shown text, seller, and source URL.
 - [x] Export is stable across runs and suitable for copying into test fixtures.
 - [x] Documentation explains how to convert exported issues into `tests/test_matcher.py`, parser fixtures, or benchmark cases.
-- [ ] Maintainers can mark exported issues as reviewed/fixed/ignored.
+- [x] Maintainers can mark exported issues as fixed or ignored.
 
 Verify:
 

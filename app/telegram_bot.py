@@ -46,7 +46,8 @@ HELP_MESSAGE = (
     "• Hoặc trả lời tin nhắn của bot với truy vấn mới\n\n"
     "🧹 /cancel để xóa các nút kết quả đang chờ.\n"
     "⚙️ /settings để xem cấu hình bot hiện tại.\n"
-    "🩺 /health để kiểm tra session WatchFacts."
+    "🩺 /health để kiểm tra session WatchFacts.\n"
+    "🧾 /issues để xem feedback và kết quả đáng nghi."
 )
 EMPTY_QUERY_MESSAGE = (
     "⚠️ Truy vấn đang trống\n\n"
@@ -243,6 +244,14 @@ async def issues_export_command(update, context) -> None:
             )
         )
     )
+
+
+async def issue_done_command(update, context) -> None:
+    await _mark_issue_command(update, context, status="fixed")
+
+
+async def issue_ignore_command(update, context) -> None:
+    await _mark_issue_command(update, context, status="ignored")
 
 
 async def cancel_command(update, context) -> None:
@@ -622,9 +631,29 @@ def format_issue_detail(issue: IssueRecord | None) -> str:
         sections.append(f"🧪 Severity: {issue.severity}")
     else:
         sections.append(f"📊 Report: {issue.report_count} lượt")
+    if issue.issue_status == "open":
+        sections.append("")
+        sections.append(f"✅ Xong: /issue_done {_issue_key(issue)}")
+        sections.append(f"🙈 Bỏ qua: /issue_ignore {_issue_key(issue)}")
     sections.append("")
     sections.append("🔒 Không hiển thị cookie, token hoặc browser state.")
     return _limit_telegram_text("\n".join(sections), TELEGRAM_TEXT_MESSAGE_LIMIT)
+
+
+def format_issue_status_update(issue: IssueRecord | None, status: str) -> str:
+    if issue is None:
+        return (
+            "🧾 Issue không tồn tại\n\n"
+            "Kiểm tra lại ID bằng `/issues`."
+        )
+
+    label = "đã xử lý" if status == "fixed" else "đã bỏ qua"
+    return (
+        f"✅ Issue #{_issue_key(issue)} {label}.\n\n"
+        f"📌 Trạng thái: {issue.issue_status}\n"
+        f"🔎 Query: {issue.query_text}\n"
+        f"🏷️ Bot gửi: {_limit_inline(issue.listing_text, 160)}"
+    )
 
 
 def format_health_message(status: BrowserSessionStatus | None) -> str:
@@ -696,6 +725,8 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.add_handler(CommandHandler("issues", issues_command))
     application.add_handler(CommandHandler("issue", issue_command))
     application.add_handler(CommandHandler("issues_export", issues_export_command))
+    application.add_handler(CommandHandler("issue_done", issue_done_command))
+    application.add_handler(CommandHandler("issue_ignore", issue_ignore_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CallbackQueryHandler(handle_more_results, pattern=f"^{MORE_RESULTS_PREFIX}"))
     application.add_handler(CallbackQueryHandler(handle_feedback, pattern=f"^{FEEDBACK_PREFIX}"))
@@ -811,6 +842,41 @@ def _first_issue_arg(context) -> tuple[str | None, int] | None:
         return issue_type, int(raw)
     except ValueError:
         return None
+
+
+async def _mark_issue_command(update, context, *, status: str) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    issue_ref = _first_issue_arg(context)
+    if issue_ref is None:
+        command = "/issue_done" if status == "fixed" else "/issue_ignore"
+        await _maybe_await(
+            message.reply_text(
+                "🧾 Cập nhật issue\n\n"
+                f"Vui lòng dùng dạng `{command} F1` hoặc `{command} S1`."
+            )
+        )
+        return
+
+    issue_type, issue_id = issue_ref
+    notes = _issue_notes_arg(context)
+    issue = _issue_database(context).mark_issue_status(
+        issue_id,
+        issue_type=issue_type,
+        status=status,
+        notes=notes,
+    )
+    await _maybe_await(message.reply_text(format_issue_status_update(issue, status)))
+
+
+def _issue_notes_arg(context) -> str | None:
+    args = getattr(context, "args", None) or []
+    notes = " ".join(str(arg).strip() for arg in args[1:]).strip()
+    return notes or None
 
 
 def _issue_key(issue: IssueRecord) -> str:

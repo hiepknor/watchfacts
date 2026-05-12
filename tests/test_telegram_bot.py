@@ -32,6 +32,7 @@ from app.telegram_bot import (
     format_result_summary,
     format_health_message,
     format_issue_detail,
+    format_issue_status_update,
     format_issues_message,
     format_posted_date,
     format_settings_message,
@@ -40,6 +41,8 @@ from app.telegram_bot import (
     handle_text_message,
     health_command,
     issue_command,
+    issue_done_command,
+    issue_ignore_command,
     issues_command,
     issues_export_command,
     help_command,
@@ -359,6 +362,68 @@ def test_issues_export_command_returns_json(tmp_path) -> None:
     assert "📤 Export issue regression" in message.replies[0]
     assert '"query": "5712r"' in message.replies[0]
     assert '"raw_text": "5712R 2016/ HKD 830000"' in message.replies[0]
+
+
+def test_issue_done_command_marks_feedback_issue_fixed(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    issue_id = Database(db_path).record_result_feedback(
+        query_text="5712r",
+        result_rank=26,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+        telegram_user_id=123,
+    )
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+    context.args = [f"F{issue_id}", "covered", "by", "test"]
+
+    asyncio.run(issue_done_command(SimpleNamespace(message=message), context))
+
+    assert f"✅ Issue #F{issue_id} đã xử lý." in message.replies[0]
+    issue = Database(db_path).get_issue(issue_id, issue_type="feedback")
+    assert issue is not None
+    assert issue.issue_status == "fixed"
+    assert Database(db_path).list_open_issues() == []
+
+
+def test_issue_ignore_command_marks_suspicious_issue_ignored(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    database.record_suspicious_result(
+        query_text="5712r",
+        result_rank=26,
+        reason="ends_with_currency",
+        severity=3,
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+    )
+    issue_id = database.list_open_issues()[0].id
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+    context.args = [f"S{issue_id}"]
+
+    asyncio.run(issue_ignore_command(SimpleNamespace(message=message), context))
+
+    assert f"✅ Issue #S{issue_id} đã bỏ qua." in message.replies[0]
+    issue = Database(db_path).get_issue(issue_id, issue_type="suspicious")
+    assert issue is not None
+    assert issue.issue_status == "ignored"
+    assert Database(db_path).export_open_issues() == []
+
+
+def test_issue_done_command_handles_missing_issue_id(tmp_path) -> None:
+    message = FakeMessage()
+    context = make_context(db_path=tmp_path / "data" / "bot.db", allowed_user_ids=(123,))
+    context.args = ["F999"]
+
+    asyncio.run(issue_done_command(SimpleNamespace(message=message), context))
+
+    assert "Issue không tồn tại" in message.replies[0]
+
+
+def test_format_issue_status_update_handles_missing_issue() -> None:
+    assert "Issue không tồn tại" in format_issue_status_update(None, "fixed")
 
 
 def test_format_settings_message_shows_public_access() -> None:
