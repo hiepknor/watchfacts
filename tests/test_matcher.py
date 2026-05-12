@@ -149,6 +149,31 @@ def test_extract_relevant_listing_text_keeps_thousands_price_before_currency() -
     )
 
 
+def test_extract_relevant_listing_text_keeps_dot_date_and_price() -> None:
+    listing_text = (
+        "Brand new // Deal in HK "
+        "Patek 7118/1200A Blue // New 03.2026 // Price 725K HKD "
+        "Rolex 126518 Tiffany // New 02.2026 // Price 685K HKD"
+    )
+
+    assert extract_relevant_listing_text("7118/1200a blue", listing_text) == (
+        "7118/1200A Blue // New 03.2026 // Price 725K HKD"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_condition_prefixed_price() -> None:
+    listing_text = (
+        "5524G-cream-N2-405k hkd "
+        "5226G-N2-280k hkd "
+        "7118/1200a blue N3-735k hkd "
+        "7118/1r white N3-985k hkd"
+    )
+
+    assert extract_relevant_listing_text("7118/1200a blue", listing_text) == (
+        "7118/1200a blue N3-735k hkd"
+    )
+
+
 def test_extract_relevant_listing_text_drops_next_item_marker() -> None:
     listing_text = (
         "7010R purple N3/2026y 580k hkd "

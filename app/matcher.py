@@ -8,6 +8,14 @@ from typing import Iterable, Protocol, TypeVar
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:[./-][a-z0-9]+)*", re.IGNORECASE)
 QUERY_TERM_RE = TOKEN_RE
 LOCAL_MATCH_WINDOW = 12
+PRODUCT_BRAND_TOKENS = {
+    "audemars",
+    "cartier",
+    "patek",
+    "richard",
+    "rolex",
+    "vacheron",
+}
 
 
 class HasListingText(Protocol):
@@ -198,10 +206,15 @@ def _matching_segment_end(
     reference_index: int,
 ) -> int:
     end = token_matches[reference_index].end()
-    for offset, match in enumerate(token_matches[reference_index + 1 :], start=1):
+    following_matches = token_matches[reference_index + 1 :]
+    for offset, match in enumerate(following_matches, start=1):
         token = match.group(0)
         normalized_token = normalize_text(token)
         if offset > LOCAL_MATCH_WINDOW:
+            break
+        next_match = following_matches[offset] if offset < len(following_matches) else None
+        next_token = normalize_text(next_match.group(0)) if next_match else ""
+        if _looks_like_next_product_brand(normalized_token, next_token):
             break
         if _looks_like_product_reference_boundary(
             listing_text,
@@ -235,15 +248,23 @@ def _looks_like_product_reference_boundary(
     )
 
 
+def _looks_like_next_product_brand(token: str, next_token: str) -> bool:
+    return token in PRODUCT_BRAND_TOKENS and _looks_like_model_or_price_token(next_token)
+
+
 def _looks_like_price_token(token: str) -> bool:
     return bool(
         re.fullmatch(r"\d+(?:\.\d+)?(?:k|m)", token)
         or re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:\.\d+)?", token)
+        or re.fullmatch(r"n?\d+[/-]\d+(?:\.\d+)?(?:k|m)", token)
     )
 
 
 def _looks_like_date_or_condition_token(token: str) -> bool:
-    return bool(re.fullmatch(r"n?\d{1,2}[/-]\d{2,4}y?", token))
+    return bool(
+        re.fullmatch(r"n?\d{1,2}[/-]\d{2,4}y?", token)
+        or re.fullmatch(r"\d{1,2}\.\d{4}", token)
+    )
 
 
 def _looks_like_year_token(token: str) -> bool:
