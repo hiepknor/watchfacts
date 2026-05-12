@@ -5,6 +5,7 @@ import inspect
 import logging
 import secrets
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -77,6 +78,7 @@ PROCESSING_MIN_SECONDS_KEY = "processing_min_seconds"
 DEFAULT_PROCESSING_MIN_SECONDS = 1.0
 TELEGRAM_RESULT_LIMIT_KEY = "telegram_result_limit"
 RESULT_PAGES_KEY = "result_pages"
+RESULT_REFINER_KEY = "result_refiner"
 MORE_RESULTS_PREFIX = "more_results:"
 ALLOWED_USER_IDS_KEY = "allowed_user_ids"
 TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
@@ -95,6 +97,9 @@ class SearchResult:
 class SearchWorkflow(Protocol):
     async def search(self, query: str) -> list[SearchResult]:
         ...
+
+
+RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 
 
 class PlaceholderSearchWorkflow:
@@ -195,6 +200,7 @@ async def handle_text_message(update, context) -> None:
             context,
             message,
             results,
+            query=query,
             result_limit=_result_limit(context),
         )
 
@@ -204,6 +210,7 @@ async def send_search_results(
     message,
     results: list[SearchResult],
     *,
+    query: str,
     result_limit: int = DEFAULT_TELEGRAM_RESULT_LIMIT,
 ) -> None:
     if not results:
@@ -212,6 +219,7 @@ async def send_search_results(
 
     token = _store_result_page(
         context,
+        query=query,
         results=results,
         next_offset=0,
         result_limit=result_limit,
@@ -251,7 +259,7 @@ async def handle_more_results(update, context) -> None:
     results = page["results"]
     offset = page["next_offset"]
     limit = page["result_limit"]
-    next_results = results[offset : offset + limit]
+    next_results = await _refined_page_results(context, page, offset)
     next_offset = offset + len(next_results)
 
     await _send_result_batch(message, next_results)
@@ -259,6 +267,7 @@ async def handle_more_results(update, context) -> None:
     remaining = len(results) - next_offset
     if remaining > 0:
         page["next_offset"] = next_offset
+        _prefetch_page_results(context, page, next_offset)
         await _maybe_await(
             message.reply_text(
                 format_more_results_notice(next_offset, len(results)),
@@ -344,6 +353,9 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
 
     application = Application.builder().token(settings.telegram_bot_token).build()
     application.bot_data[WORKFLOW_KEY] = workflow or PlaceholderSearchWorkflow()
+    refiner = _build_result_refiner(settings)
+    if refiner is not None:
+        application.bot_data[RESULT_REFINER_KEY] = refiner
     application.bot_data[ALLOWED_USER_IDS_KEY] = settings.telegram_allowed_user_ids
     application.bot_data[TELEGRAM_RESULT_LIMIT_KEY] = settings.telegram_result_limit
     application.add_handler(CommandHandler("start", start_command))
@@ -392,6 +404,13 @@ def _result_limit(context) -> int:
         return max(1, int(value))
     except (TypeError, ValueError):
         return DEFAULT_TELEGRAM_RESULT_LIMIT
+
+
+def _result_refiner(context) -> RefineResults | None:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(RESULT_REFINER_KEY)
+    return value if callable(value) else None
 
 
 def _allowed_user_ids(context) -> tuple[int, ...]:
@@ -533,6 +552,7 @@ def _limit_telegram_text(value: str, limit: int) -> str:
 def _store_result_page(
     context,
     *,
+    query: str,
     results: list[SearchResult],
     next_offset: int,
     result_limit: int,
@@ -542,9 +562,11 @@ def _store_result_page(
     pages = bot_data.setdefault(RESULT_PAGES_KEY, {})
     token = secrets.token_urlsafe(8)
     pages[token] = {
+        "query": query,
         "results": results,
         "next_offset": next_offset,
         "result_limit": result_limit,
+        "refined_results": {},
     }
     return token
 
@@ -560,16 +582,102 @@ def _remove_result_page(context, token: str) -> None:
     application = getattr(context, "application", None)
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     pages = bot_data.get(RESULT_PAGES_KEY, {})
-    pages.pop(token, None)
+    page = pages.pop(token, None)
+    _cancel_prefetch_task(page)
 
 
 def _clear_result_pages(context) -> int:
     application = getattr(context, "application", None)
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     pages = bot_data.get(RESULT_PAGES_KEY, {})
+    for page in pages.values():
+        _cancel_prefetch_task(page)
     cleared_count = len(pages)
     pages.clear()
     return cleared_count
+
+
+async def _refined_page_results(context, page, offset: int) -> list[SearchResult]:
+    task = page.get("prefetch_task")
+    if task is not None and page.get("prefetch_offset") == offset:
+        try:
+            await task
+        except Exception as exc:
+            logger.info("event=telegram.prefetch_failed error_type=%s", exc.__class__.__name__)
+        finally:
+            page.pop("prefetch_task", None)
+            page.pop("prefetch_offset", None)
+
+    result_limit = int(page["result_limit"])
+    raw_results = page["results"][offset : offset + result_limit]
+    refined_results = page.setdefault("refined_results", {})
+    missing = [
+        (offset + index, result)
+        for index, result in enumerate(raw_results)
+        if offset + index not in refined_results
+    ]
+    if missing:
+        await _refine_and_store_page_results(context, page, offset)
+
+    return [
+        refined_results.get(offset + index, result)
+        for index, result in enumerate(raw_results)
+    ]
+
+
+def _prefetch_page_results(context, page, offset: int) -> None:
+    if _result_refiner(context) is None:
+        return
+    if page.get("prefetch_task") is not None:
+        return
+    page["prefetch_offset"] = offset
+    page["prefetch_task"] = asyncio.create_task(
+        _refine_and_store_page_results(context, page, offset)
+    )
+
+
+async def _refine_and_store_page_results(context, page, offset: int) -> None:
+    refiner = _result_refiner(context)
+    if refiner is None:
+        return
+
+    result_limit = int(page["result_limit"])
+    raw_results = page["results"][offset : offset + result_limit]
+    if not raw_results:
+        return
+
+    try:
+        refined = await refiner(str(page["query"]), raw_results)
+    except Exception as exc:
+        logger.info("event=telegram.refine_fallback error_type=%s", exc.__class__.__name__)
+        refined = raw_results
+
+    refined_results = page.setdefault("refined_results", {})
+    for index, result in enumerate(refined[: len(raw_results)]):
+        refined_results[offset + index] = result
+
+
+def _cancel_prefetch_task(page) -> None:
+    if not page:
+        return
+    task = page.get("prefetch_task")
+    if task is not None and not task.done():
+        task.cancel()
+
+
+def _build_result_refiner(settings: Settings) -> RefineResults | None:
+    if not settings.local_llm_enabled:
+        return None
+
+    from app.db import Database
+    from app.llm_matcher import refine_search_results
+
+    database = Database(settings.db_path)
+
+    async def refine(query: str, results: list[SearchResult]) -> list[SearchResult]:
+        return await refine_search_results(query, results, settings, database=database)
+
+    return refine
 
 
 def _results_markup(token: str, count: int, *, label: str):

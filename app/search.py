@@ -7,7 +7,6 @@ from collections.abc import Awaitable, Callable
 from app.config import Settings
 from app.db import Database
 from app.dedupe import unique_latest_by_text, unique_latest_listings
-from app.llm_matcher import refine_search_results
 from app.matcher import extract_relevant_listing_text, filter_matching_listings
 from app.parser import ListingCandidate, parse_listings
 from app.scraper import ScrapeResult, fetch_watchfacts_html
@@ -46,8 +45,9 @@ class WatchFactsSearchWorkflow:
             matched = parsed if scrape_result.server_filtered else filter_matching_listings(query, parsed)
             results = [_to_search_result(query, listing) for listing in matched]
             unique = unique_latest_listings(results)
-            unique = await self._refine_results(query, unique)
-            unique = unique_latest_listings(unique)
+            if self.refine_results is not None:
+                unique = await self._refine_results(query, unique)
+                unique = unique_latest_listings(unique)
             unique = unique_latest_by_text(unique)
 
             self.database.record_query_results(query, unique)
@@ -72,7 +72,7 @@ class WatchFactsSearchWorkflow:
     ) -> list[SearchResult]:
         if self.refine_results is not None:
             return await self.refine_results(query, results)
-        return await refine_search_results(query, results, self.settings)
+        return results
 
 
 def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:

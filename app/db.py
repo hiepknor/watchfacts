@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -37,6 +38,18 @@ CREATE TABLE IF NOT EXISTS query_results (
     listing_id INTEGER NOT NULL REFERENCES listings(id),
     rank INTEGER NOT NULL,
     PRIMARY KEY (query_id, listing_id)
+);
+
+CREATE TABLE IF NOT EXISTS llm_refinements (
+    id INTEGER PRIMARY KEY,
+    normalized_query TEXT NOT NULL,
+    listing_hash TEXT NOT NULL,
+    model TEXT NOT NULL,
+    refined_text TEXT NOT NULL,
+    latency_ms INTEGER,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT NOT NULL,
+    UNIQUE(normalized_query, listing_hash, model)
 );
 """
 
@@ -108,6 +121,81 @@ class Database:
             result_count=len(listing_rows),
         )
 
+    def get_llm_refinement(
+        self,
+        query_text: str,
+        listing_text: str,
+        model: str,
+    ) -> str | None:
+        now = _utc_now()
+        normalized_query = normalize_text(query_text)
+        listing_hash = _listing_hash(listing_text)
+
+        with self.connect() as connection:
+            connection.executescript(SCHEMA)
+            row = connection.execute(
+                """
+                SELECT refined_text
+                FROM llm_refinements
+                WHERE normalized_query = ? AND listing_hash = ? AND model = ?
+                """,
+                (normalized_query, listing_hash, model),
+            ).fetchone()
+            if row is None:
+                return None
+            connection.execute(
+                """
+                UPDATE llm_refinements
+                SET last_used_at = ?
+                WHERE normalized_query = ? AND listing_hash = ? AND model = ?
+                """,
+                (now, normalized_query, listing_hash, model),
+            )
+            return str(row[0])
+
+    def record_llm_refinement(
+        self,
+        query_text: str,
+        listing_text: str,
+        model: str,
+        refined_text: str,
+        *,
+        latency_ms: int | None = None,
+    ) -> None:
+        now = _utc_now()
+        normalized_query = normalize_text(query_text)
+        listing_hash = _listing_hash(listing_text)
+
+        with self.connect() as connection:
+            connection.executescript(SCHEMA)
+            connection.execute(
+                """
+                INSERT INTO llm_refinements (
+                    normalized_query,
+                    listing_hash,
+                    model,
+                    refined_text,
+                    latency_ms,
+                    created_at,
+                    last_used_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(normalized_query, listing_hash, model) DO UPDATE SET
+                    refined_text = excluded.refined_text,
+                    latency_ms = excluded.latency_ms,
+                    last_used_at = excluded.last_used_at
+                """,
+                (
+                    normalized_query,
+                    listing_hash,
+                    model,
+                    refined_text,
+                    latency_ms,
+                    now,
+                    now,
+                ),
+            )
+
 
 def _upsert_listing(
     connection: sqlite3.Connection,
@@ -168,3 +256,7 @@ def _upsert_listing(
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _listing_hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()

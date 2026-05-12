@@ -4,19 +4,21 @@ import asyncio
 import json
 import logging
 import re
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 
 from app.config import Settings
+from app.db import Database
 from app.matcher import tokenize_query
 from app.telegram_bot import SearchResult
 
 
 Complete = Callable[[str], Awaitable[str]]
 logger = logging.getLogger(__name__)
-MULTI_ITEM_MARKERS = (" - [ ]", "\n-", "\n•", " | ")
+MULTI_ITEM_MARKERS = (" - [ ]", "\n-", "\n•", " • ", " | ")
 UNRELATED_BRAND_OR_MODEL_TOKENS = {
     "audemars",
     "cartier",
@@ -36,6 +38,8 @@ async def refine_search_results(
     query: str,
     results: list[SearchResult],
     settings: Settings,
+    *,
+    database: Database | None = None,
 ) -> list[SearchResult]:
     if not settings.local_llm_enabled or not results:
         return results
@@ -51,16 +55,37 @@ async def refine_search_results(
             refined.append(result)
             continue
         refine_count += 1
-        listing_text = await refine_listing_text(
-            query,
-            result.listing_text,
-            complete=complete,
+        cached = (
+            database.get_llm_refinement(
+                query,
+                result.listing_text,
+                settings.local_llm_model,
+            )
+            if database is not None
+            else None
         )
+        if cached is not None:
+            refined.append(replace(result, listing_text=cached))
+            continue
+
+        start = time.perf_counter()
+        listing_text = await refine_listing_text(query, result.listing_text, complete=complete)
+        if database is not None:
+            database.record_llm_refinement(
+                query,
+                result.listing_text,
+                settings.local_llm_model,
+                listing_text,
+                latency_ms=int((time.perf_counter() - start) * 1000),
+            )
         refined.append(replace(result, listing_text=listing_text))
     return refined
 
 
 def should_refine_listing_text(listing_text: str) -> bool:
+    if len(_candidate_snippets(listing_text)) > 1:
+        return True
+
     normalized = listing_text.casefold()
     if any(marker in listing_text for marker in MULTI_ITEM_MARKERS):
         return True
@@ -80,11 +105,10 @@ async def refine_listing_text(
     complete: Complete,
 ) -> str:
     candidates = _candidate_snippets(listing_text)
-    fallback_text = (
-        _best_candidate(query, candidates)
-        if len(candidates) > 1
-        else _strip_trailing_unrelated_token(query, listing_text)
-    )
+    fallback_text = deterministic_refine_listing_text(query, listing_text)
+    if _has_confident_candidate(query, candidates):
+        return fallback_text
+
     prompt = _refine_prompt(query, listing_text, candidates)
     try:
         response_text = await complete(prompt)
@@ -98,7 +122,7 @@ async def refine_listing_text(
 
     index = payload.get("index")
     if isinstance(index, int) and 1 <= index <= len(candidates):
-        return candidates[index - 1]
+        return _post_process_refined_text(query, candidates[index - 1])
 
     refined_text = payload.get("listing_text")
     if not isinstance(refined_text, str):
@@ -109,7 +133,14 @@ async def refine_listing_text(
     if refined_text not in listing_text:
         logger.info("event=llm.refine_rejected reason=not_substring")
         return fallback_text
-    return refined_text
+    return _post_process_refined_text(query, refined_text)
+
+
+def deterministic_refine_listing_text(query: str, listing_text: str) -> str:
+    candidates = _candidate_snippets(listing_text)
+    if len(candidates) > 1:
+        return _post_process_refined_text(query, _best_candidate(query, candidates))
+    return _post_process_refined_text(query, listing_text)
 
 
 def _settings_complete(settings: Settings) -> Complete:
@@ -213,14 +244,33 @@ def _best_candidate(query: str, candidates: list[str]) -> str:
     if not query_tokens:
         return candidates[0]
 
-    def score(candidate: str) -> tuple[int, int]:
-        candidate_tokens = set(tokenize_query(candidate))
-        return (
-            sum(1 for token in query_tokens if token in candidate_tokens),
-            -len(candidate),
-        )
+    return max(candidates, key=lambda candidate: _candidate_score(query_tokens, candidate))
 
-    return max(candidates, key=score)
+
+def _has_confident_candidate(query: str, candidates: list[str]) -> bool:
+    if len(candidates) < 2:
+        return False
+
+    query_tokens = set(tokenize_query(query))
+    if not query_tokens:
+        return False
+
+    scores = sorted(_candidate_score(query_tokens, candidate) for candidate in candidates)
+    top_score = scores[-1]
+    runner_up = scores[-2]
+    return top_score[0] > 0 and top_score[0] > runner_up[0]
+
+
+def _candidate_score(query_tokens: set[str], candidate: str) -> tuple[int, int]:
+    candidate_tokens = set(tokenize_query(candidate))
+    return (
+        sum(1 for token in query_tokens if token in candidate_tokens),
+        -len(candidate),
+    )
+
+
+def _post_process_refined_text(query: str, listing_text: str) -> str:
+    return _strip_trailing_unrelated_token(query, listing_text)
 
 
 def _strip_trailing_unrelated_token(query: str, listing_text: str) -> str:

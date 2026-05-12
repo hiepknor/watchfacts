@@ -18,6 +18,7 @@ from app.telegram_bot import (
     TELEGRAM_TEXT_MESSAGE_LIMIT,
     UNAUTHORIZED_MESSAGE,
     WORKFLOW_KEY,
+    RESULT_REFINER_KEY,
     SearchResult,
     cancel_command,
     format_result_summary,
@@ -116,6 +117,7 @@ class FakeCallbackQuery:
 def make_context(
     workflow=None,
     *,
+    refiner=None,
     result_limit: int | None = None,
     allowed_user_ids: tuple[int, ...] = (),
 ):
@@ -125,6 +127,8 @@ def make_context(
         bot_data[TELEGRAM_RESULT_LIMIT_KEY] = result_limit
     if workflow is not None:
         bot_data[WORKFLOW_KEY] = workflow
+    if refiner is not None:
+        bot_data[RESULT_REFINER_KEY] = refiner
     bot = FakeBot()
     return SimpleNamespace(bot=bot, application=SimpleNamespace(bot=bot, bot_data=bot_data))
 
@@ -354,6 +358,37 @@ def test_results_callback_sends_first_photo_batch() -> None:
         )
     ]
     assert message.replies[-1] == "✅ Đã gửi hết kết quả."
+
+
+def test_results_callback_refines_only_requested_page() -> None:
+    message = FakeMessage("Fpj Elegante Titanium")
+    workflow = FakeWorkflow(
+        [
+            SearchResult("raw page one"),
+            SearchResult("raw page two"),
+        ]
+    )
+    refine_calls: list[tuple[str, list[SearchResult]]] = []
+
+    async def refiner(query: str, results: list[SearchResult]) -> list[SearchResult]:
+        refine_calls.append((query, results))
+        return [SearchResult(f"refined {result.listing_text}") for result in results]
+
+    context = make_context(workflow, refiner=refiner, result_limit=1)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    notice_markup = message.sent_messages[-1].reply_markup
+    token = notice_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    callback = FakeCallbackQuery(f"more_results:{token}", message)
+
+    asyncio.run(handle_more_results(SimpleNamespace(callback_query=callback), context))
+
+    assert refine_calls[0] == ("Fpj Elegante Titanium", [SearchResult("raw page one")])
+    assert message.replies[-2:] == [
+        "🏷️ refined raw page one",
+        "📊 Đã hiển thị 1/2 kết quả.\nBấm “Xem thêm” để nhận lượt tiếp theo.",
+    ]
 
 
 def test_results_callback_limits_long_photo_caption() -> None:

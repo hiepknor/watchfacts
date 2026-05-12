@@ -29,7 +29,7 @@ def test_initialize_creates_database_and_tables(tmp_path) -> None:
             )
         }
 
-    assert {"queries", "listings", "query_results"} <= tables
+    assert {"queries", "listings", "query_results", "llm_refinements"} <= tables
 
 
 def test_record_query_results_persists_query_listing_and_relationship(tmp_path) -> None:
@@ -100,3 +100,24 @@ def test_record_query_results_updates_existing_listing_by_dedupe_key(tmp_path) -
     assert listing_count == 1
     assert query_count == 2
     assert result_count == 2
+
+
+def test_llm_refinement_cache_round_trips_by_query_listing_and_model(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    assert database.get_llm_refinement("fpj elegante", "raw listing", "q4") is None
+
+    database.record_llm_refinement(
+        "fpj elegante",
+        "raw listing",
+        "q4",
+        "refined listing",
+        latency_ms=123,
+    )
+
+    assert (
+        database.get_llm_refinement("FPJ Elegante", "raw listing", "q4")
+        == "refined listing"
+    )
+    assert database.get_llm_refinement("fpj elegante", "raw listing", "q8") is None
