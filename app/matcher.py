@@ -99,11 +99,17 @@ def filter_matching_listings(query: str, listings: Iterable[T]) -> list[T]:
 
 def extract_relevant_listing_text(query: str, listing_text: str) -> str:
     reference_terms, descriptor_tokens = _parse_query_terms(query)
-    if not reference_terms:
-        return listing_text
 
     token_matches = list(TOKEN_RE.finditer(listing_text))
     normalized_tokens = [normalize_text(match.group(0)) for match in token_matches]
+    if not reference_terms:
+        return _extract_descriptor_only_listing_text(
+            listing_text,
+            token_matches,
+            normalized_tokens,
+            descriptor_tokens,
+        )
+
     fallback: tuple[int, int] | None = None
     for reference_term in reference_terms:
         term_length = len(reference_term)
@@ -136,6 +142,64 @@ def extract_relevant_listing_text(query: str, listing_text: str) -> str:
         return _clean_display_text(listing_text[start:end])
 
     return listing_text
+
+
+def _extract_descriptor_only_listing_text(
+    listing_text: str,
+    token_matches: list[re.Match[str]],
+    normalized_tokens: list[str],
+    descriptor_tokens: list[str],
+) -> str:
+    if not descriptor_tokens:
+        return listing_text
+
+    descriptor_set = set(descriptor_tokens)
+    for index, token in enumerate(normalized_tokens):
+        if token not in descriptor_set:
+            continue
+
+        end_index = min(len(normalized_tokens), index + LOCAL_MATCH_WINDOW)
+        local_tokens = set(normalized_tokens[index:end_index])
+        if not all(descriptor in local_tokens for descriptor in descriptor_tokens):
+            continue
+
+        end = _descriptor_segment_end(listing_text, token_matches, index)
+        return _clean_display_text(listing_text[token_matches[index].start() : end])
+
+    return listing_text
+
+
+def _descriptor_segment_end(
+    listing_text: str,
+    token_matches: list[re.Match[str]],
+    start_index: int,
+) -> int:
+    end = token_matches[start_index].end()
+    following_matches = token_matches[start_index + 1 :]
+    for offset, match in enumerate(following_matches, start=1):
+        normalized_token = normalize_text(match.group(0))
+        next_match = following_matches[offset] if offset < len(following_matches) else None
+        next_token = normalize_text(next_match.group(0)) if next_match else ""
+        previous_token = (
+            normalize_text(token_matches[start_index + offset - 1].group(0))
+            if start_index + offset - 1 >= 0
+            else ""
+        )
+        if offset > SEGMENT_MATCH_WINDOW:
+            break
+        if offset > 1 and _looks_like_product_reference_boundary(
+            listing_text,
+            match.start(),
+            normalized_token,
+            next_token,
+            previous_token,
+        ):
+            break
+        end = _include_trailing_non_token_suffix(
+            listing_text,
+            _include_trailing_currency_symbol(listing_text, match.end()),
+        )
+    return end
 
 
 def _parse_query_terms(query: str) -> tuple[list[list[str]], list[str]]:

@@ -96,6 +96,18 @@ def test_extract_relevant_listing_text_returns_exact_stock_list_segment() -> Non
     )
 
 
+def test_extract_relevant_listing_text_scopes_descriptor_only_query() -> None:
+    stock_list = (
+        "FPJ Elegante titanium ti 48mm G0A23172 10/2025 680000 "
+        "642.OX.0118.Lr.0999 1/2026 410000 "
+        "126618lb n2 335000"
+    )
+
+    assert extract_relevant_listing_text("Fpj Elegante Titanium", stock_list) == (
+        "FPJ Elegante titanium ti 48mm"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_price_with_currency_suffix() -> None:
     listing_text = "Rolex 228253A choco N2 467000hkd full set"
 
