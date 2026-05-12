@@ -24,6 +24,8 @@ class FakePage:
         self.url = final_url
         self.response_status = response_status
         self.goto_calls: list[tuple[str, str, int]] = []
+        self.evaluate_result = None
+        self.evaluate_calls = []
 
     async def goto(self, url: str, *, wait_until: str, timeout: int):
         self.goto_calls.append((url, wait_until, timeout))
@@ -31,6 +33,10 @@ class FakePage:
 
     async def content(self) -> str:
         return self._html
+
+    async def evaluate(self, script: str, arg):
+        self.evaluate_calls.append((script, arg))
+        return self.evaluate_result
 
 
 class FakeLocator:
@@ -61,12 +67,15 @@ class FakeSearchPage(FakePage):
 
 
 class FakeRequest:
-    def __init__(self, response) -> None:
+    def __init__(self, response, *, error: Exception | None = None) -> None:
         self.response = response
+        self.error = error
         self.posts = []
 
     async def post(self, url: str, *, form, timeout: int):
         self.posts.append((url, form, timeout))
+        if self.error is not None:
+            raise self.error
         return self.response
 
 
@@ -183,6 +192,18 @@ def make_search_playwright_factory(page: FakeSearchPage, response: FakeSearchRes
     return factory, request
 
 
+def make_fallback_search_playwright_factory(page: FakeSearchPage, error: Exception):
+    request = FakeRequest(None, error=error)
+    context = FakeContext(page, request=request)
+    browser = FakeBrowser(context)
+    chromium = FakeChromium(browser)
+
+    def factory() -> FakePlaywrightManager:
+        return FakePlaywrightManager(FakePlaywright(chromium))
+
+    return factory, request
+
+
 def test_missing_browser_state_raises_clear_error(tmp_path) -> None:
     settings = make_settings(tmp_path, state_exists=False)
 
@@ -250,6 +271,37 @@ def test_fetch_watchfacts_html_posts_query_to_watchfacts_search(tmp_path) -> Non
             90_000,
         )
     ]
+
+
+def test_fetch_watchfacts_html_falls_back_to_page_fetch_when_api_post_aborts(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    page = FakeSearchPage("<html><body>Listings</body></html>", settings.watchfacts_url)
+    page.evaluate_result = {
+        "status": 200,
+        "url": "https://watchfacts.example/simon-search-matches",
+        "text": '{"listings":[{"title":"15467bc"}]}',
+    }
+    factory, request = make_fallback_search_playwright_factory(
+        page,
+        RuntimeError("APIRequestContext.post: aborted"),
+    )
+
+    result = asyncio.run(
+        fetch_watchfacts_html(
+            settings,
+            query="15467bc",
+            playwright_factory=factory,
+            timeout_ms=1234,
+        )
+    )
+
+    assert result == ScrapeResult(
+        html='{"listings":[{"title":"15467bc"}]}',
+        final_url="https://watchfacts.example/simon-search-matches",
+        server_filtered=True,
+    )
+    assert request.posts
+    assert page.evaluate_calls
 
 
 def test_expired_browser_state_raises_clear_error(tmp_path) -> None:

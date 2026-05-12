@@ -35,6 +35,9 @@ class Page(Protocol):
     async def content(self) -> str:
         ...
 
+    async def evaluate(self, script: str, arg):
+        ...
+
 
 SEARCH_FORM_SELECTOR = "#mode3Form"
 
@@ -139,18 +142,63 @@ async def _fetch_search_results(
         "sort_by": "price-low",
         "created_days": "90",
     }
-    response = await context.request.post(
-        action,
-        form=form_data,
-        timeout=max(timeout_ms, SEARCH_TIMEOUT_MS),
-    )
-    if response.status >= 400:
-        raise ScraperError(
-            f"WatchFacts search failed with HTTP {response.status}"
+    try:
+        response = await context.request.post(
+            action,
+            form=form_data,
+            timeout=max(timeout_ms, SEARCH_TIMEOUT_MS),
         )
+        if response.status >= 400:
+            raise ScraperError(
+                f"WatchFacts search failed with HTTP {response.status}"
+            )
+        return ScrapeResult(
+            html=await response.text(),
+            final_url=response.url,
+            server_filtered=True,
+        )
+    except ScraperError:
+        raise
+    except Exception:
+        return await _fetch_search_results_with_page_fetch(
+            page,
+            action,
+            form_data,
+        )
+
+
+async def _fetch_search_results_with_page_fetch(
+    page: Page,
+    action: str,
+    form_data: dict[str, str],
+) -> ScrapeResult:
+    result = await page.evaluate(
+        """
+        async ({ action, formData }) => {
+          const response = await fetch(action, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Accept": "application/json, text/plain, */*",
+              "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            },
+            body: new URLSearchParams(formData).toString(),
+          });
+          return {
+            status: response.status,
+            url: response.url,
+            text: await response.text(),
+          };
+        }
+        """,
+        {"action": action, "formData": form_data},
+    )
+    status = int(result.get("status", 0))
+    if status >= 400:
+        raise ScraperError(f"WatchFacts search failed with HTTP {status}")
     return ScrapeResult(
-        html=await response.text(),
-        final_url=response.url,
+        html=str(result.get("text", "")),
+        final_url=str(result.get("url", action)),
         server_filtered=True,
     )
 
