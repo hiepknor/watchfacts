@@ -155,7 +155,7 @@ async def fetch_watchfacts_html(
                 page = await context.new_page()
                 response = await page.goto(
                     settings.watchfacts_url,
-                    wait_until="networkidle",
+                    wait_until="domcontentloaded",
                     timeout=timeout_ms,
                 )
                 if response is not None and response.status >= 400:

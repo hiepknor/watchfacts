@@ -230,7 +230,7 @@ def test_fetch_watchfacts_html_loads_state_and_navigates_to_configured_url(tmp_p
     )
     assert chromium.headless is True
     assert browser.storage_state == settings.browser_state_path
-    assert page.goto_calls == [(settings.watchfacts_url, "networkidle", 1234)]
+    assert page.goto_calls == [(settings.watchfacts_url, "domcontentloaded", 1234)]
     assert context.closed is True
     assert browser.closed is True
 
