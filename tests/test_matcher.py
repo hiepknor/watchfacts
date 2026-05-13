@@ -586,6 +586,45 @@ def test_extract_relevant_listing_text_drops_next_item_marker() -> None:
     )
 
 
+def test_extract_relevant_listing_text_keeps_dot_thousand_price_with_hk_suffix() -> None:
+    listing_text = (
+        "127386 2026 1,37m "
+        "127336 2026 1,22m "
+        "127335 2025 453.000hk "
+        "128236a rainbow good 590.000hk "
+        "228235a choco 2026 468.000hk "
+        "7010r champ nos 455.000hk"
+    )
+
+    assert extract_relevant_listing_text("228235a choco", listing_text) == (
+        "228235a choco 2026 468.000hk"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_compact_year_condition_after_reference() -> None:
+    listing_text = (
+        "Datejust 36/41mm 2️⃣ 126331 Choco JUB 2024N10 $139,500 "
+        "Day-Date ⏰ 228235A Choco 2018N9 Used $380,000 "
+        "Sky-Dweller 9️⃣ 326238 White 2021N1 $295,500"
+    )
+
+    assert extract_relevant_listing_text("228235a choco", listing_text) == (
+        "228235A Choco 2018N9 Used $380,000"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_luggage_separator() -> None:
+    listing_text = (
+        "🧳*126621 Choco - N4/2026* $149,000 HKD "
+        "*🧳228235A Choco - N5/2026* $465,000 HKD "
+        "*🧳228238 Champ Roman - N5/2026* $425,000 HKD 🧳*"
+    )
+
+    assert extract_relevant_listing_text("228235a choco", listing_text) == (
+        "228235A Choco - N5/2026* $465,000 HKD"
+    )
+
+
 def test_filter_matching_listings_preserves_original_order() -> None:
     listings = [
         Listing("Rolex 228253A silver dial"),

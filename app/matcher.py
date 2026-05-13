@@ -19,7 +19,22 @@ PRODUCT_BRAND_TOKENS = {
     "rolex",
     "vacheron",
 }
+PRODUCT_HEADER_TOKENS = {
+    "air-king",
+    "datejust",
+    "day-date",
+    "deepsea",
+    "explorer",
+    "gmt",
+    "milgauss",
+    "oyster",
+    "sea-dweller",
+    "sky-dweller",
+    "submariner",
+    "yacht",
+}
 CURRENCY_PREFIX_CHARS = {"$", "€", "£", "¥", "💲"}
+ITEM_SEPARATOR_CHARS = "🍃🍓🍑🍯🍒🍄🍇🍧🥝🦋📍⏰🚗🧳🧰🪨"
 LOCAL_PREFIX_WINDOW = 4
 LOCAL_PREFIX_TOKENS = {
     "ap",
@@ -397,7 +412,14 @@ def _matching_segment_end(
             if reference_index + offset - 1 >= 0
             else ""
         )
+        previous_match = token_matches[reference_index + offset - 1]
+        if _has_item_separator_between(listing_text, previous_match.end(), match.start()):
+            end = _trim_trailing_section_marker(listing_text, end)
+            break
         if _looks_like_next_product_brand(normalized_token, next_token):
+            end = _trim_trailing_section_marker(listing_text, end)
+            break
+        if _looks_like_next_product_header(normalized_token, next_token):
             end = _trim_trailing_section_marker(listing_text, end)
             break
         if _looks_like_split_brand_header(normalized_token, next_token):
@@ -422,7 +444,7 @@ def _matching_segment_end(
 
 
 def _has_item_separator_between(listing_text: str, left_end: int, right_start: int) -> bool:
-    return bool(re.search(r"[🍃🍓🍑🍯🍒🍄🍇🍧🥝🦋]", listing_text[left_end:right_start]))
+    return bool(re.search(f"[{ITEM_SEPARATOR_CHARS}]", listing_text[left_end:right_start]))
 
 
 def _looks_like_metadata_boundary(token: str, next_token: str) -> bool:
@@ -492,6 +514,12 @@ def _looks_like_next_product_brand(token: str, next_token: str) -> bool:
     return token in PRODUCT_BRAND_TOKENS and _looks_like_model_or_price_token(next_token)
 
 
+def _looks_like_next_product_header(token: str, next_token: str) -> bool:
+    return token in PRODUCT_HEADER_TOKENS and (
+        next_token.isdigit() or _looks_like_model_or_price_token(next_token)
+    )
+
+
 def _looks_like_split_brand_header(token: str, next_token: str) -> bool:
     return token + next_token in {"ap", "pp", "rm", "vc"}
 
@@ -543,6 +571,7 @@ def _trim_trailing_section_marker(listing_text: str, end: int) -> int:
 def _looks_like_price_token(token: str) -> bool:
     return bool(
         re.fullmatch(r"\d+(?:\.\d+)?(?:k|m)", token)
+        or re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:hk|hkd)?", token)
         or re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:\.\d+)?", token)
         or re.fullmatch(r"\d{3}\.\d{2}", token)
         or re.fullmatch(r"n?\d+[/-]\d+(?:\.\d+)?(?:k|m)", token)
@@ -574,6 +603,7 @@ def _looks_like_date_or_condition_token(token: str) -> bool:
         or re.fullmatch(r"\d{4}-\d{4}(?:-\d{4})?", token)
         or re.fullmatch(r"\d{1,2}\.\d{4}", token)
         or re.fullmatch(r"\d{4}(?:y|year|full|like)", token)
+        or re.fullmatch(r"\d{4}n\d{1,2}", token)
         or re.fullmatch(r"[a-z]+\d{4}y?", token)
     )
 
@@ -670,7 +700,7 @@ def _looks_like_year_token(token: str) -> bool:
 
 def _clean_display_text(value: str) -> str:
     cleaned = " ".join(value.split())
-    cleaned = re.sub(r"\s*[🍃🍓🍑🍯🍒🍄🍇🍧🥝🦋]+\s*$", "", cleaned)
+    cleaned = re.sub(f"\\s*[{ITEM_SEPARATOR_CHARS}]+\\s*$", "", cleaned)
     cleaned = re.sub(r"\s*[•|]+\s*$", "", cleaned)
     cleaned = re.sub(r"\s*(?:👤|📅|🗓️)\s*$", "", cleaned)
     cleaned = re.sub(r"\s+(?:P\.p|PP|AP|Patek Philippe|Audemars Piguet)\s*[^\w\s$./-]*$", "", cleaned, flags=re.IGNORECASE)
