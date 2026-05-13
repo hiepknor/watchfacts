@@ -68,6 +68,95 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
     assert result_count == 1
 
 
+def test_search_workflow_serves_repeated_query_from_cache(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = FIXTURE.read_text()
+    fetch_count = 0
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal fetch_count
+        fetch_count += 1
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    first = asyncio.run(workflow.search("228253a choco"))
+    second = asyncio.run(workflow.search("  228253A   CHOCO "))
+
+    assert fetch_count == 1
+    assert second == first
+    with sqlite3.connect(settings.db_path) as connection:
+        query_count = connection.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
+        cache_count = connection.execute("SELECT COUNT(*) FROM search_cache").fetchone()[0]
+
+    assert query_count == 2
+    assert cache_count == 1
+
+
+def test_search_workflow_refetches_after_cache_expiry(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = FIXTURE.read_text()
+    fetch_count = 0
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal fetch_count
+        fetch_count += 1
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    asyncio.run(workflow.search("228253a choco"))
+    with sqlite3.connect(settings.db_path) as connection:
+        connection.execute(
+            "UPDATE search_cache SET expires_at = '2000-01-01T00:00:00+00:00'"
+        )
+    asyncio.run(workflow.search("228253a choco"))
+
+    assert fetch_count == 2
+
+
+def test_search_workflow_coalesces_concurrent_same_query_fetches(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = FIXTURE.read_text()
+    fetch_count = 0
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal fetch_count
+        fetch_count += 1
+        await asyncio.sleep(0.01)
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    async def run_searches() -> tuple[list[SearchResult], list[SearchResult]]:
+        first, second = await asyncio.gather(
+            workflow.search("228253a choco"),
+            workflow.search("228253a choco"),
+        )
+        return first, second
+
+    first, second = asyncio.run(run_searches())
+
+    assert fetch_count == 1
+    assert first == second
+    with sqlite3.connect(settings.db_path) as connection:
+        query_count = connection.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
+
+    assert query_count == 2
+
+
 def test_search_workflow_persists_no_result_queries(tmp_path) -> None:
     settings = make_settings(tmp_path)
 

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import logging
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 
 from app.config import Settings
 from app.db import Database
 from app.dedupe import unique_latest_by_text, unique_latest_listings
 from app.issues import detect_suspicious_result
-from app.matcher import extract_relevant_listing_text, filter_matching_listings
+from app.matcher import extract_relevant_listing_text, filter_matching_listings, normalize_text
 from app.parser import ListingCandidate, parse_listings
 from app.scraper import ScrapeResult, fetch_watchfacts_html
 from app.similarity import group_similar_results
@@ -18,11 +22,13 @@ from app.telegram_bot import SearchResult
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
+SEARCH_CACHE_VERSION = "search-v1"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
 )
 MULTI_LIST_REFERENCE_THRESHOLD = 1
+_IN_FLIGHT_SEARCHES: dict[str, asyncio.Task[list[SearchResult]]] = {}
 
 
 class WatchFactsSearchWorkflow:
@@ -41,33 +47,87 @@ class WatchFactsSearchWorkflow:
 
     async def search(self, query: str) -> list[SearchResult]:
         logger.info("event=query.start query_length=%d", len(query))
+        cache_key = _search_cache_key(query, self.settings)
+        in_flight_key = f"{self.settings.db_path.resolve()}:{cache_key}"
         try:
-            scrape_result = await self.fetch_html(self.settings, query=query)
-            parsed = parse_listings(scrape_result.html)
-            matched = parsed if scrape_result.server_filtered else filter_matching_listings(query, parsed)
-            results = [_to_search_result(query, listing) for listing in matched]
-            unique = unique_latest_listings(results)
-            if self.refine_results is not None:
-                unique = await self._refine_results(query, unique)
-                unique = unique_latest_listings(unique)
-            unique = unique_latest_by_text(unique)
-            unique = group_similar_results(unique, query=query)
+            cached_results = self._get_cached_results(cache_key)
+            if cached_results is not None:
+                self.database.record_query_results(query, cached_results)
+                logger.info("event=query.cache_hit result_count=%d", len(cached_results))
+                return cached_results
 
-            self.database.record_query_results(query, unique)
-            self._record_suspicious_results(query, unique)
-            logger.info(
-                "event=query.end parsed_count=%d matched_count=%d result_count=%d",
-                len(parsed),
-                len(matched),
-                len(unique),
-            )
-            return unique
+            task = _IN_FLIGHT_SEARCHES.get(in_flight_key)
+            if task is None:
+                task = asyncio.create_task(self._search_uncached(query, cache_key))
+                _IN_FLIGHT_SEARCHES[in_flight_key] = task
+                owner = True
+            else:
+                owner = False
+                logger.info("event=query.coalesced")
+
+            try:
+                results = await task
+            finally:
+                if owner:
+                    _IN_FLIGHT_SEARCHES.pop(in_flight_key, None)
+
+            if not owner:
+                self.database.record_query_results(query, results)
+            return results
         except Exception as exc:
             logger.error(
                 "event=query.error error_type=%s",
                 exc.__class__.__name__,
             )
             raise
+
+    async def _search_uncached(self, query: str, cache_key: str) -> list[SearchResult]:
+        scrape_result = await self.fetch_html(self.settings, query=query)
+        parsed = parse_listings(scrape_result.html)
+        matched = parsed if scrape_result.server_filtered else filter_matching_listings(query, parsed)
+        results = [_to_search_result(query, listing) for listing in matched]
+        unique = unique_latest_listings(results)
+        if self.refine_results is not None:
+            unique = await self._refine_results(query, unique)
+            unique = unique_latest_listings(unique)
+        unique = unique_latest_by_text(unique)
+        unique = group_similar_results(unique, query=query)
+
+        self.database.record_query_results(query, unique)
+        self._record_suspicious_results(query, unique)
+        self._record_cached_results(cache_key, query, unique)
+        logger.info(
+            "event=query.end parsed_count=%d matched_count=%d result_count=%d",
+            len(parsed),
+            len(matched),
+            len(unique),
+        )
+        return unique
+
+    def _get_cached_results(self, cache_key: str) -> list[SearchResult] | None:
+        payload = self.database.get_fresh_search_cache(cache_key)
+        if payload is None:
+            logger.info("event=query.cache_miss")
+            return None
+        try:
+            return _deserialize_results(payload)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            logger.info("event=query.cache_decode_failed")
+            return None
+
+    def _record_cached_results(
+        self,
+        cache_key: str,
+        query: str,
+        results: list[SearchResult],
+    ) -> None:
+        self.database.record_search_cache(
+            cache_key=cache_key,
+            query_text=query,
+            result_json=_serialize_results(results),
+            result_count=len(results),
+            ttl_seconds=self.settings.search_cache_ttl_seconds,
+        )
 
     async def _refine_results(
         self,
@@ -147,3 +207,50 @@ def _looks_like_product_reference(token: str) -> bool:
     if len(normalized) < 4 and "/" not in normalized:
         return False
     return True
+
+
+def _search_cache_key(query: str, settings: Settings) -> str:
+    payload = {
+        "version": SEARCH_CACHE_VERSION,
+        "query": normalize_text(query),
+        "watchfacts_url": settings.watchfacts_url,
+        "local_llm_enabled": settings.local_llm_enabled,
+        "local_llm_model": settings.local_llm_model if settings.local_llm_enabled else "",
+        "local_llm_max_refines": (
+            settings.local_llm_max_refines if settings.local_llm_enabled else 0
+        ),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _serialize_results(results: list[SearchResult]) -> str:
+    return json.dumps([asdict(result) for result in results], separators=(",", ":"))
+
+
+def _deserialize_results(payload: str) -> list[SearchResult]:
+    data = json.loads(payload)
+    if not isinstance(data, list):
+        raise ValueError("cached search result payload must be a list")
+    return [_search_result_from_dict(item) for item in data]
+
+
+def _search_result_from_dict(item: object) -> SearchResult:
+    if not isinstance(item, dict):
+        raise ValueError("cached search result item must be an object")
+    similar = item.get("similar_results", ())
+    if not isinstance(similar, list):
+        raise ValueError("cached similar results must be a list")
+    return SearchResult(
+        listing_text=str(item.get("listing_text") or ""),
+        seller=_optional_str(item.get("seller")),
+        posted_date=_optional_str(item.get("posted_date")),
+        image_url=_optional_str(item.get("image_url")),
+        source_url=_optional_str(item.get("source_url")),
+        similar_results=tuple(_search_result_from_dict(value) for value in similar),
+        raw_listing_text=_optional_str(item.get("raw_listing_text")),
+    )
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None

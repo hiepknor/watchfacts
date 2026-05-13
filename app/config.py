@@ -15,6 +15,7 @@ DEFAULT_LOCAL_LLM_BASE_URL = "http://localhost:8080"
 DEFAULT_LOCAL_LLM_MODEL = "gemma-4-e2b-Q4_K_M.gguf"
 DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS = 30
 DEFAULT_LOCAL_LLM_MAX_REFINES = 3
+DEFAULT_SEARCH_CACHE_TTL_SECONDS = 5 * 60
 
 
 class ConfigError(ValueError):
@@ -40,6 +41,7 @@ class Settings:
     local_llm_model: str = DEFAULT_LOCAL_LLM_MODEL
     local_llm_timeout_seconds: int = DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS
     local_llm_max_refines: int = DEFAULT_LOCAL_LLM_MAX_REFINES
+    search_cache_ttl_seconds: int = DEFAULT_SEARCH_CACHE_TTL_SECONDS
 
 
 def parse_bool(value: str, *, name: str) -> bool:
@@ -141,6 +143,10 @@ def load_settings(
         source.get("LOCAL_LLM_MAX_REFINES", str(DEFAULT_LOCAL_LLM_MAX_REFINES)),
         name="LOCAL_LLM_MAX_REFINES",
     )
+    search_cache_ttl_seconds = parse_positive_int(
+        source.get("SEARCH_CACHE_TTL_SECONDS", str(DEFAULT_SEARCH_CACHE_TTL_SECONDS)),
+        name="SEARCH_CACHE_TTL_SECONDS",
+    )
 
     data_dir = root / "data"
     logs_dir = root / "logs"
@@ -158,6 +164,7 @@ def load_settings(
         local_llm_model=local_llm_model,
         local_llm_timeout_seconds=local_llm_timeout_seconds,
         local_llm_max_refines=local_llm_max_refines,
+        search_cache_ttl_seconds=search_cache_ttl_seconds,
         project_root=root,
         data_dir=data_dir,
         logs_dir=logs_dir,

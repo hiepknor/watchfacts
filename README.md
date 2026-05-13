@@ -70,6 +70,8 @@ Set `TELEGRAM_RESULT_LIMIT` to control how many results are sent per Telegram
 batch.
 Set `TELEGRAM_MAX_CONCURRENT_SEARCHES` to control how many WatchFacts searches
 may run at the same time; extra queries show a queue message and wait.
+Set `SEARCH_CACHE_TTL_SECONDS` to reuse fresh identical search results before
+calling WatchFacts again; the default is 300 seconds.
 
 Create an authenticated WatchFacts browser session:
 
@@ -221,6 +223,12 @@ Control concurrent WatchFacts searches:
 
 ```bash
 TELEGRAM_MAX_CONCURRENT_SEARCHES=1
+```
+
+Control fresh search cache TTL:
+
+```bash
+SEARCH_CACHE_TTL_SECONDS=300
 ```
 
 Bot commands:

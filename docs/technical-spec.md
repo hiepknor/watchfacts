@@ -49,6 +49,7 @@ Expected environment:
 | `WATCHFACTS_URL` | Yes | `https://watchfacts.com/simon-match-making` | WatchFacts page to crawl |
 | `HEADLESS` | No | `true` | Browser headless mode |
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
+| `SEARCH_CACHE_TTL_SECONDS` | No | `300` | Fresh-result cache lifetime for identical normalized searches before calling WatchFacts again |
 | `LOCAL_LLM_ENABLED` | No | `false` | Enables local LLM experiment code paths when explicitly implemented |
 | `LOCAL_LLM_BASE_URL` | No | `http://localhost:8080` | Local llama.cpp server URL; use `http://llama-cpp:8080` inside Docker Compose |
 | `LOCAL_LLM_MODEL` | No | `gemma-4-e2b-Q4_K_M.gguf` | Local model identifier sent to the chat API |
@@ -69,6 +70,7 @@ Configuration rules:
 - Treat boolean env values case-insensitively.
 - Restrict Telegram handlers to configured user ids when `TELEGRAM_ALLOWED_USER_IDS` is non-empty.
 - Validate Telegram result limit as a positive integer.
+- Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
 - Keep local LLM settings optional and disabled by default.
 
 ## Runtime Architecture
@@ -220,6 +222,22 @@ SQLite tables:
 | `query_id` | integer | References `queries.id` |
 | `listing_id` | integer | References `listings.id` |
 | `rank` | integer | Result order |
+
+### `search_cache`
+
+Fresh final-result cache used before calling WatchFacts for repeated identical
+normalized searches.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `cache_key` | text primary key | Versioned normalized query/runtime key |
+| `query_text` | text | Original query that populated the cache |
+| `normalized_query` | text | Normalized query |
+| `result_json` | text | Serialized final deduped/grouped `SearchResult` list |
+| `result_count` | integer | Number of cached primary results |
+| `created_at` | text | ISO timestamp |
+| `expires_at` | text | ISO timestamp checked before reuse |
+| `last_used_at` | text | ISO timestamp updated on cache hit |
 
 ### `result_feedback`
 

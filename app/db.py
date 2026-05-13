@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Protocol
 
@@ -87,6 +87,17 @@ CREATE TABLE IF NOT EXISTS suspicious_results (
     issue_status TEXT NOT NULL DEFAULT 'open',
     review_notes TEXT,
     UNIQUE(normalized_query, result_rank, reason, listing_text)
+);
+
+CREATE TABLE IF NOT EXISTS search_cache (
+    cache_key TEXT PRIMARY KEY,
+    query_text TEXT NOT NULL,
+    normalized_query TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    result_count INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_used_at TEXT NOT NULL
 );
 """
 
@@ -174,6 +185,82 @@ class Database:
             normalized_query=normalized_query,
             result_count=len(listing_rows),
         )
+
+    def get_fresh_search_cache(self, cache_key: str) -> str | None:
+        now = _utc_now()
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            row = connection.execute(
+                """
+                SELECT result_json
+                FROM search_cache
+                WHERE cache_key = ? AND expires_at > ?
+                """,
+                (cache_key, now),
+            ).fetchone()
+            if row is None:
+                return None
+            connection.execute(
+                """
+                UPDATE search_cache
+                SET last_used_at = ?
+                WHERE cache_key = ?
+                """,
+                (now, cache_key),
+            )
+            return str(row[0])
+
+    def record_search_cache(
+        self,
+        *,
+        cache_key: str,
+        query_text: str,
+        result_json: str,
+        result_count: int,
+        ttl_seconds: int,
+    ) -> None:
+        now = datetime.now(UTC)
+        created_at = now.isoformat(timespec="seconds")
+        expires_at_text = (now + timedelta(seconds=ttl_seconds)).isoformat(
+            timespec="seconds"
+        )
+        normalized_query = normalize_text(query_text)
+
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            connection.execute(
+                """
+                INSERT INTO search_cache (
+                    cache_key,
+                    query_text,
+                    normalized_query,
+                    result_json,
+                    result_count,
+                    created_at,
+                    expires_at,
+                    last_used_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    query_text = excluded.query_text,
+                    normalized_query = excluded.normalized_query,
+                    result_json = excluded.result_json,
+                    result_count = excluded.result_count,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at,
+                    last_used_at = excluded.last_used_at
+                """,
+                (
+                    cache_key,
+                    query_text,
+                    normalized_query,
+                    result_json,
+                    result_count,
+                    created_at,
+                    expires_at_text,
+                    created_at,
+                ),
+            )
 
     def get_llm_refinement(
         self,

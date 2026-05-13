@@ -34,6 +34,7 @@ def test_initialize_creates_database_and_tables(tmp_path) -> None:
         "listings",
         "query_results",
         "llm_refinements",
+        "search_cache",
         "result_feedback",
         "suspicious_results",
     } <= tables
@@ -128,6 +129,33 @@ def test_llm_refinement_cache_round_trips_by_query_listing_and_model(tmp_path) -
         == "refined listing"
     )
     assert database.get_llm_refinement("fpj elegante", "raw listing", "q8") is None
+
+
+def test_search_cache_round_trips_fresh_payload_and_expires(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    assert database.get_fresh_search_cache("cache-key") is None
+
+    database.record_search_cache(
+        cache_key="cache-key",
+        query_text="7118/1200a white",
+        result_json='[{"listing_text":"7118/1200A WHITE"}]',
+        result_count=1,
+        ttl_seconds=300,
+    )
+
+    assert (
+        database.get_fresh_search_cache("cache-key")
+        == '[{"listing_text":"7118/1200A WHITE"}]'
+    )
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "UPDATE search_cache SET expires_at = '2000-01-01T00:00:00+00:00'"
+        )
+
+    assert database.get_fresh_search_cache("cache-key") is None
 
 
 def test_result_feedback_records_and_dedupes_reports(tmp_path) -> None:

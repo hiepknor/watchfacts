@@ -36,6 +36,8 @@ Access control:
 - `TELEGRAM_RESULT_LIMIT=5` controls how many results each Telegram button click sends.
 - `TELEGRAM_MAX_CONCURRENT_SEARCHES=1` serializes WatchFacts searches and shows
   a queue notice for extra concurrent queries.
+- `SEARCH_CACHE_TTL_SECONDS=300` serves repeated identical normalized searches
+  from SQLite before calling WatchFacts again.
 
 Telegram behavior:
 
