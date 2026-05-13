@@ -425,6 +425,30 @@ def test_extract_relevant_listing_text_stops_before_split_brand_header() -> None
     )
 
 
+def test_extract_relevant_listing_text_drops_previous_item_before_emoji_separator() -> None:
+    listing_text = (
+        "7118/1R WHITE $996k HKD 3/2026 🍃 "
+        "7118/1200A WHITE $816k HKD 21Y USED 🍃 "
+        "7118/1450G $3.3m HKD 2/2026"
+    )
+
+    assert extract_relevant_listing_text("7118/1200a white", listing_text) == (
+        "7118/1200A WHITE $816k HKD 21Y USED"
+    )
+
+
+def test_extract_relevant_listing_text_drops_previous_condition_before_emoji_separator() -> None:
+    listing_text = (
+        "5235/50R $245k HKD 2021 LIKE NEW 🍃 "
+        "7118/1200A WHITE $888k HKD 2024 LIKE NEW "
+        "🍒🍒🍒A P🍒🍒🍒 15210ST GREY $135k HKD"
+    )
+
+    assert extract_relevant_listing_text("7118/1200a white", listing_text) == (
+        "7118/1200A WHITE $888k HKD 2024 LIKE NEW"
+    )
+
+
 def test_extract_relevant_listing_text_stops_before_richard_mille_header() -> None:
     listing_text = (
         "USED 7118/1200A white 2023Y $875K "

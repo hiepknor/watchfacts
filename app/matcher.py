@@ -131,7 +131,12 @@ def extract_relevant_listing_text(query: str, listing_text: str) -> str:
             ):
                 continue
 
-            start = _matching_segment_start(token_matches, normalized_tokens, index)
+            start = _matching_segment_start(
+                listing_text,
+                token_matches,
+                normalized_tokens,
+                index,
+            )
             end = _matching_segment_end(
                 listing_text,
                 token_matches,
@@ -141,7 +146,12 @@ def extract_relevant_listing_text(query: str, listing_text: str) -> str:
 
     if fallback is not None:
         index, reference_index = fallback
-        start = _matching_segment_start(token_matches, normalized_tokens, index)
+        start = _matching_segment_start(
+            listing_text,
+            token_matches,
+            normalized_tokens,
+            index,
+        )
         end = _matching_segment_end(listing_text, token_matches, reference_index)
         return _clean_display_text(listing_text[start:end])
 
@@ -342,6 +352,7 @@ def _looks_like_model_or_price_token(token: str) -> bool:
 
 
 def _matching_segment_start(
+    listing_text: str,
     token_matches: list[re.Match[str]],
     normalized_tokens: list[str],
     reference_start_index: int,
@@ -349,6 +360,13 @@ def _matching_segment_start(
     start_index = reference_start_index
     for index in range(reference_start_index - 1, -1, -1):
         if reference_start_index - index > LOCAL_PREFIX_WINDOW:
+            break
+
+        if _has_item_separator_between(
+            listing_text,
+            token_matches[index].end(),
+            token_matches[index + 1].start(),
+        ):
             break
 
         token = normalized_tokens[index]
@@ -401,6 +419,10 @@ def _matching_segment_end(
             _include_trailing_currency_symbol(listing_text, match.end()),
         )
     return end
+
+
+def _has_item_separator_between(listing_text: str, left_end: int, right_start: int) -> bool:
+    return bool(re.search(r"[🍃🍓🍑🍯🍒🍄🍇🍧🥝🦋]", listing_text[left_end:right_start]))
 
 
 def _looks_like_metadata_boundary(token: str, next_token: str) -> bool:
@@ -648,6 +670,7 @@ def _looks_like_year_token(token: str) -> bool:
 
 def _clean_display_text(value: str) -> str:
     cleaned = " ".join(value.split())
+    cleaned = re.sub(r"\s*[🍃🍓🍑🍯🍒🍄🍇🍧🥝🦋]+\s*$", "", cleaned)
     cleaned = re.sub(r"\s*[•|]+\s*$", "", cleaned)
     cleaned = re.sub(r"\s*(?:👤|📅|🗓️)\s*$", "", cleaned)
     cleaned = re.sub(r"\s+(?:P\.p|PP|AP|Patek Philippe|Audemars Piguet)\s*[^\w\s$./-]*$", "", cleaned, flags=re.IGNORECASE)
