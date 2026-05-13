@@ -12,6 +12,7 @@ SEGMENT_MATCH_WINDOW = 45
 PRODUCT_BRAND_TOKENS = {
     "audemars",
     "cartier",
+    "p.p",
     "patek",
     "philippe",
     "richard",
@@ -26,6 +27,7 @@ LOCAL_PREFIX_TOKENS = {
     "brand",
     "like",
     "new",
+    "p.p",
     "patek",
     "philippe",
     "piguet",
@@ -115,10 +117,11 @@ def extract_relevant_listing_text(query: str, listing_text: str) -> str:
     for reference_term in reference_terms:
         term_length = len(reference_term)
         for index in range(len(normalized_tokens) - term_length + 1):
-            if not _reference_term_matches_at(reference_term, normalized_tokens, index):
+            match_length = _reference_match_length_at(reference_term, normalized_tokens, index)
+            if match_length is None:
                 continue
 
-            reference_index = index + term_length - 1
+            reference_index = index + match_length - 1
             if fallback is None:
                 fallback = (index, reference_index)
             if descriptor_tokens and not all(
@@ -285,12 +288,30 @@ def _reference_term_matches_at(
     listing_tokens: list[str],
     index: int,
 ) -> bool:
+    return _reference_match_length_at(reference_term, listing_tokens, index) is not None
+
+
+def _reference_match_length_at(
+    reference_term: list[str],
+    listing_tokens: list[str],
+    index: int,
+) -> int | None:
     listing_slice = listing_tokens[index : index + len(reference_term)]
     if listing_slice == reference_term:
-        return True
-    if len(reference_term) != 1 or len(listing_slice) != 1:
-        return False
-    return _reference_token_matches(reference_term[0], listing_slice[0])
+        return len(reference_term)
+    if len(reference_term) != 1:
+        return None
+    if len(listing_slice) == 1 and _reference_token_matches(reference_term[0], listing_slice[0]):
+        return 1
+
+    compact_reference = _compact_text(reference_term[0])
+    for span_length in range(2, 4):
+        token_span = listing_tokens[index : index + span_length]
+        if len(token_span) != span_length:
+            break
+        if _compact_text("".join(token_span)) == compact_reference:
+            return span_length
+    return None
 
 
 def _reference_token_matches(query_token: str, listing_token: str) -> bool:
@@ -359,6 +380,10 @@ def _matching_segment_end(
             else ""
         )
         if _looks_like_next_product_brand(normalized_token, next_token):
+            end = _trim_trailing_section_marker(listing_text, end)
+            break
+        if _looks_like_split_brand_header(normalized_token, next_token):
+            end = _trim_trailing_section_marker(listing_text, end)
             break
         if _looks_like_metadata_boundary(normalized_token, next_token):
             break
@@ -408,7 +433,11 @@ def _looks_like_product_reference_boundary(
         normalized_token,
     ):
         return False
+    if _looks_like_decimal_price_before_currency(normalized_token, next_token):
+        return False
     if _looks_like_plain_price_before_currency(normalized_token, next_token):
+        return False
+    if _looks_like_decimal_price_after_currency(normalized_token, previous_token):
         return False
     if _looks_like_plain_price_after_currency(normalized_token, previous_token):
         return False
@@ -436,7 +465,13 @@ def _looks_like_product_reference_boundary(
 
 
 def _looks_like_next_product_brand(token: str, next_token: str) -> bool:
+    if (token, next_token) in {("richard", "mille"), ("richard", "miller")}:
+        return True
     return token in PRODUCT_BRAND_TOKENS and _looks_like_model_or_price_token(next_token)
+
+
+def _looks_like_split_brand_header(token: str, next_token: str) -> bool:
+    return token + next_token in {"ap", "pp", "rm", "vc"}
 
 
 def _looks_like_previous_product_boundary(
@@ -474,6 +509,12 @@ def _include_trailing_currency_symbol(listing_text: str, end: int) -> int:
 def _include_trailing_non_token_suffix(listing_text: str, end: int) -> int:
     while end < len(listing_text) and not listing_text[end].isalnum():
         end += 1
+    return end
+
+
+def _trim_trailing_section_marker(listing_text: str, end: int) -> int:
+    while end > 0 and not listing_text[end - 1].isalnum():
+        end -= 1
     return end
 
 
@@ -545,6 +586,13 @@ def _looks_like_plain_price_before_currency(token: str, next_token: str) -> bool
     )
 
 
+def _looks_like_decimal_price_before_currency(token: str, next_token: str) -> bool:
+    return bool(
+        re.fullmatch(r"\d{1,4}\.\d{1,3}", token)
+        and next_token in {"hkd", "usd", "usdt", "eur", "aed", "chf"}
+    )
+
+
 def _looks_like_plain_price_after_date(token: str, previous_token: str) -> bool:
     return bool(
         re.fullmatch(r"\d{5,8}", token)
@@ -555,6 +603,13 @@ def _looks_like_plain_price_after_date(token: str, previous_token: str) -> bool:
 def _looks_like_plain_price_after_currency(token: str, previous_token: str) -> bool:
     return bool(
         re.fullmatch(r"\d{5,8}", token)
+        and previous_token in {"hkd", "usd", "usdt", "eur", "aed", "chf"}
+    )
+
+
+def _looks_like_decimal_price_after_currency(token: str, previous_token: str) -> bool:
+    return bool(
+        re.fullmatch(r"\d{1,4}\.\d{1,3}", token)
         and previous_token in {"hkd", "usd", "usdt", "eur", "aed", "chf"}
     )
 
@@ -595,9 +650,11 @@ def _clean_display_text(value: str) -> str:
     cleaned = " ".join(value.split())
     cleaned = re.sub(r"\s*[•|]+\s*$", "", cleaned)
     cleaned = re.sub(r"\s*(?:👤|📅|🗓️)\s*$", "", cleaned)
-    cleaned = re.sub(r"\s+(?:PP|AP|Patek Philippe|Audemars Piguet)\s*[^\w\s$./-]*$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+(?:P\.p|PP|AP|Patek Philippe|Audemars Piguet)\s*[^\w\s$./-]*$", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s*[❣❶-❿➊-➓]\ufe0f?\s*$", "", cleaned)
-    return re.sub(r"(?:\s*[^\w\s$./-]*\s*new\s*)+$", "", cleaned, flags=re.IGNORECASE)
+    if not re.search(r"\blike\s+new\s*$", cleaned, flags=re.IGNORECASE):
+        cleaned = re.sub(r"(?:\s*[^\w\s$./-]*\s*new\s*)+$", "", cleaned, flags=re.IGNORECASE)
+    return cleaned
 
 
 def _compact_text(value: str) -> str:

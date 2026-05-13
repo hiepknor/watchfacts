@@ -40,7 +40,20 @@ def detect_suspicious_result(
 
 def _ends_with_currency(value: str) -> bool:
     tokens = value.split()
-    return bool(tokens and tokens[-1].strip(":,.;/-") in CURRENCY_TOKENS)
+    if not tokens or tokens[-1].strip(":,.;/-") not in CURRENCY_TOKENS:
+        return False
+    if len(tokens) >= 2 and _looks_like_price_token(tokens[-2].strip(":,.;/-$")):
+        return False
+    return True
+
+
+def _looks_like_price_token(value: str) -> bool:
+    if value.isdigit() and len(value) == 4 and 1900 <= int(value) <= 2099:
+        return False
+    return bool(
+        re.fullmatch(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m)?", value)
+        or re.fullmatch(r"\d+(?:\.\d+)?", value)
+    )
 
 
 def _ends_with_price_marker(value: str) -> bool:

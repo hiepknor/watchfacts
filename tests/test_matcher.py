@@ -386,6 +386,56 @@ def test_extract_relevant_listing_text_keeps_plain_number_after_currency() -> No
     )
 
 
+def test_extract_relevant_listing_text_keeps_decimal_price_before_currency() -> None:
+    listing_text = "PP : 7118/1200A / White / Used full set 2023 - 105.5 Usdt"
+
+    assert extract_relevant_listing_text("7118/1200a white", listing_text) == (
+        "PP : 7118/1200A / White / Used full set 2023 - 105.5 Usdt"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_decimal_price_after_currency() -> None:
+    listing_text = "7118/1200A white 2021 hkd (84.2)"
+
+    assert extract_relevant_listing_text("7118/1200a white", listing_text) == (
+        "7118/1200A white 2021 hkd (84.2)"
+    )
+
+
+def test_extract_relevant_listing_text_matches_split_compound_reference() -> None:
+    listing_text = (
+        "Rm 056 white sapphire "
+        "P.p 7118 1200a white naked 99k usdt "
+        "P.p 5821/1AR 2026 new 755,000 HKD"
+    )
+
+    assert extract_relevant_listing_text("7118/1200a white", listing_text) == (
+        "P.p 7118 1200a white naked 99k usdt"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_split_brand_header() -> None:
+    listing_text = (
+        "7118/1200A WHITE $816k HKD 21Y USED "
+        "A P 15416CD BLUE CERAMIC $3.32m HKD"
+    )
+
+    assert extract_relevant_listing_text("7118/1200a white", listing_text) == (
+        "7118/1200A WHITE $816k HKD 21Y USED"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_richard_mille_header() -> None:
+    listing_text = (
+        "USED 7118/1200A white 2023Y $875K "
+        "Richard miller RM61-01 green 2015y full set"
+    )
+
+    assert extract_relevant_listing_text("7118/1200a white", listing_text) == (
+        "USED 7118/1200A white 2023Y $875K"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_fullset_price_after_currency() -> None:
     listing_text = (
         "❶ 5167R Naked 71 series HKD 640000 "
