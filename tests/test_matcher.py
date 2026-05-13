@@ -281,6 +281,12 @@ def test_extract_relevant_listing_text_keeps_trailing_currency_symbol() -> None:
     )
 
 
+def test_extract_relevant_listing_text_keeps_decimal_price_before_currency_symbol() -> None:
+    listing_text = "Brand new 5712G full set 2021 - 78.5 € inc shipment"
+
+    assert extract_relevant_listing_text("5712g", listing_text) == listing_text
+
+
 def test_extract_relevant_listing_text_keeps_one_digit_month_date_and_price() -> None:
     listing_text = (
         "5990/1r 25/11 new HKD2.23 "

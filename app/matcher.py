@@ -23,6 +23,7 @@ LOCAL_PREFIX_WINDOW = 4
 LOCAL_PREFIX_TOKENS = {
     "ap",
     "audemars",
+    "brand",
     "like",
     "new",
     "patek",
@@ -190,6 +191,7 @@ def _descriptor_segment_end(
         if offset > 1 and _looks_like_product_reference_boundary(
             listing_text,
             match.start(),
+            match.end(),
             normalized_token,
             next_token,
             previous_token,
@@ -363,6 +365,7 @@ def _matching_segment_end(
         if _looks_like_product_reference_boundary(
             listing_text,
             match.start(),
+            match.end(),
             normalized_token,
             next_token,
             previous_token,
@@ -384,6 +387,7 @@ def _looks_like_metadata_boundary(token: str, next_token: str) -> bool:
 def _looks_like_product_reference_boundary(
     listing_text: str,
     token_start: int,
+    token_end: int,
     normalized_token: str,
     next_token: str,
     previous_token: str,
@@ -397,6 +401,12 @@ def _looks_like_product_reference_boundary(
     if _looks_like_year_token(normalized_token):
         return False
     if _looks_like_price_token(normalized_token):
+        return False
+    if _looks_like_decimal_price_before_currency_symbol(
+        listing_text,
+        token_end,
+        normalized_token,
+    ):
         return False
     if _looks_like_plain_price_before_currency(normalized_token, next_token):
         return False
@@ -474,6 +484,19 @@ def _looks_like_price_token(token: str) -> bool:
         or re.fullmatch(r"\d{3}\.\d{2}", token)
         or re.fullmatch(r"n?\d+[/-]\d+(?:\.\d+)?(?:k|m)", token)
     )
+
+
+def _looks_like_decimal_price_before_currency_symbol(
+    listing_text: str,
+    token_end: int,
+    token: str,
+) -> bool:
+    if not re.fullmatch(r"\d{1,4}\.\d{1,3}", token):
+        return False
+    index = token_end
+    while index < len(listing_text) and listing_text[index].isspace():
+        index += 1
+    return index < len(listing_text) and listing_text[index] in CURRENCY_PREFIX_CHARS
 
 
 def _looks_like_date_or_condition_token(token: str) -> bool:
