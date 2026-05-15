@@ -43,3 +43,27 @@ def test_detect_suspicious_result_ignores_price_with_dollar_suffix() -> None:
     )
 
     assert issues == []
+
+
+def test_detect_suspicious_result_ignores_long_raw_when_segment_has_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="7118/1200R White 26/N2 HKD 1,445,000",
+        raw_listing_text=(
+            "Ready in HK 7118/1200R White 26/N2 HKD 1,445,000 "
+            "7118/1200R Gold 26/N2 HKD 1,235,000"
+        ),
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_flags_long_raw_without_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="7118/1200R white N2/2026",
+        raw_listing_text=(
+            "Ready in HK 7118/1200R white N2/2026 Hk1.45M "
+            "7118/1200R champ N2/2026 Hk1.23M 5267/200A white HKD700k"
+        ),
+    )
+
+    assert [issue.reason for issue in issues] == ["raw_much_longer"]

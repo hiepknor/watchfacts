@@ -29,7 +29,11 @@ def detect_suspicious_result(
     if _ends_with_price_marker(normalized):
         issues.append(SuspiciousIssue("ends_with_price_marker", 3))
 
-    if raw_normalized and _raw_much_longer(normalized, raw_normalized):
+    if (
+        raw_normalized
+        and _raw_much_longer(normalized, raw_normalized)
+        and not _has_price_evidence(listing_text)
+    ):
         issues.append(SuspiciousIssue("raw_much_longer", 2))
 
     if raw_normalized and _missing_price_after_currency(normalized, raw_normalized):
@@ -70,6 +74,18 @@ def _ends_with_price_marker(value: str) -> bool:
 
 def _has_price_before_trailing_marker(value: str) -> bool:
     return bool(re.search(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m)?[$💰💲]$", value))
+
+
+def _has_price_evidence(value: str) -> bool:
+    normalized = value.casefold()
+    amount = r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m|u)?"
+    currency = r"(?:hk|hkd|usd|usdt|eur|aed|chf)"
+    return bool(
+        re.search(rf"\b{currency}\s*{amount}\b", normalized)
+        or re.search(rf"\b{amount}\s*{currency}\b", normalized)
+        or re.search(rf"[$💰💲]\s*{amount}\b", normalized)
+        or re.search(rf"\b{amount}\s*[$💰💲]", normalized)
+    )
 
 
 def _raw_much_longer(listing_text: str, raw_text: str) -> bool:
