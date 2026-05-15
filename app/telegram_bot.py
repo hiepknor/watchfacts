@@ -1260,16 +1260,55 @@ def _cancel_prefetch_task(page) -> None:
 
 
 def _build_result_refiner(settings: Settings) -> RefineResults | None:
-    if not settings.local_llm_enabled:
+    mode = settings.hybrid_ai_mode
+    if not settings.local_llm_enabled or mode == "off":
         return None
 
     from app.db import Database
-    from app.llm_matcher import refine_search_results
+    from app.llm_matcher import evaluate_refinement_suggestion, refine_search_results
 
     database = Database(settings.db_path)
 
     async def refine(query: str, results: list[SearchResult]) -> list[SearchResult]:
-        return await refine_search_results(query, results, settings, database=database)
+        start = time.perf_counter()
+        refined = await refine_search_results(query, results, settings, database=database)
+        latency_ms = int((time.perf_counter() - start) * 1000)
+
+        if mode in {"shadow", "review"}:
+            for rank, (original, suggested) in enumerate(zip(results, refined), start=1):
+                if suggested.listing_text == original.listing_text:
+                    continue
+                gate = evaluate_refinement_suggestion(query, original, suggested)
+                try:
+                    database.record_ai_refinement_suggestion(
+                        query_text=query,
+                        result_rank=rank,
+                        mode=mode,
+                        model=settings.local_llm_model,
+                        deterministic_text=original.listing_text,
+                        suggested_text=suggested.listing_text,
+                        raw_listing_text=original.raw_listing_text,
+                        source_url=original.source_url,
+                        gate_status=gate.status,
+                        gate_reasons=gate.reasons,
+                        latency_ms=latency_ms,
+                    )
+                except Exception as exc:
+                    logger.info(
+                        "event=telegram.ai_suggestion_record_failed error_type=%s",
+                        exc.__class__.__name__,
+                    )
+            return results
+
+        if mode == "guarded":
+            guarded: list[SearchResult] = []
+            for original, suggested in zip(results, refined):
+                gate = evaluate_refinement_suggestion(query, original, suggested)
+                guarded.append(suggested if gate.status == "accepted" else original)
+            guarded.extend(results[len(guarded) :])
+            return guarded
+
+        return results
 
     return refine
 

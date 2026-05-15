@@ -4,6 +4,7 @@ import asyncio
 import logging
 from types import SimpleNamespace
 
+from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
 from app.db import Database
 from app.scraper import BrowserSessionError, BrowserSessionStatus
 from app.telegram_bot import (
@@ -28,6 +29,7 @@ from app.telegram_bot import (
     WORKFLOW_KEY,
     RESULT_REFINER_KEY,
     SearchResult,
+    _build_result_refiner,
     cancel_command,
     format_result_summary,
     format_health_message,
@@ -49,7 +51,25 @@ from app.telegram_bot import (
     settings_command,
     start_command,
 )
-from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT
+
+
+def make_settings(tmp_path, *, hybrid_ai_mode: str = "shadow") -> Settings:
+    return Settings(
+        telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
+        telegram_result_limit=5,
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+        headless=True,
+        enable_crawl4ai=True,
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+        db_path=tmp_path / "data" / "bot.db",
+        browser_state_path=tmp_path / "data" / "watchfacts_state.json",
+        local_llm_enabled=True,
+        local_llm_model="test-model",
+        hybrid_ai_mode=hybrid_ai_mode,  # type: ignore[arg-type]
+    )
 
 
 class FakeSentMessage:
@@ -183,6 +203,63 @@ def make_context(
         bot_data[ISSUE_DATABASE_KEY] = Database(db_path)
     bot = FakeBot()
     return SimpleNamespace(bot=bot, application=SimpleNamespace(bot=bot, bot_data=bot_data))
+
+
+def test_build_result_refiner_shadow_records_suggestions_without_changing_output(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    settings = make_settings(tmp_path, hybrid_ai_mode="shadow")
+    original = SearchResult(
+        "FPJ quantieme perpetuel - FPJ Elegante Titanium White 48mm 2022 Fullset 120,000usd",
+        raw_listing_text=(
+            "FPJ quantieme perpetuel - FPJ Elegante Titanium White 48mm 2022 Fullset "
+            "120,000usd"
+        ),
+    )
+    suggested = SearchResult(
+        "FPJ Elegante Titanium White 48mm 2022 Fullset 120,000usd",
+        raw_listing_text=original.raw_listing_text,
+    )
+
+    async def refine_search_results(query, results, settings, *, database=None):
+        return [suggested]
+
+    monkeypatch.setattr("app.llm_matcher.refine_search_results", refine_search_results)
+
+    refiner = _build_result_refiner(settings)
+    assert refiner is not None
+
+    refined = asyncio.run(refiner("Fpj Elegante Titanium", [original]))
+    suggestions = Database(settings.db_path).list_ai_refinement_suggestions()
+
+    assert refined == [original]
+    assert suggestions[0].mode == "shadow"
+    assert suggestions[0].gate_status == "accepted"
+    assert suggestions[0].deterministic_text == original.listing_text
+    assert suggestions[0].suggested_text == suggested.listing_text
+
+
+def test_build_result_refiner_guarded_rejects_unsafe_suggestion(tmp_path, monkeypatch) -> None:
+    settings = make_settings(tmp_path, hybrid_ai_mode="guarded")
+    original = SearchResult(
+        "Patek Philippe 7118/1200R brown dial",
+        raw_listing_text="Patek Philippe 7118/1200R brown dial",
+    )
+    suggested = SearchResult(
+        "Rolex Daytona 116500 black",
+        raw_listing_text=original.raw_listing_text,
+    )
+
+    async def refine_search_results(query, results, settings, *, database=None):
+        return [suggested]
+
+    monkeypatch.setattr("app.llm_matcher.refine_search_results", refine_search_results)
+
+    refiner = _build_result_refiner(settings)
+    assert refiner is not None
+
+    assert asyncio.run(refiner("7118/1200R", [original])) == [original]
 
 
 def test_start_command_returns_usage_message() -> None:
