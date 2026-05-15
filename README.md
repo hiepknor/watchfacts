@@ -197,6 +197,8 @@ make llm-smoke
 Use `make llm-down` to stop the service. Model files under `models/` are ignored
 by git.
 For Docker bot trials, set `LOCAL_LLM_BASE_URL=http://llama-cpp:8080` in `.env`.
+Set `HYBRID_AI_MODE=shadow` to record AI suggestions without changing Telegram
+results. Keep the default `HYBRID_AI_MODE=off` for deterministic-only behavior.
 
 ## Telegram Usage
 

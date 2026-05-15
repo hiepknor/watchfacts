@@ -129,9 +129,14 @@ LOCAL_LLM_BASE_URL=http://llama-cpp:8080
 LOCAL_LLM_MODEL=gemma-4-e2b-Q4_K_M.gguf
 LOCAL_LLM_TIMEOUT_SECONDS=8
 LOCAL_LLM_MAX_REFINES=3
+HYBRID_AI_MODE=shadow
 LLAMA_CPP_MODELS_DIR=./models
 LLAMA_CPP_MODEL_FILE=gemma-4-e2b-Q4_K_M.gguf
 ```
+
+`HYBRID_AI_MODE=shadow` records AI suggestions for review without changing
+Telegram output. Keep `HYBRID_AI_MODE=off` for fully deterministic behavior.
+Use `guarded` only after reviewed fixtures prove the pattern is safe.
 
 Start only the local LLM service:
 

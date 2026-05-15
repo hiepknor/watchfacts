@@ -37,6 +37,7 @@ def test_initialize_creates_database_and_tables(tmp_path) -> None:
         "search_cache",
         "result_feedback",
         "suspicious_results",
+        "ai_refinement_suggestions",
     } <= tables
 
 
@@ -129,6 +130,37 @@ def test_llm_refinement_cache_round_trips_by_query_listing_and_model(tmp_path) -
         == "refined listing"
     )
     assert database.get_llm_refinement("fpj elegante", "raw listing", "q8") is None
+
+
+def test_ai_refinement_suggestions_are_recorded_for_review(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    suggestion_id = database.record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=2,
+        mode="shadow",
+        model="gemma",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        source_url="/flash-sales/1",
+        gate_status="accepted",
+        gate_reasons=["matches_query", "raw_substring"],
+        latency_ms=42,
+    )
+
+    suggestions = database.list_ai_refinement_suggestions()
+
+    assert suggestions[0].id == suggestion_id
+    assert suggestions[0].query_text == "Fpj Elegante Titanium"
+    assert suggestions[0].normalized_query == "fpj elegante titanium"
+    assert suggestions[0].result_rank == 2
+    assert suggestions[0].mode == "shadow"
+    assert suggestions[0].model == "gemma"
+    assert suggestions[0].suggested_text == "FPJ Elegante Titanium 120k"
+    assert suggestions[0].gate_status == "accepted"
+    assert suggestions[0].gate_reasons == ("matches_query", "raw_substring")
 
 
 def test_search_cache_round_trips_fresh_payload_and_expires(tmp_path) -> None:

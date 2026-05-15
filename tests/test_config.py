@@ -4,6 +4,7 @@ import pytest
 
 from app.config import (
     ConfigError,
+    DEFAULT_HYBRID_AI_MODE,
     DEFAULT_LOCAL_LLM_BASE_URL,
     DEFAULT_LOCAL_LLM_MAX_REFINES,
     DEFAULT_LOCAL_LLM_MODEL,
@@ -14,6 +15,7 @@ from app.config import (
     DEFAULT_WATCHFACTS_URL,
     load_settings,
     parse_bool,
+    parse_hybrid_ai_mode,
     parse_positive_int,
     parse_user_ids,
 )
@@ -44,6 +46,16 @@ def test_parse_bool_supports_common_forms(value: str, expected: bool) -> None:
 def test_parse_bool_rejects_unknown_values() -> None:
     with pytest.raises(ConfigError, match="TEST_BOOL must be a boolean value"):
         parse_bool("sometimes", name="TEST_BOOL")
+
+
+@pytest.mark.parametrize("value", ["off", "shadow", "review", "guarded"])
+def test_parse_hybrid_ai_mode_accepts_supported_modes(value: str) -> None:
+    assert parse_hybrid_ai_mode(value, name="HYBRID_AI_MODE") == value
+
+
+def test_parse_hybrid_ai_mode_rejects_unknown_modes() -> None:
+    with pytest.raises(ConfigError, match="HYBRID_AI_MODE must be one of"):
+        parse_hybrid_ai_mode("auto", name="HYBRID_AI_MODE")
 
 
 def test_parse_user_ids_accepts_empty_and_comma_separated_values() -> None:
@@ -85,6 +97,7 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.local_llm_model == DEFAULT_LOCAL_LLM_MODEL
     assert settings.local_llm_timeout_seconds == DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS
     assert settings.local_llm_max_refines == DEFAULT_LOCAL_LLM_MAX_REFINES
+    assert settings.hybrid_ai_mode == DEFAULT_HYBRID_AI_MODE
     assert settings.search_cache_ttl_seconds == DEFAULT_SEARCH_CACHE_TTL_SECONDS
     assert settings.data_dir == tmp_path / "data"
     assert settings.logs_dir == tmp_path / "logs"
@@ -137,6 +150,7 @@ def test_load_settings_reads_local_llm_options(tmp_path: Path) -> None:
             "LOCAL_LLM_MODEL": "gemma4-e2b-q4",
             "LOCAL_LLM_TIMEOUT_SECONDS": "45",
             "LOCAL_LLM_MAX_REFINES": "2",
+            "HYBRID_AI_MODE": "shadow",
         },
         project_root=tmp_path,
     )
@@ -146,6 +160,7 @@ def test_load_settings_reads_local_llm_options(tmp_path: Path) -> None:
     assert settings.local_llm_model == "gemma4-e2b-q4"
     assert settings.local_llm_timeout_seconds == 45
     assert settings.local_llm_max_refines == 2
+    assert settings.hybrid_ai_mode == "shadow"
 
 
 def test_load_settings_reads_search_cache_ttl(tmp_path: Path) -> None:

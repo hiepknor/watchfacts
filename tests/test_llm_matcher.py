@@ -8,6 +8,7 @@ from app.config import Settings
 from app.db import Database
 from app.llm_matcher import (
     deterministic_refine_listing_text,
+    evaluate_refinement_suggestion,
     refine_search_results,
     refine_listing_text,
     should_refine_listing_text,
@@ -168,6 +169,35 @@ def test_deterministic_refine_listing_text_selects_clear_candidate_without_llm()
     refined = deterministic_refine_listing_text("Fpj Elegante Titanium", raw_text)
 
     assert refined == "FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd"
+
+
+def test_evaluate_refinement_suggestion_accepts_traceable_query_match() -> None:
+    gate = evaluate_refinement_suggestion(
+        "Fpj Elegante Titanium",
+        SearchResult(
+            "FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+            raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        ),
+        SearchResult("FPJ Elegante Titanium 120k"),
+    )
+
+    assert gate.status == "accepted"
+    assert gate.reasons == ("matches_query", "raw_substring")
+
+
+def test_evaluate_refinement_suggestion_rejects_invented_or_mismatched_text() -> None:
+    gate = evaluate_refinement_suggestion(
+        "Fpj Elegante Titanium",
+        SearchResult(
+            "FPJ Elegante Titanium 120k",
+            raw_listing_text="FPJ Elegante Titanium 120k",
+        ),
+        SearchResult("Patek Nautilus invented price"),
+    )
+
+    assert gate.status == "rejected"
+    assert "query_mismatch" in gate.reasons
+    assert "not_raw_substring" in gate.reasons
 
 
 def test_refine_search_results_uses_database_cache(tmp_path) -> None:

@@ -55,6 +55,7 @@ Expected environment:
 | `LOCAL_LLM_MODEL` | No | `gemma-4-e2b-Q4_K_M.gguf` | Local model identifier sent to the chat API |
 | `LOCAL_LLM_TIMEOUT_SECONDS` | No | `30` | Local LLM HTTP timeout for experiments; `8` is recommended for bot trials with CPU inference |
 | `LOCAL_LLM_MAX_REFINES` | No | `3` | Maximum snippets refined by the local LLM per query |
+| `HYBRID_AI_MODE` | No | `off` | Controlled AI mode: `off`, `shadow`, `review`, or `guarded`; only `guarded` can alter search output |
 | `LLAMA_CPP_IMAGE` | No | `ghcr.io/ggml-org/llama.cpp:server` | Docker image for the experimental llama.cpp service |
 | `LLAMA_CPP_PORT` | No | `8080` | Host port for llama.cpp |
 | `LLAMA_CPP_MODELS_DIR` | No | `./models` | Host directory containing GGUF files; ignored by git |
@@ -72,6 +73,7 @@ Configuration rules:
 - Validate Telegram result limit as a positive integer.
 - Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
 - Keep local LLM settings optional and disabled by default.
+- Keep `HYBRID_AI_MODE=off` by default; use `shadow` or `review` to collect safe suggestions before considering `guarded`.
 
 ## Runtime Architecture
 
@@ -83,6 +85,7 @@ Telegram update
   -> matcher filters or scopes listings by query tokens
   -> dedupe removes repeated latest reposts
   -> suspicious-result detector records likely extraction issues
+  -> optional controlled hybrid AI records suggestions or applies guarded refinements
   -> db records query/cache/dedupe state
   -> telegram_bot sends a summary first, then paginated result batches
 ```

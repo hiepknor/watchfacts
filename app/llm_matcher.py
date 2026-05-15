@@ -8,11 +8,11 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from app.config import Settings
 from app.db import Database
-from app.matcher import tokenize_query
+from app.matcher import listing_matches, tokenize_query
 from app.telegram_bot import SearchResult
 
 
@@ -32,6 +32,12 @@ UNRELATED_BRAND_OR_MODEL_TOKENS = {
     "tudor",
     "vacheron",
 }
+
+
+@dataclass(frozen=True)
+class RefinementGate:
+    status: str
+    reasons: tuple[str, ...]
 
 
 async def refine_search_results(
@@ -80,6 +86,36 @@ async def refine_search_results(
             )
         refined.append(replace(result, listing_text=listing_text))
     return refined
+
+
+def evaluate_refinement_suggestion(
+    query: str,
+    deterministic: SearchResult,
+    suggested: SearchResult,
+) -> RefinementGate:
+    reasons: list[str] = []
+    suggested_text = " ".join(suggested.listing_text.split())
+    raw_text = deterministic.raw_listing_text or deterministic.listing_text
+
+    if not suggested_text:
+        reasons.append("empty_suggestion")
+    elif listing_matches(query, suggested_text):
+        reasons.append("matches_query")
+    else:
+        reasons.append("query_mismatch")
+
+    if suggested_text and suggested_text in raw_text:
+        reasons.append("raw_substring")
+    elif suggested_text:
+        reasons.append("not_raw_substring")
+
+    rejected = {
+        "empty_suggestion",
+        "query_mismatch",
+        "not_raw_substring",
+    }
+    status = "rejected" if any(reason in rejected for reason in reasons) else "accepted"
+    return RefinementGate(status=status, reasons=tuple(reasons))
 
 
 def should_refine_listing_text(listing_text: str) -> bool:

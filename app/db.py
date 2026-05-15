@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -99,6 +100,23 @@ CREATE TABLE IF NOT EXISTS search_cache (
     expires_at TEXT NOT NULL,
     last_used_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ai_refinement_suggestions (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    query_text TEXT NOT NULL,
+    normalized_query TEXT NOT NULL,
+    result_rank INTEGER NOT NULL,
+    mode TEXT NOT NULL,
+    model TEXT NOT NULL,
+    deterministic_text TEXT NOT NULL,
+    suggested_text TEXT NOT NULL,
+    raw_listing_text TEXT,
+    source_url TEXT,
+    gate_status TEXT NOT NULL,
+    gate_reasons TEXT NOT NULL,
+    latency_ms INTEGER
+);
 """
 
 
@@ -133,6 +151,23 @@ class IssueRecord:
     report_count: int
     severity: int | None
     issue_status: str
+
+
+@dataclass(frozen=True)
+class AIRefinementSuggestionRecord:
+    id: int
+    query_text: str
+    normalized_query: str
+    result_rank: int
+    mode: str
+    model: str
+    deterministic_text: str
+    suggested_text: str
+    raw_listing_text: str | None
+    source_url: str | None
+    gate_status: str
+    gate_reasons: tuple[str, ...]
+    latency_ms: int | None
 
 
 class Database:
@@ -336,6 +371,95 @@ class Database:
                     now,
                 ),
             )
+
+    def record_ai_refinement_suggestion(
+        self,
+        *,
+        query_text: str,
+        result_rank: int,
+        mode: str,
+        model: str,
+        deterministic_text: str,
+        suggested_text: str,
+        raw_listing_text: str | None = None,
+        source_url: str | None = None,
+        gate_status: str,
+        gate_reasons: Iterable[str],
+        latency_ms: int | None = None,
+    ) -> int:
+        now = _utc_now()
+        normalized_query = normalize_text(query_text)
+        reasons_json = json.dumps(list(gate_reasons), separators=(",", ":"))
+
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            cursor = connection.execute(
+                """
+                INSERT INTO ai_refinement_suggestions (
+                    created_at,
+                    query_text,
+                    normalized_query,
+                    result_rank,
+                    mode,
+                    model,
+                    deterministic_text,
+                    suggested_text,
+                    raw_listing_text,
+                    source_url,
+                    gate_status,
+                    gate_reasons,
+                    latency_ms
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    now,
+                    query_text,
+                    normalized_query,
+                    result_rank,
+                    mode,
+                    model,
+                    deterministic_text,
+                    suggested_text,
+                    raw_listing_text,
+                    source_url,
+                    gate_status,
+                    reasons_json,
+                    latency_ms,
+                ),
+            )
+        return int(cursor.lastrowid)
+
+    def list_ai_refinement_suggestions(
+        self,
+        *,
+        limit: int = 20,
+    ) -> list[AIRefinementSuggestionRecord]:
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    query_text,
+                    normalized_query,
+                    result_rank,
+                    mode,
+                    model,
+                    deterministic_text,
+                    suggested_text,
+                    raw_listing_text,
+                    source_url,
+                    gate_status,
+                    gate_reasons,
+                    latency_ms
+                FROM ai_refinement_suggestions
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [_ai_refinement_suggestion_from_row(row) for row in rows]
 
     def record_result_feedback(
         self,
@@ -761,4 +885,28 @@ def _issue_record_from_row(row) -> IssueRecord:
         report_count=int(row[10]),
         severity=int(row[11]) if row[11] is not None else None,
         issue_status=str(row[12]),
+    )
+
+
+def _ai_refinement_suggestion_from_row(row) -> AIRefinementSuggestionRecord:
+    try:
+        reasons = json.loads(str(row[11]))
+    except json.JSONDecodeError:
+        reasons = []
+    if not isinstance(reasons, list):
+        reasons = []
+    return AIRefinementSuggestionRecord(
+        id=int(row[0]),
+        query_text=str(row[1]),
+        normalized_query=str(row[2]),
+        result_rank=int(row[3]),
+        mode=str(row[4]),
+        model=str(row[5]),
+        deterministic_text=str(row[6]),
+        suggested_text=str(row[7]),
+        raw_listing_text=str(row[8]) if row[8] is not None else None,
+        source_url=str(row[9]) if row[9] is not None else None,
+        gate_status=str(row[10]),
+        gate_reasons=tuple(str(reason) for reason in reasons),
+        latency_ms=int(row[12]) if row[12] is not None else None,
     )

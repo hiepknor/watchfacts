@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Literal, Mapping, cast
 
 from dotenv import load_dotenv
 
@@ -16,6 +16,8 @@ DEFAULT_LOCAL_LLM_MODEL = "gemma-4-e2b-Q4_K_M.gguf"
 DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS = 30
 DEFAULT_LOCAL_LLM_MAX_REFINES = 3
 DEFAULT_SEARCH_CACHE_TTL_SECONDS = 5 * 60
+HybridAIMode = Literal["off", "shadow", "review", "guarded"]
+DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
 
 
 class ConfigError(ValueError):
@@ -41,6 +43,7 @@ class Settings:
     local_llm_model: str = DEFAULT_LOCAL_LLM_MODEL
     local_llm_timeout_seconds: int = DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS
     local_llm_max_refines: int = DEFAULT_LOCAL_LLM_MAX_REFINES
+    hybrid_ai_mode: HybridAIMode = DEFAULT_HYBRID_AI_MODE
     search_cache_ttl_seconds: int = DEFAULT_SEARCH_CACHE_TTL_SECONDS
 
 
@@ -82,6 +85,13 @@ def parse_positive_int(value: str, *, name: str) -> int:
     if parsed <= 0:
         raise ConfigError(f"{name} must be a positive integer")
     return parsed
+
+
+def parse_hybrid_ai_mode(value: str, *, name: str) -> HybridAIMode:
+    normalized = value.strip().lower()
+    if normalized in {"off", "shadow", "review", "guarded"}:
+        return cast(HybridAIMode, normalized)
+    raise ConfigError(f"{name} must be one of: off, shadow, review, guarded")
 
 
 def load_settings(
@@ -143,6 +153,10 @@ def load_settings(
         source.get("LOCAL_LLM_MAX_REFINES", str(DEFAULT_LOCAL_LLM_MAX_REFINES)),
         name="LOCAL_LLM_MAX_REFINES",
     )
+    hybrid_ai_mode = parse_hybrid_ai_mode(
+        source.get("HYBRID_AI_MODE", DEFAULT_HYBRID_AI_MODE),
+        name="HYBRID_AI_MODE",
+    )
     search_cache_ttl_seconds = parse_positive_int(
         source.get("SEARCH_CACHE_TTL_SECONDS", str(DEFAULT_SEARCH_CACHE_TTL_SECONDS)),
         name="SEARCH_CACHE_TTL_SECONDS",
@@ -164,6 +178,7 @@ def load_settings(
         local_llm_model=local_llm_model,
         local_llm_timeout_seconds=local_llm_timeout_seconds,
         local_llm_max_refines=local_llm_max_refines,
+        hybrid_ai_mode=hybrid_ai_mode,
         search_cache_ttl_seconds=search_cache_ttl_seconds,
         project_root=root,
         data_dir=data_dir,

@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 
@@ -12,6 +13,7 @@ from app.config import Settings
 from app.db import Database
 from app.dedupe import unique_latest_by_text, unique_latest_listings
 from app.issues import detect_suspicious_result
+from app.llm_matcher import evaluate_refinement_suggestion
 from app.matcher import extract_relevant_listing_text, filter_matching_listings, normalize_text
 from app.parser import ListingCandidate, parse_listings
 from app.scraper import ScrapeResult, fetch_watchfacts_html
@@ -87,9 +89,8 @@ class WatchFactsSearchWorkflow:
         matched = parsed if scrape_result.server_filtered else filter_matching_listings(query, parsed)
         results = [_to_search_result(query, listing) for listing in matched]
         unique = unique_latest_listings(results)
-        if self.refine_results is not None:
-            unique = await self._refine_results(query, unique)
-            unique = unique_latest_listings(unique)
+        if self.refine_results is not None and self.settings.local_llm_enabled:
+            unique = await self._handle_hybrid_refinement(query, unique)
         unique = unique_latest_by_text(unique)
         unique = group_similar_results(unique, query=query)
 
@@ -137,6 +138,74 @@ class WatchFactsSearchWorkflow:
         if self.refine_results is not None:
             return await self.refine_results(query, results)
         return results
+
+    async def _handle_hybrid_refinement(
+        self,
+        query: str,
+        results: list[SearchResult],
+    ) -> list[SearchResult]:
+        mode = self.settings.hybrid_ai_mode
+        if mode == "off":
+            return results
+
+        start = time.perf_counter()
+        refined = await self._refine_results(query, results)
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        if mode in {"shadow", "review"}:
+            self._record_ai_refinement_suggestions(
+                query,
+                results,
+                refined,
+                mode=mode,
+                latency_ms=latency_ms,
+            )
+            return results
+
+        if mode != "guarded":
+            return results
+
+        guarded: list[SearchResult] = []
+        for original, suggested in zip(results, refined):
+            gate = evaluate_refinement_suggestion(query, original, suggested)
+            guarded.append(suggested if gate.status == "accepted" else original)
+        guarded.extend(results[len(guarded) :])
+        return unique_latest_listings(guarded)
+
+    def _record_ai_refinement_suggestions(
+        self,
+        query: str,
+        deterministic: list[SearchResult],
+        refined: list[SearchResult],
+        *,
+        mode: str,
+        latency_ms: int,
+    ) -> None:
+        for rank, (original, suggested) in enumerate(
+            zip(deterministic, refined),
+            start=1,
+        ):
+            if suggested.listing_text == original.listing_text:
+                continue
+            gate = evaluate_refinement_suggestion(query, original, suggested)
+            try:
+                self.database.record_ai_refinement_suggestion(
+                    query_text=query,
+                    result_rank=rank,
+                    mode=mode,
+                    model=self.settings.local_llm_model,
+                    deterministic_text=original.listing_text,
+                    suggested_text=suggested.listing_text,
+                    raw_listing_text=original.raw_listing_text,
+                    source_url=original.source_url,
+                    gate_status=gate.status,
+                    gate_reasons=gate.reasons,
+                    latency_ms=latency_ms,
+                )
+            except Exception as exc:
+                logger.info(
+                    "event=query.ai_suggestion_record_failed error_type=%s",
+                    exc.__class__.__name__,
+                )
 
     def _record_suspicious_results(
         self,
@@ -215,6 +284,7 @@ def _search_cache_key(query: str, settings: Settings) -> str:
         "query": normalize_text(query),
         "watchfacts_url": settings.watchfacts_url,
         "local_llm_enabled": settings.local_llm_enabled,
+        "hybrid_ai_mode": settings.hybrid_ai_mode if settings.local_llm_enabled else "off",
         "local_llm_model": settings.local_llm_model if settings.local_llm_enabled else "",
         "local_llm_max_refines": (
             settings.local_llm_max_refines if settings.local_llm_enabled else 0
