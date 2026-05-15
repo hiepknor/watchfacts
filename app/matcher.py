@@ -34,7 +34,7 @@ PRODUCT_HEADER_TOKENS = {
     "yacht",
 }
 CURRENCY_PREFIX_CHARS = {"$", "€", "£", "¥", "💲"}
-ITEM_SEPARATOR_CHARS = "🍃🍓🍑🍯🍒🍄🍇🍧🥝🦋📍⏰🚗🧳🧰🪨"
+ITEM_SEPARATOR_CHARS = "🍃🍓🍑🍯🍒🍄🍇🍧🥝🦋📍⏰🚗🧳🧰🪨💥♦‼🥥💠🚀"
 LOCAL_PREFIX_WINDOW = 4
 LOCAL_PREFIX_TOKENS = {
     "ap",
@@ -483,6 +483,10 @@ def _looks_like_product_reference_boundary(
         normalized_token,
     ):
         return False
+    if _looks_like_compact_currency_prefixed_price(
+        listing_text[token_start:token_end],
+    ):
+        return False
     if _looks_like_decimal_price_before_currency(normalized_token, next_token):
         return False
     if _looks_like_plain_price_before_currency(normalized_token, next_token):
@@ -598,6 +602,15 @@ def _looks_like_decimal_price_before_currency_symbol(
     while index < len(listing_text) and listing_text[index].isspace():
         index += 1
     return index < len(listing_text) and listing_text[index] in CURRENCY_PREFIX_CHARS
+
+
+def _looks_like_compact_currency_prefixed_price(token: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"(?i)(?:hk|hkd|usd|usdt|eur|aed|chf)\s*\d+(?:[,.]\d+)*(?:k|m)?",
+            token.strip(),
+        )
+    )
 
 
 def _looks_like_date_or_condition_token(token: str) -> bool:

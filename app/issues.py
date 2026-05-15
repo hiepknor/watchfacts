@@ -61,7 +61,15 @@ def _ends_with_price_marker(value: str) -> bool:
     if not stripped:
         return False
     last_token = stripped.split()[-1].strip(":,.;/-").casefold()
-    return last_token in PRICE_MARKERS or stripped[-1] in {"$", "💰", "💲"}
+    if last_token in PRICE_MARKERS:
+        return True
+    if stripped[-1] in {"$", "💰", "💲"}:
+        return not _has_price_before_trailing_marker(stripped)
+    return False
+
+
+def _has_price_before_trailing_marker(value: str) -> bool:
+    return bool(re.search(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m)?[$💰💲]$", value))
 
 
 def _raw_much_longer(listing_text: str, raw_text: str) -> bool:

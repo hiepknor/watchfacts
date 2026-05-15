@@ -35,3 +35,11 @@ def test_detect_suspicious_result_flags_price_marker_suffix() -> None:
     issues = detect_suspicious_result(listing_text="5712R 2016 Price")
 
     assert [issue.reason for issue in issues] == ["ends_with_price_marker"]
+
+
+def test_detect_suspicious_result_ignores_price_with_dollar_suffix() -> None:
+    issues = detect_suspicious_result(
+        listing_text="7118/1200R White Fullset 2023 /Good Price: 163.000$"
+    )
+
+    assert issues == []

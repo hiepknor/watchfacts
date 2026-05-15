@@ -147,6 +147,26 @@ def test_extract_relevant_listing_text_keeps_price_with_currency_suffix() -> Non
     assert extract_relevant_listing_text("228253a choco", listing_text) == listing_text
 
 
+def test_extract_relevant_listing_text_keeps_hk_prefixed_decimal_price() -> None:
+    listing_text = "4-7 days arrive hk 7118/1200R white N2/2026 Hk1.45M"
+
+    assert extract_relevant_listing_text("7118/1200r white", listing_text) == (
+        "7118/1200R white N2/2026 Hk1.45M"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_fire_separator_brand() -> None:
+    listing_text = (
+        "💥PP 7118/1200r white 2026/2 new hkd1.47m "
+        "💥PP 7118/1200r Champ 2026/2 new hkd1.235m "
+        "💥Rolex 228348A Black 2026/3 new hkd650k"
+    )
+
+    assert extract_relevant_listing_text("7118/1200r white", listing_text) == (
+        "PP 7118/1200r white 2026/2 new hkd1.47m"
+    )
+
+
 def test_extract_relevant_listing_text_handles_compound_reference() -> None:
     listing_text = (
         "7010/1G blue 03-26 $717k "
