@@ -42,11 +42,13 @@ LOCAL_PREFIX_TOKENS = {
     "brand",
     "like",
     "new",
+    "nautilus",
     "p.p",
     "patek",
     "philippe",
     "piguet",
     "pp",
+    "ref",
     "rolex",
     "used",
 }
@@ -426,6 +428,8 @@ def _matching_segment_end(
             end = _trim_trailing_section_marker(listing_text, end)
             break
         if _looks_like_metadata_boundary(normalized_token, next_token):
+            if normalized_token in {"location", "loc"}:
+                end = _trim_trailing_section_marker(listing_text, end)
             break
         if _looks_like_product_reference_boundary(
             listing_text,
@@ -448,6 +452,8 @@ def _has_item_separator_between(listing_text: str, left_end: int, right_start: i
 
 
 def _looks_like_metadata_boundary(token: str, next_token: str) -> bool:
+    if token in {"location", "loc"}:
+        return True
     return token in {"member", "seller", "dealer"} and bool(
         re.fullmatch(r"\d{3,}", next_token)
     )
@@ -494,6 +500,8 @@ def _looks_like_product_reference_boundary(
     if _looks_like_descriptor_number_token(normalized_token, next_token):
         return False
     if _looks_like_hyphenated_descriptor_number(normalized_token):
+        return False
+    if _looks_like_link_count_token(normalized_token):
         return False
     if _looks_like_repeat_reference_detail(normalized_token, next_token, previous_token):
         return False
@@ -571,6 +579,7 @@ def _trim_trailing_section_marker(listing_text: str, end: int) -> int:
 def _looks_like_price_token(token: str) -> bool:
     return bool(
         re.fullmatch(r"\d+(?:\.\d+)?(?:k|m)", token)
+        or re.fullmatch(r"\d{4,7}u", token)
         or re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:hk|hkd)?", token)
         or re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:\.\d+)?", token)
         or re.fullmatch(r"\d{3}\.\d{2}", token)
@@ -597,12 +606,14 @@ def _looks_like_date_or_condition_token(token: str) -> bool:
         or re.fullmatch(r"\d{1,2}n[/-]\d{1,4}y?", token)
         or re.fullmatch(r"\d{1,2}[/-]n\d{1,2}", token)
         or re.fullmatch(r"\d{1,2}[/-]\d{3,4}p?", token)
+        or re.fullmatch(r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}", token)
         or re.fullmatch(r"\d{4}[/-]\d{1,2}", token)
         or re.fullmatch(r"\d{4}[/-]n\d{1,2}", token)
+        or re.fullmatch(r"\d{4}\.\d{1,2}", token)
         or re.fullmatch(r"\d{1,2}-\d{4}new", token)
         or re.fullmatch(r"\d{4}-\d{4}(?:-\d{4})?", token)
         or re.fullmatch(r"\d{1,2}\.\d{4}", token)
-        or re.fullmatch(r"\d{4}(?:y|year|full|like)", token)
+        or re.fullmatch(r"\d{4}(?:y|year|full|like|used)", token)
         or re.fullmatch(r"\d{4}n\d{1,2}", token)
         or re.fullmatch(r"[a-z]+\d{4}y?", token)
     )
@@ -614,6 +625,10 @@ def _looks_like_descriptor_number_token(token: str, next_token: str) -> bool:
 
 def _looks_like_hyphenated_descriptor_number(token: str) -> bool:
     return bool(re.fullmatch(r"\d{1,3}-[a-z]+", token))
+
+
+def _looks_like_link_count_token(token: str) -> bool:
+    return bool(re.fullmatch(r"\d{1,3}links?", token))
 
 
 def _looks_like_repeat_reference_detail(

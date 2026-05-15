@@ -625,6 +625,50 @@ def test_extract_relevant_listing_text_stops_before_luggage_separator() -> None:
     )
 
 
+def test_extract_relevant_listing_text_keeps_compact_used_year_and_price() -> None:
+    listing_text = "15410OR 2024used 460K usdt"
+
+    assert extract_relevant_listing_text("15410or", listing_text) == listing_text
+
+
+def test_extract_relevant_listing_text_keeps_decimal_year_and_split_price() -> None:
+    listing_text = "127335 land dweller 🤍 New 2026.3 no box $59,000 + label 🫶🇺🇸"
+
+    assert extract_relevant_listing_text("127335", listing_text) == listing_text
+
+
+def test_extract_relevant_listing_text_keeps_link_count_before_compact_prices() -> None:
+    listing_text = "15451OR white only watch 18links💰501000Hkd/64500USDT"
+
+    assert extract_relevant_listing_text("15451or white", listing_text) == listing_text
+
+
+def test_extract_relevant_listing_text_keeps_slash_usdt_shorthand_price() -> None:
+    listing_text = "Good condition 2021 fullset 15451or white 585000 hkd / 75700u"
+
+    assert extract_relevant_listing_text("15451or white", listing_text) == (
+        "15451or white 585000 hkd / 75700u"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_full_slash_date_and_emoji_price() -> None:
+    listing_text = (
+        "Philippe Nautilus Ref. 5726/1A-014 ✨ Blue Dial • Annual Calendar • "
+        "Moonphase • 09/10/2019 Stunning blue dial configuration, full set dated "
+        "09/10/2019. Mint condition example, very well preserved. Includes serial "
+        "check for added transparency and confidence. Yours for 1️⃣2️⃣4️⃣,9️⃣8️⃣5️⃣ "
+        "USD + insured shipping 📦 Location: Miami, FL • @ThrowinSalt 📸 DM for pics"
+    )
+
+    assert extract_relevant_listing_text("5726/1a", listing_text) == (
+        "Philippe Nautilus Ref. 5726/1A-014 ✨ Blue Dial • Annual Calendar • "
+        "Moonphase • 09/10/2019 Stunning blue dial configuration, full set dated "
+        "09/10/2019. Mint condition example, very well preserved. Includes serial "
+        "check for added transparency and confidence. Yours for 1️⃣2️⃣4️⃣,9️⃣8️⃣5️⃣ "
+        "USD + insured shipping"
+    )
+
+
 def test_filter_matching_listings_preserves_original_order() -> None:
     listings = [
         Listing("Rolex 228253A silver dial"),
