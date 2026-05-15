@@ -147,6 +147,40 @@ Detailed spec:
 
 - [Continuous Improvement Spec](continuous-improvement.md)
 
+## Milestone 7: Controlled Hybrid Intelligence
+
+Status: planned.
+
+Goal: make the bot improve faster on messy listing formats while preserving deterministic, auditable production behavior.
+
+Decision:
+
+- Keep deterministic matching as the default source of truth.
+- Add AI only as a guarded second-opinion/refiner for suspicious or hard cases.
+- Start in shadow mode: compare AI suggestions with deterministic output, record diffs, and do not change user-facing results.
+- Promote AI-assisted corrections only when confidence gates pass and regression tests cover the pattern.
+
+Deliverables:
+
+- Issue-pattern clustering for feedback and suspicious cases.
+- Optional AI refiner that proposes scoped listing text for high-risk results.
+- Confidence gates that require query/reference match, local price/date evidence, and no cross-item leakage.
+- Shadow-mode metrics showing when AI would change output.
+- Owner review commands or digest entries for AI-suggested corrections.
+- Regression fixture generation from reviewed AI suggestions.
+
+Exit criteria:
+
+- [ ] AI is disabled by default and never required for normal search.
+- [ ] Shadow mode records proposed changes without altering Telegram output.
+- [ ] Accepted AI suggestions become deterministic tests before production behavior changes.
+- [ ] The bot never auto-edits code, auto-deploys, or stores secrets in AI prompts/logs.
+- [ ] Fallback behavior is deterministic when AI is unavailable, slow, or uncertain.
+
+Architecture decision:
+
+- [ADR-005: Use Controlled Hybrid AI For Result Refinement](decisions/005-controlled-hybrid-ai-refinement.md)
+
 ## Later Ideas
 
 - Multi-page crawling.

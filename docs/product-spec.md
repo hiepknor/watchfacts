@@ -67,6 +67,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - No LLM is required for core behavior.
 - Matching must be deterministic and testable.
 - Continuous improvement must be evidence collection and review, not autonomous code mutation.
+- AI-assisted refinement, if enabled later, must be controlled by explicit modes, confidence gates, owner review, and deterministic fallback.
 - Telegram handlers should remain async and avoid blocking network/browser work on the event loop.
 - Secrets and browser session files must never be committed.
 - The bot must fail clearly when configuration or login state is missing.
@@ -80,6 +81,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Storing WatchFacts passwords in source code or config examples.
 - Building a web UI in the initial version.
 - Adding LLM ranking, summarization, or extraction in the initial version.
+- Letting AI become the uncontrolled source of truth for listing extraction.
 - Letting the bot automatically rewrite matcher/parser code or deploy fixes based on feedback.
 - Supporting multiple watch sources before the WatchFacts path is stable.
 

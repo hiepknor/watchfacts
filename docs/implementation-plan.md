@@ -302,6 +302,7 @@ Each item needs a focused spec before implementation:
 - Exporting result sets.
 - Additional watch sources.
 - Query operators such as optional terms, quoted phrases, or negative filters.
+- Controlled hybrid intelligence: AI-assisted issue clustering and result refinement in shadow/review mode before any guarded user-facing correction.
 
 ## Phase 6: Continuous Improvement Loop
 

@@ -23,6 +23,7 @@ Current matcher/parser quality improves only when the operator manually notices 
 - Provide owner commands to list, inspect, and export issue cases.
 - Convert reviewed issue cases into deterministic tests or benchmark fixtures.
 - Keep production behavior deterministic and auditable.
+- Support a controlled hybrid path where AI can suggest corrections for review or guarded refinement without becoming an uncontrolled source of truth.
 
 ## Non-Goals
 
@@ -31,6 +32,7 @@ Current matcher/parser quality improves only when the operator manually notices 
 - No storage of Telegram tokens, WatchFacts cookies, browser state, or passwords in issue records.
 - No public feedback controls for unauthorized users.
 - No LLM-only correction path as the first implementation.
+- No AI-generated correction should bypass query/reference validation, confidence gates, or regression coverage.
 
 ## User Roles
 
@@ -258,6 +260,80 @@ Example fixture shape:
 - Feedback must remain useful after result page callbacks expire.
 - Owner commands must be restricted by `TELEGRAM_ALLOWED_USER_IDS`.
 - Owner commands must not reveal secrets.
+
+## Controlled Hybrid Intelligence
+
+The long-term improvement direction is a controlled hybrid system: deterministic matcher/parser first, AI only as a second-opinion/refiner for cases that are already suspicious, reported, or hard to scope.
+
+This is not autonomous learning. The bot should not rewrite code, deploy changes, or blindly trust an AI response. AI suggestions are evidence that must pass guards and become tests.
+
+### Operating Modes
+
+| Mode | Behavior | User-facing impact |
+| --- | --- | --- |
+| `off` | No AI refinement or suggestions | Deterministic behavior only |
+| `shadow` | AI proposes alternative extraction for suspicious cases; bot records diff | No Telegram output changes |
+| `review` | AI suggestions appear in owner issue review/digest | Owner can approve/ignore |
+| `guarded` | AI correction can be used only when strict confidence gates pass | Limited user-facing correction |
+
+Initial rollout should use `shadow`, then `review`. `guarded` requires enough reviewed fixtures and production evidence.
+
+### Confidence Gates
+
+An AI-suggested listing text can only be considered if all of these are true:
+
+- It contains the query reference or a normalized equivalent.
+- It preserves required query descriptors when present.
+- It includes local evidence from the raw listing text, not invented text.
+- It does not cross a known item separator or product-header boundary.
+- It improves a concrete issue signal such as missing price, truncated date, or dangling currency.
+- It does not include secrets, cookies, full page HTML, or unrelated user data.
+- It is bounded by length and Telegram formatting limits.
+
+If any gate fails, the suggestion is stored only as review evidence or discarded.
+
+### AI Review Artifacts
+
+For each AI suggestion, store only safe, minimal data:
+
+- Query.
+- Shown deterministic text.
+- Raw listing text snippet already available in the issue record.
+- Suggested corrected text.
+- Reason codes and confidence score.
+- Gate results.
+- Source issue id or query history id.
+
+Do not store prompts containing secrets or full browser state. Do not send `.env`, cookies, tokens, or full HTML pages to any model.
+
+### Owner Workflow
+
+Recommended workflow:
+
+1. Deterministic search runs as usual.
+2. Suspicious detector flags risky results.
+3. AI refiner runs only on flagged snippets when enabled.
+4. Bot records `deterministic_text` vs `suggested_text`.
+5. Owner reviews grouped suggestions in a digest or issue command.
+6. Maintainer converts approved suggestions into regression tests.
+7. Deterministic matcher/parser is updated where possible.
+8. Guarded AI use is considered only for patterns that cannot be handled cleanly by deterministic rules.
+
+### Success Metrics
+
+- Fewer open feedback issues per week.
+- Lower false-positive rate in `suspicious_results`.
+- More regression tests generated per owner review session.
+- Fewer repeated reports for the same extraction pattern.
+- AI suggestions accepted by owner at a high enough rate to justify the added complexity.
+
+### Safety Requirements
+
+- AI must be optional and disabled by default.
+- Search must still work when AI is unavailable or times out.
+- AI timeout must be short enough not to block normal Telegram UX.
+- Every AI-assisted user-facing correction must be explainable from raw listing text.
+- Reviewed AI suggestions should strengthen deterministic tests rather than replace them.
 - The bot must continue sending search results even if feedback storage fails; storage failures should be logged safely.
 - Suspicious detection must be deterministic and unit-tested.
 
