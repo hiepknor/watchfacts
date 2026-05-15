@@ -43,6 +43,8 @@ def detect_suspicious_result(
 
 
 def _ends_with_currency(value: str) -> bool:
+    if _has_price_evidence(value):
+        return False
     tokens = value.split()
     if not tokens or tokens[-1].strip(":,.;/-") not in CURRENCY_TOKENS:
         return False
@@ -73,18 +75,25 @@ def _ends_with_price_marker(value: str) -> bool:
 
 
 def _has_price_before_trailing_marker(value: str) -> bool:
-    return bool(re.search(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m)?[$💰💲]$", value))
+    return bool(
+        re.search(r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m)?(?:hk|hkd|us|usd|usdt)?[$💰💲]$", value)
+    )
 
 
 def _has_price_evidence(value: str) -> bool:
     normalized = value.casefold()
     amount = r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m|u)?"
-    currency = r"(?:hk|hkd|usd|usdt|eur|aed|chf)"
+    currency = r"(?:hk|hkd|us|usd|usdt|eur|aed|chf)"
     return bool(
         re.search(rf"\b{currency}\s*{amount}\b", normalized)
         or re.search(rf"\b{amount}\s*{currency}\b", normalized)
+        or re.search(rf"\b{currency}\s*[-~]\s*{amount}\b", normalized)
+        or re.search(rf"\b{amount}\s*{currency}\s*~\s*{amount}\s*{currency}\b", normalized)
+        or re.search(rf"\b[a-z]?\d+[-/]{amount}\s*{currency}\b", normalized)
         or re.search(rf"[$💰💲]\s*{amount}\b", normalized)
+        or re.search(rf"[$💰💲]\s*{amount}\s*{currency}\b", normalized)
         or re.search(rf"\b{amount}\s*[$💰💲]", normalized)
+        or re.search(rf"\b{amount}\s*{currency}\s*[$💰💲]", normalized)
     )
 
 
@@ -95,6 +104,8 @@ def _raw_much_longer(listing_text: str, raw_text: str) -> bool:
 
 
 def _missing_price_after_currency(listing_text: str, raw_text: str) -> bool:
+    if _has_price_evidence(listing_text):
+        return False
     raw_prices = {
         f"{currency} {amount}"
         for currency, amount in re.findall(

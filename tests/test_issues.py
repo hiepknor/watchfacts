@@ -45,6 +45,48 @@ def test_detect_suspicious_result_ignores_price_with_dollar_suffix() -> None:
     assert issues == []
 
 
+def test_detect_suspicious_result_ignores_tilde_joined_currency_prices() -> None:
+    issues = detect_suspicious_result(
+        listing_text="7118/1200R White 2021 1.210.000 HKD~155.200 USD"
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_condition_price_before_currency() -> None:
+    issues = detect_suspicious_result(listing_text="7118/1r white N3-985k hkd")
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_money_marker_price_before_currency() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5168g New button 2020y full set 💰84000 USDT"
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_currency_symbol_after_abbrev_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5168G. Blue 2023 Full Set 738,000HK$ 94,600US$"
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_other_raw_currency_prices_when_shown_has_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5168G-010 2022 full set HKD 688000",
+        raw_listing_text=(
+            "5168G-010 2022 full set HKD 688000 "
+            "5712G 2015 full set HkD 593000"
+        ),
+    )
+
+    assert issues == []
+
+
 def test_detect_suspicious_result_ignores_long_raw_when_segment_has_price() -> None:
     issues = detect_suspicious_result(
         listing_text="7118/1200R White 26/N2 HKD 1,445,000",
