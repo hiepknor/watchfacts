@@ -19,16 +19,25 @@ class FakeResponse:
 
 
 class FakePage:
-    def __init__(self, html: str, final_url: str, response_status: int = 200) -> None:
+    def __init__(
+        self,
+        html: str,
+        final_url: str,
+        response_status: int = 200,
+        goto_error: Exception | None = None,
+    ) -> None:
         self._html = html
         self.url = final_url
         self.response_status = response_status
+        self.goto_error = goto_error
         self.goto_calls: list[tuple[str, str, int]] = []
         self.evaluate_result = None
         self.evaluate_calls = []
 
     async def goto(self, url: str, *, wait_until: str, timeout: int):
         self.goto_calls.append((url, wait_until, timeout))
+        if self.goto_error is not None:
+            raise self.goto_error
         return FakeResponse(self.response_status)
 
     async def content(self) -> str:
@@ -67,10 +76,24 @@ class FakeSearchPage(FakePage):
 
 
 class FakeRequest:
-    def __init__(self, response, *, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        response,
+        *,
+        get_response=None,
+        error: Exception | None = None,
+    ) -> None:
         self.response = response
+        self.get_response = get_response
         self.error = error
+        self.gets = []
         self.posts = []
+
+    async def get(self, url: str, *, timeout: int):
+        self.gets.append((url, timeout))
+        if self.error is not None:
+            raise self.error
+        return self.get_response or self.response
 
     async def post(self, url: str, *, form, timeout: int):
         self.posts.append((url, form, timeout))
@@ -204,6 +227,23 @@ def make_fallback_search_playwright_factory(page: FakeSearchPage, error: Excepti
     return factory, request
 
 
+def make_request_bootstrap_playwright_factory(
+    page: FakePage,
+    *,
+    get_response: FakeSearchResponse,
+    post_response: FakeSearchResponse,
+):
+    request = FakeRequest(post_response, get_response=get_response)
+    context = FakeContext(page, request=request)
+    browser = FakeBrowser(context)
+    chromium = FakeChromium(browser)
+
+    def factory() -> FakePlaywrightManager:
+        return FakePlaywrightManager(FakePlaywright(chromium))
+
+    return factory, request
+
+
 def test_missing_browser_state_raises_clear_error(tmp_path) -> None:
     settings = make_settings(tmp_path, state_exists=False)
 
@@ -302,6 +342,62 @@ def test_fetch_watchfacts_html_falls_back_to_page_fetch_when_api_post_aborts(tmp
     )
     assert request.posts
     assert page.evaluate_calls
+
+
+def test_fetch_watchfacts_html_uses_request_bootstrap_when_page_navigation_times_out(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    page = FakePage(
+        "<html><head><title>WatchFacts</title></head>",
+        settings.watchfacts_url,
+        goto_error=TimeoutError("navigation timed out"),
+    )
+    get_response = FakeSearchResponse(
+        url=settings.watchfacts_url,
+        body=(
+            '<html><body><form id="mode3Form" action="/simon-search-matches">'
+            '<input name="_token" value="csrf-token"></form></body></html>'
+        ),
+    )
+    post_response = FakeSearchResponse(body='{"listings":[{"title":"7118/1200r"}]}')
+    factory, request = make_request_bootstrap_playwright_factory(
+        page,
+        get_response=get_response,
+        post_response=post_response,
+    )
+
+    result = asyncio.run(
+        fetch_watchfacts_html(
+            settings,
+            query="7118/1200r",
+            playwright_factory=factory,
+            timeout_ms=1234,
+        )
+    )
+
+    assert result == ScrapeResult(
+        html='{"listings":[{"title":"7118/1200r"}]}',
+        final_url="https://watchfacts.example/simon-search-matches",
+        server_filtered=True,
+    )
+    assert request.gets == [(settings.watchfacts_url, 90_000)]
+    assert request.posts == [
+        (
+            "https://watchfacts.example/simon-search-matches",
+            {
+                "_token": "csrf-token",
+                "listingType": "sale",
+                "reference": "7118/1200r",
+                "region": "",
+                "dial_color": "",
+                "is_bundle": "",
+                "sort_by": "price-low",
+                "created_days": "90",
+            },
+            90_000,
+        )
+    ]
 
 
 def test_expired_browser_state_raises_clear_error(tmp_path) -> None:

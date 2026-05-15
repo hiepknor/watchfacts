@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup
 
 from app.config import Settings
 
@@ -46,10 +49,28 @@ class Page(Protocol):
         ...
 
 
+class APIResponse(Protocol):
+    status: int
+    url: str
+
+    async def text(self) -> str:
+        ...
+
+
+class APIRequestContext(Protocol):
+    async def get(self, url: str, *, timeout: int) -> APIResponse:
+        ...
+
+    async def post(self, url: str, *, form, timeout: int) -> APIResponse:
+        ...
+
+
 SEARCH_FORM_SELECTOR = "#mode3Form"
 
 
 class BrowserContext(Protocol):
+    request: APIRequestContext
+
     async def new_page(self) -> Page:
         ...
 
@@ -153,15 +174,27 @@ async def fetch_watchfacts_html(
             context = await browser.new_context(storage_state=state_path)
             try:
                 page = await context.new_page()
-                response = await page.goto(
-                    settings.watchfacts_url,
-                    wait_until="domcontentloaded",
-                    timeout=timeout_ms,
-                )
-                if response is not None and response.status >= 400:
-                    raise ScraperError(
-                        f"WatchFacts navigation failed with HTTP {response.status}"
+                try:
+                    response = await page.goto(
+                        settings.watchfacts_url,
+                        wait_until="domcontentloaded",
+                        timeout=timeout_ms,
                     )
+                    if response is not None and response.status >= 400:
+                        raise ScraperError(
+                            f"WatchFacts navigation failed with HTTP {response.status}"
+                        )
+                except ScraperError:
+                    raise
+                except Exception:
+                    if query and query.strip():
+                        return await _fetch_search_results_with_request_bootstrap(
+                            context,
+                            settings.watchfacts_url,
+                            query.strip(),
+                            timeout_ms=timeout_ms,
+                        )
+                    raise
 
                 html = await page.content()
                 final_url = getattr(page, "url", settings.watchfacts_url)
@@ -179,6 +212,12 @@ async def fetch_watchfacts_html(
                     )
                     if search_result is not None:
                         return search_result
+                    return await _fetch_search_results_with_request_bootstrap(
+                        context,
+                        settings.watchfacts_url,
+                        query.strip(),
+                        timeout_ms=timeout_ms,
+                    )
                 return ScrapeResult(html=html, final_url=final_url)
             finally:
                 await context.close()
@@ -202,30 +241,13 @@ async def _fetch_search_results(
     if not token or not action:
         return None
 
-    form_data = {
-        "_token": token,
-        "listingType": "sale",
-        "reference": query,
-        "region": "",
-        "dial_color": "",
-        "is_bundle": "",
-        "sort_by": "price-low",
-        "created_days": "90",
-    }
+    form_data = _search_form_data(token, query)
     try:
-        response = await context.request.post(
+        return await _post_search_results(
+            context,
             action,
-            form=form_data,
-            timeout=max(timeout_ms, SEARCH_TIMEOUT_MS),
-        )
-        if response.status >= 400:
-            raise ScraperError(
-                f"WatchFacts search failed with HTTP {response.status}"
-            )
-        return ScrapeResult(
-            html=await response.text(),
-            final_url=response.url,
-            server_filtered=True,
+            form_data,
+            timeout_ms=timeout_ms,
         )
     except ScraperError:
         raise
@@ -235,6 +257,63 @@ async def _fetch_search_results(
             action,
             form_data,
         )
+
+
+async def _fetch_search_results_with_request_bootstrap(
+    context: BrowserContext,
+    url: str,
+    query: str,
+    *,
+    timeout_ms: int,
+) -> ScrapeResult:
+    response = await context.request.get(url, timeout=max(timeout_ms, SEARCH_TIMEOUT_MS))
+    if response.status >= 400:
+        raise ScraperError(f"WatchFacts navigation failed with HTTP {response.status}")
+    html = await response.text()
+    if _looks_unauthenticated(response.url, html):
+        raise BrowserSessionError(
+            "Saved browser session appears expired. "
+            "Run `python scripts/login.py` again."
+        )
+    search_result = await _fetch_search_results_from_html(
+        context,
+        response.url,
+        html,
+        query,
+        timeout_ms=timeout_ms,
+    )
+    if search_result is None:
+        return ScrapeResult(html=html, final_url=response.url)
+    return search_result
+
+
+async def _fetch_search_results_from_html(
+    context: BrowserContext,
+    base_url: str,
+    html: str,
+    query: str,
+    *,
+    timeout_ms: int,
+) -> ScrapeResult | None:
+    soup = BeautifulSoup(html, "lxml")
+    form = soup.select_one(SEARCH_FORM_SELECTOR)
+    if form is None:
+        return None
+
+    token_input = form.select_one('input[name="_token"]')
+    token = token_input.get("value") if token_input is not None else None
+    action = form.get("action")
+    if not isinstance(token, str) or not token:
+        return None
+    if not isinstance(action, str) or not action:
+        return None
+
+    return await _post_search_results(
+        context,
+        urljoin(base_url, action),
+        _search_form_data(token, query),
+        timeout_ms=timeout_ms,
+    )
 
 
 async def _fetch_search_results_with_page_fetch(
@@ -271,6 +350,40 @@ async def _fetch_search_results_with_page_fetch(
         final_url=str(result.get("url", action)),
         server_filtered=True,
     )
+
+
+async def _post_search_results(
+    context: BrowserContext,
+    action: str,
+    form_data: dict[str, str],
+    *,
+    timeout_ms: int,
+) -> ScrapeResult:
+    response = await context.request.post(
+        action,
+        form=form_data,
+        timeout=max(timeout_ms, SEARCH_TIMEOUT_MS),
+    )
+    if response.status >= 400:
+        raise ScraperError(f"WatchFacts search failed with HTTP {response.status}")
+    return ScrapeResult(
+        html=await response.text(),
+        final_url=response.url,
+        server_filtered=True,
+    )
+
+
+def _search_form_data(token: str, query: str) -> dict[str, str]:
+    return {
+        "_token": token,
+        "listingType": "sale",
+        "reference": query,
+        "region": "",
+        "dial_color": "",
+        "is_bundle": "",
+        "sort_by": "price-low",
+        "created_days": "90",
+    }
 
 
 def _looks_unauthenticated(final_url: str, html: str) -> bool:
