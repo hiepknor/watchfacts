@@ -101,6 +101,7 @@ def _has_price_evidence(value: str) -> bool:
         or re.search(r"\b(?:19|20)\d{2}\s+\d{5,8}\b", normalized)
         or re.search(r"\b(?:full\s+set|fullset|used|new|naked)\s+\d{5,8}\b", normalized)
         or re.search(r"\b\d{5,8}\s*(?:lab|label|lbl|ship|shipping)\b", normalized)
+        or re.search(r"\b\d{1,3},\d{3}(?:\+\s*)?(?:lab|label|lbl|ship|shipping)?\b", normalized)
         or re.search(r"\b\d{3,4}\s*nfc\b", normalized)
         or re.search(r"\b\d+(?:\.\d+)?[km]\b", normalized)
     )

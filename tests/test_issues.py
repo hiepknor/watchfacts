@@ -116,6 +116,24 @@ def test_detect_suspicious_result_does_not_treat_reference_as_plain_price() -> N
     assert [issue.reason for issue in issues] == ["missing_price_evidence"]
 
 
+def test_detect_suspicious_result_ignores_comma_thousands_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="116500 panda watch only -3 links 27,500",
+        raw_listing_text="116500 panda watch only -3 links 27,500",
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_comma_price_with_label_suffix() -> None:
+    issues = detect_suspicious_result(
+        listing_text="116500 PANDA RETAIL READY FULL LINK 2022 30,450+lbl",
+        raw_listing_text="116500 PANDA RETAIL READY FULL LINK 2022 30,450+lbl",
+    )
+
+    assert issues == []
+
+
 def test_detect_suspicious_result_ignores_tilde_joined_currency_prices() -> None:
     issues = detect_suspicious_result(
         listing_text="7118/1200R White 2021 1.210.000 HKD~155.200 USD"
