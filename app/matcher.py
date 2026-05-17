@@ -443,6 +443,12 @@ def _matching_segment_end(
             if normalized_token in {"location", "loc"}:
                 end = _trim_trailing_section_marker(listing_text, end)
             break
+        if _looks_like_post_price_service_tail(normalized_token, previous_token):
+            end = _trim_trailing_section_marker(listing_text, end)
+            break
+        if _looks_like_next_item_after_price(normalized_token, next_token, previous_token):
+            end = _trim_trailing_section_marker(listing_text, end)
+            break
         if _looks_like_product_reference_boundary(
             listing_text,
             match.start(),
@@ -511,6 +517,8 @@ def _looks_like_product_reference_boundary(
         return False
     if _looks_like_plain_price_after_date(normalized_token, previous_token):
         return False
+    if _looks_like_decimal_size_before_unit(normalized_token, next_token):
+        return False
     if _looks_like_bare_reference_after_price(normalized_token, next_token, previous_token):
         return True
     if _looks_like_date_or_condition_token(normalized_token):
@@ -558,6 +566,37 @@ def _looks_like_next_product_header(token: str, next_token: str) -> bool:
 
 def _looks_like_split_brand_header(token: str, next_token: str) -> bool:
     return token + next_token in {"ap", "pp", "rm", "vc"}
+
+
+def _looks_like_post_price_service_tail(token: str, previous_token: str) -> bool:
+    return token in {"welcome", "reconfirm"} and _looks_like_price_context_token(previous_token)
+
+
+def _looks_like_next_item_after_price(
+    token: str,
+    next_token: str,
+    previous_token: str,
+) -> bool:
+    if not _looks_like_price_context_token(previous_token):
+        return False
+    if token in {"new", "used"}:
+        return _looks_like_model_or_price_token(next_token) or next_token in {
+            "ap",
+            "cartier",
+            "patek",
+            "pp",
+            "rm",
+            "rolex",
+        }
+    return bool(re.fullmatch(r"\d{1,3}", token) and next_token in {"new", "used"})
+
+
+def _looks_like_price_context_token(token: str) -> bool:
+    return (
+        token in {"hkd", "usd", "usdt", "eur", "aed", "chf"}
+        or _looks_like_price_token(token)
+        or _looks_like_compact_currency_prefixed_price(token)
+    )
 
 
 def _looks_like_previous_product_boundary(
@@ -712,6 +751,10 @@ def _looks_like_decimal_price_before_currency(token: str, next_token: str) -> bo
         re.fullmatch(r"\d{1,4}\.\d{1,3}", token)
         and next_token in {"hkd", "usd", "usdt", "eur", "aed", "chf"}
     )
+
+
+def _looks_like_decimal_size_before_unit(token: str, next_token: str) -> bool:
+    return bool(re.fullmatch(r"\d{1,3}\.\d{1,2}", token) and next_token == "mm")
 
 
 def _looks_like_plain_price_after_date(token: str, previous_token: str) -> bool:

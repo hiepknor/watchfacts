@@ -806,6 +806,69 @@ def test_extract_relevant_listing_text_stops_before_rm_section_header_after_pric
     )
 
 
+def test_extract_relevant_listing_text_stops_before_post_price_service_tail() -> None:
+    listing_text = (
+        "Brand new // Deal in HK • 5226G // New 02/2026 // Price 37k USDT "
+        "• 7130R // New 02/2026 // Price 43k USDT "
+        "• 7200R // New 02/2026 // Price 23K USDT "
+        "👉 Welcome to my office check and pay // All"
+    )
+
+    assert extract_relevant_listing_text("7200r", listing_text) == (
+        "7200R // New 02/2026 // Price 23K USDT"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_decimal_size_and_comma_price() -> None:
+    listing_text = "Patek Philippe 7200R, 34.6 mm case diameter, 2019, no box,152000HKD"
+
+    assert extract_relevant_listing_text("7200r", listing_text) == listing_text
+
+
+def test_extract_relevant_listing_text_stops_before_numbered_used_item_after_price() -> None:
+    listing_text = (
+        "*🎊✨🎊Used Cartier🎊✨🎊* ✨w20018d6 with card 39300hkd "
+        "✨w20073x8 16y 28500hkd ✨w2sa0011 24y fullset 38500hkd "
+        "✨wssa0009 18y fullset 44400hkd ✨w2sa0012 20y fullset 33000hkd "
+        "✨wssa0022 24y fullset 28500hkd ✨wssa0046 26y fullset 56000hkd "
+        "✨wssa0082 25y fullset 43000hkd ✨Used 7200R-001 White 2017y 146000hkd "
+        "4⃣Used"
+    )
+
+    assert extract_relevant_listing_text("7200r", listing_text) == (
+        "Used 7200R-001 White 2017y 146000hkd"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_next_used_same_reference_item() -> None:
+    listing_text = (
+        "🩵Used 5160R-001 naked 1.1m hkd "
+        "🩵Used 5160R-001 2014y 1.245m hkd "
+        "🩵Used 7200R-001 2019y 156k hkd "
+        "🩵Used 7200R-001 2022y 160k hkd "
+        "🩵Used 5980/1A-001 blue naked 780k hkd"
+    )
+
+    assert extract_relevant_listing_text("7200r", listing_text) == (
+        "Used 7200R-001 2019y 156k hkd"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_numbered_next_item_after_hkd_price() -> None:
+    listing_text = (
+        "🔥🔥CL WATCH🔥🔥 HKD/USD/EUR wire 🆗+ ✈️ label, 4-7days arrive HK "
+        "No box for watches, Welcome DM 1. Used Cartier ‎W2BB0023 / watch only / "
+        "11 links HKD43500 2. Used PAM01287 green 2022 / card and watch / "
+        "not original strap HKD55500 3. Used Cartier WSSA0009 2018 / card and watch / "
+        "not original strap HKD44400 11. Used PP 7200R 2019 / paper and watch / "
+        "not original strap HKD156500 11. Used 114300 black / watch only /"
+    )
+
+    assert extract_relevant_listing_text("7200r", listing_text) == (
+        "Used PP 7200R 2019 / paper and watch / not original strap HKD156500"
+    )
+
+
 def test_filter_matching_listings_preserves_original_order() -> None:
     listings = [
         Listing("Rolex 228253A silver dial"),
