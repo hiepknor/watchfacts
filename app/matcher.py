@@ -475,6 +475,7 @@ def _matching_segment_end(
         ) and not _separator_keeps_continuation_detail(
             normalized_token,
             previous_token,
+            next_token,
         ):
             end = _trim_trailing_section_marker(listing_text, end)
             break
@@ -693,12 +694,16 @@ def _trim_trailing_section_marker(listing_text: str, end: int) -> int:
     return end
 
 
-def _separator_keeps_continuation_detail(token: str, previous_token: str) -> bool:
+def _separator_keeps_continuation_detail(
+    token: str,
+    previous_token: str,
+    next_token: str,
+) -> bool:
     if _looks_like_price_context_token(token):
         return True
-    return _looks_like_date_or_condition_token(token) and _looks_like_price_context_token(
-        previous_token
-    )
+    if _looks_like_split_thousands_price(token, next_token):
+        return True
+    return _looks_like_date_or_condition_token(token)
 
 
 def _looks_like_price_token(token: str) -> bool:
@@ -805,6 +810,13 @@ def _looks_like_plain_price_before_currency(token: str, next_token: str) -> bool
     return bool(
         re.fullmatch(r"\d{5,8}", token)
         and next_token in {"hkd", "usd", "usdt", "eur", "aed", "chf"}
+    )
+
+
+def _looks_like_split_thousands_price(token: str, next_token: str) -> bool:
+    return bool(
+        re.fullmatch(r"\d{1,3}", token)
+        and re.fullmatch(r"\d{3}(?:hk|hkd|usd|usdt|eur|aed|chf)?", next_token)
     )
 
 

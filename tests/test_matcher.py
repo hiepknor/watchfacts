@@ -175,6 +175,14 @@ def test_extract_relevant_listing_text_keeps_price_after_fire_separator() -> Non
     )
 
 
+def test_extract_relevant_listing_text_keeps_condition_and_split_price_after_fire_separator() -> None:
+    listing_text = "*PP 7118/1200A grey* 💥N1/2026 💥790 000HKD"
+
+    assert extract_relevant_listing_text("7118/1200a grey", listing_text) == (
+        "PP 7118/1200A grey* 💥N1/2026 💥790 000HKD"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_ap_50th_anniversary_details() -> None:
     listing_text = "AP 77451OR White 50th Used fullset 2022 🇭🇰HKD$ 660,000"
 
