@@ -685,6 +685,14 @@ Acceptance:
 
 Acceptance:
 
-- [ ] Run full local test suite.
-- [ ] Deploy production only after tests pass.
-- [ ] Smoke test at least 10 diverse production queries and summarize result counts plus top-result quality.
+- [x] Run full local test suite.
+- [x] Deploy production only after tests pass.
+- [x] Smoke test at least 10 diverse production queries and summarize result counts plus top-result quality.
+
+Latest validation:
+
+- Local full suite: `288 passed`.
+- Production deployed through commit `c3eb1a4`.
+- Production mode: `HYBRID_AI_MODE=guarded`.
+- 10-query smoke set: `5205r`, `126500ln white 2026`, `7118/1200a grey`, `77451or white`, `116500 panda`, `5712/1r`, `5990/1r`, `26240ba new 2024`, `7200r`, `RM65-01 Lebron`.
+- Remaining suspicious flags: 2 true positives in top 20 where raw text has no clear price amount.
