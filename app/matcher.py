@@ -468,7 +468,14 @@ def _matching_segment_end(
             else ""
         )
         previous_match = token_matches[reference_index + offset - 1]
-        if _has_item_separator_between(listing_text, previous_match.end(), match.start()):
+        if _has_item_separator_between(
+            listing_text,
+            previous_match.end(),
+            match.start(),
+        ) and not _separator_keeps_continuation_detail(
+            normalized_token,
+            previous_token,
+        ):
             end = _trim_trailing_section_marker(listing_text, end)
             break
         if _looks_like_next_product_brand(normalized_token, next_token):
@@ -527,6 +534,8 @@ def _looks_like_product_reference_boundary(
     previous_token: str,
 ) -> bool:
     if not _looks_like_model_or_price_token(normalized_token):
+        return False
+    if _looks_like_ordinal_detail_token(normalized_token):
         return False
     if token_start > 0 and listing_text[token_start - 1] in CURRENCY_PREFIX_CHARS:
         return False
@@ -684,6 +693,14 @@ def _trim_trailing_section_marker(listing_text: str, end: int) -> int:
     return end
 
 
+def _separator_keeps_continuation_detail(token: str, previous_token: str) -> bool:
+    if _looks_like_price_context_token(token):
+        return True
+    return _looks_like_date_or_condition_token(token) and _looks_like_price_context_token(
+        previous_token
+    )
+
+
 def _looks_like_price_token(token: str) -> bool:
     return bool(
         re.fullmatch(r"\d+(?:\.\d+)?(?:k|m)", token)
@@ -741,6 +758,10 @@ def _looks_like_date_or_condition_token(token: str) -> bool:
 
 def _looks_like_descriptor_number_token(token: str, next_token: str) -> bool:
     return bool(re.fullmatch(r"\d{3,4}", token) and next_token.isalpha())
+
+
+def _looks_like_ordinal_detail_token(token: str) -> bool:
+    return bool(re.fullmatch(r"\d{1,3}(?:st|nd|rd|th)", token))
 
 
 def _looks_like_hyphenated_descriptor_number(token: str) -> bool:

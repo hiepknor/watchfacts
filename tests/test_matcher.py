@@ -167,6 +167,30 @@ def test_extract_relevant_listing_text_stops_before_fire_separator_brand() -> No
     )
 
 
+def test_extract_relevant_listing_text_keeps_price_after_fire_separator() -> None:
+    listing_text = "📣*PP 7118/1200A grey* 💥$790k hkd 💥N1/2026"
+
+    assert extract_relevant_listing_text("7118/1200a grey", listing_text) == (
+        "PP 7118/1200A grey* 💥$790k hkd 💥N1/2026"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_ap_50th_anniversary_details() -> None:
+    listing_text = "AP 77451OR White 50th Used fullset 2022 🇭🇰HKD$ 660,000"
+
+    assert extract_relevant_listing_text("77451or white", listing_text) == (
+        "AP 77451OR White 50th Used fullset 2022 🇭🇰HKD$ 660,000"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_ap_50th_likenew_price_suffix() -> None:
+    listing_text = "AP 34mm 77451OR White 50th likenew 2022 665,000hkd"
+
+    assert extract_relevant_listing_text("77451or white", listing_text) == (
+        "AP 34mm 77451OR White 50th likenew 2022 665,000hkd"
+    )
+
+
 def test_extract_relevant_listing_text_handles_compound_reference() -> None:
     listing_text = (
         "7010/1G blue 03-26 $717k "
