@@ -139,10 +139,13 @@ Responsibilities:
 - Normalize missing fields to `None` or empty strings consistently.
 - Keep extraction deterministic and unit-testable with HTML fixtures.
 
-### `matcher.py`
+### `matcher.py`, `matcher_rules.py`, and `matcher_rulebook.py`
 
 Responsibilities:
 
+- Keep `app.matcher` as the stable public API for search, dedupe, AI gates, and tests.
+- Keep deterministic matcher implementation in `matcher_rules.py`.
+- Keep matcher rule taxonomy, priorities, and trace data types in `matcher_rulebook.py`.
 - Normalize user query and listing text.
 - Tokenize query text.
 - Apply case-insensitive all-token matching.
@@ -151,6 +154,7 @@ Responsibilities:
 - Treat year/date/price-like numeric query tokens as descriptors instead of independent references.
 - Normalize Unicode mark characters so keycap digit prices such as `$8️⃣0️⃣k` match normal price queries.
 - Stop product segment extraction before seller/member metadata boundaries.
+- Expose `explain_extraction()` for local debugging and future owner-visible diagnostics.
 
 Matching rule:
 
@@ -158,6 +162,17 @@ Matching rule:
 listing matches query if every normalized query token appears in the relevant listing text,
 with stricter handling for model/reference tokens
 ```
+
+Rule order:
+
+```text
+query -> reference -> descriptor -> price -> product boundary
+      -> metadata boundary -> date/condition detail -> noise -> cleanup
+```
+
+New matcher changes should preserve this order unless a spec explains why a
+rule must run earlier. Each recurring production issue should become a focused
+regression test and, where useful, a traceable rule id in the rulebook.
 
 When WatchFacts returns server-filtered JSON search results, the workflow keeps those results and only uses the matcher to scope display text. This avoids over-filtering server matches that are relevant but do not contain every local descriptor in the same form.
 

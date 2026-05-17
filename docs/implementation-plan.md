@@ -639,3 +639,52 @@ git diff --check
 ```
 
 Also verify that README, operations docs, technical spec, examples, Makefile, and Compose files no longer contain retired local-model config names, services, scripts, or model-file references.
+
+## Phase 8: Matcher Rulebook Refactor
+
+Goal: make matcher rules easier to inspect, improve, and test while preserving
+the deterministic production behavior that users already rely on.
+
+### Task 8.1: Preserve Stable Public API
+
+Acceptance:
+
+- [x] Keep `app.matcher` as the import path used by search, dedupe, AI gates, and tests.
+- [x] Move matcher implementation behind a dedicated rules module without changing caller behavior.
+- [x] Keep existing matcher regression tests passing before changing behavior.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_matcher.py
+```
+
+### Task 8.2: Add Rulebook And Trace
+
+Acceptance:
+
+- [x] Add ordered matcher rule groups: query, reference, descriptor, price, product boundary, metadata boundary, date/condition, noise, cleanup.
+- [x] Add `explain_extraction()` so maintainers can see query intent, selected reference, selected token/character span, rule ids, and output text.
+- [x] Add tests that assert the rulebook remains priority ordered and trace output is populated for a hard price-prefix case.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_matcher.py
+```
+
+### Task 8.3: Convert Helpers Into Rule Groups
+
+Acceptance:
+
+- [x] Move price, boundary, descriptor, reference, date/condition, and cleanup helpers into focused modules or explicitly grouped sections.
+- [x] Keep public behavior unchanged while moving code.
+- [x] Add table-driven fixtures for recurring production patterns.
+
+### Task 8.4: Production Validation
+
+Acceptance:
+
+- [ ] Run full local test suite.
+- [ ] Deploy production only after tests pass.
+- [ ] Smoke test at least 10 diverse production queries and summarize result counts plus top-result quality.

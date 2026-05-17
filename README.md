@@ -126,7 +126,9 @@ watchfacts-bot/
 │   ├── telegram_bot.py
 │   ├── scraper.py
 │   ├── parser.py
-│   ├── matcher.py
+│   ├── matcher.py          # stable public matcher API
+│   ├── matcher_rules.py    # deterministic matcher implementation
+│   ├── matcher_rulebook.py # rule taxonomy and extraction trace types
 │   ├── dedupe.py
 │   ├── db.py
 │   └── config.py

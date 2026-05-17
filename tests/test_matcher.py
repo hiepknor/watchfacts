@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 
+import pytest
+
 from app.matcher import (
+    RULEBOOK,
     extract_relevant_listing_text,
+    explain_extraction,
     filter_matching_listings,
     listing_matches,
     normalize_text,
@@ -418,6 +422,63 @@ def test_extract_relevant_listing_text_keeps_price_prefix_before_reference() -> 
     assert extract_relevant_listing_text("5205r", listing_text) == (
         "4️⃣1️⃣k + 🚢 5205R blac d1al, 2015 pap3rs no b0x, reta1l r3ady"
     )
+
+
+def test_explain_extraction_returns_rule_trace() -> None:
+    listing_text = "4️⃣1️⃣k + 🚢 5205R blac d1al, 2015 pap3rs no b0x, reta1l r3ady"
+
+    trace = explain_extraction("5205r", listing_text)
+
+    assert trace.intent.reference_terms == (("5205r",),)
+    assert trace.selected_reference == ("5205r",)
+    assert trace.matched_token_span == (3, 3)
+    assert trace.output_text == listing_text
+    assert "reference.match_exact_or_compact" in trace.rule_ids
+    assert "cleanup.display_text" in trace.rule_ids
+
+
+def test_rulebook_is_priority_ordered() -> None:
+    priorities = [rule.priority for rule in RULEBOOK]
+
+    assert priorities == sorted(priorities)
+
+
+@pytest.mark.parametrize(
+    ("query", "listing_text", "expected_text"),
+    [
+        (
+            "5205r",
+            "4️⃣1️⃣k + 🚢 5205R blac d1al, 2015 pap3rs no b0x, reta1l r3ady",
+            "4️⃣1️⃣k + 🚢 5205R blac d1al, 2015 pap3rs no b0x, reta1l r3ady",
+        ),
+        (
+            "126500ln white 2026",
+            "Rolex Daytona 126500LN white N3/2026 unworn 33.5k",
+            "126500LN white N3/2026 unworn 33.5k",
+        ),
+        (
+            "7118/1200a grey",
+            "7118/1200A grey 🔥 2023 full set 27,500 + label",
+            "7118/1200A grey 🔥 2023 full set 27,500 + label",
+        ),
+        (
+            "116500 panda",
+            "Naked 116500 panda 26299 + lab",
+            "Naked 116500 panda 26299 + lab",
+        ),
+        (
+            "77451or white",
+            "AP 77451OR white 50th anniversary like new 2023 470k HKD",
+            "AP 77451OR white 50th anniversary like new 2023 470k HKD",
+        ),
+    ],
+)
+def test_extract_relevant_listing_text_hard_pattern_table(
+    query: str,
+    listing_text: str,
+    expected_text: str,
+) -> None:
+    assert extract_relevant_listing_text(query, listing_text) == expected_text
 
 
 def test_listing_matches_ignores_looking_for_request() -> None:
