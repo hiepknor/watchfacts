@@ -43,6 +43,7 @@ LOCAL_PREFIX_TOKENS = {
     "like",
     "new",
     "nautilus",
+    "naked",
     "p.p",
     "patek",
     "philippe",
@@ -83,6 +84,8 @@ def listing_matches(query: str, listing_text: str) -> bool:
         return False
 
     normalized_listing = normalize_text(listing_text)
+    if _looks_like_non_sale_request(normalized_listing):
+        return False
     listing_token_list = normalized_listing.split()
     listing_tokens = set(listing_token_list)
     compact_listing = _compact_text(normalized_listing)
@@ -560,6 +563,8 @@ def _looks_like_product_reference_boundary(
         return False
     if _looks_like_plain_price_before_currency(normalized_token, next_token):
         return False
+    if _looks_like_plain_price_before_label_note(normalized_token, next_token):
+        return False
     if _looks_like_decimal_price_after_currency(normalized_token, previous_token):
         return False
     if _looks_like_plain_price_after_currency(normalized_token, previous_token):
@@ -813,6 +818,13 @@ def _looks_like_plain_price_before_currency(token: str, next_token: str) -> bool
     )
 
 
+def _looks_like_plain_price_before_label_note(token: str, next_token: str) -> bool:
+    return bool(
+        re.fullmatch(r"\d{5,8}", token)
+        and next_token in {"lab", "label", "lbl", "ship", "shipping"}
+    )
+
+
 def _looks_like_split_thousands_price(token: str, next_token: str) -> bool:
     return bool(
         re.fullmatch(r"\d{1,3}", token)
@@ -834,7 +846,10 @@ def _looks_like_decimal_size_before_unit(token: str, next_token: str) -> bool:
 def _looks_like_plain_price_after_date(token: str, previous_token: str) -> bool:
     return bool(
         re.fullmatch(r"\d{5,8}", token)
-        and _looks_like_date_or_condition_token(previous_token)
+        and (
+            _looks_like_year_token(previous_token)
+            or _looks_like_date_or_condition_token(previous_token)
+        )
     )
 
 
@@ -886,6 +901,18 @@ def _looks_like_year_token(token: str) -> bool:
         return False
     year = int(token)
     return 1900 <= year <= 2099
+
+
+def _looks_like_non_sale_request(normalized_listing: str) -> bool:
+    tokens = normalized_listing.split()
+    if not tokens:
+        return False
+    head = " ".join(tokens[:4])
+    return bool(
+        tokens[0] in {"lookingfor", "wtb"}
+        or head.startswith("looking for")
+        or head.startswith("want to buy")
+    )
 
 
 def _clean_display_text(value: str) -> str:

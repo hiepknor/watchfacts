@@ -398,6 +398,24 @@ def test_extract_relevant_listing_text_keeps_size_before_price() -> None:
     )
 
 
+def test_extract_relevant_listing_text_keeps_plain_price_after_year() -> None:
+    listing_text = "116500 PANDA RETAIL READY FULL LINK 2023 31750"
+
+    assert extract_relevant_listing_text("116500 panda", listing_text) == listing_text
+
+
+def test_extract_relevant_listing_text_keeps_plain_price_before_label_note() -> None:
+    listing_text = "Naked 116500 panda 26299 + lab"
+
+    assert extract_relevant_listing_text("116500 panda", listing_text) == (
+        "Naked 116500 panda 26299 + lab"
+    )
+
+
+def test_listing_matches_ignores_looking_for_request() -> None:
+    assert not listing_matches("228235a choco", "Lookingfor 228235A choco new 2026")
+
+
 def test_extract_relevant_listing_text_keeps_year_range_and_price_range() -> None:
     listing_text = (
         "5712/1R 2022-2024 232$-246$ "

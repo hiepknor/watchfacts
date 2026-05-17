@@ -39,6 +39,9 @@ def detect_suspicious_result(
     if raw_normalized and _missing_price_after_currency(normalized, raw_normalized):
         issues.append(SuspiciousIssue("missing_price_after_currency", 3))
 
+    if not issues and _missing_price_evidence(normalized):
+        issues.append(SuspiciousIssue("missing_price_evidence", 1))
+
     return _dedupe_issues(issues)
 
 
@@ -94,6 +97,8 @@ def _has_price_evidence(value: str) -> bool:
         or re.search(rf"[$💰💲]\s*{amount}\s*{currency}\b", normalized)
         or re.search(rf"\b{amount}\s*[$💰💲]", normalized)
         or re.search(rf"\b{amount}\s*{currency}\s*[$💰💲]", normalized)
+        or re.search(r"\b(?!19\d{2}\b|20\d{2}\b)\d{5,8}\b", normalized)
+        or re.search(r"\b\d{3,4}\s*nfc\b", normalized)
     )
 
 
@@ -118,6 +123,26 @@ def _missing_price_after_currency(listing_text: str, raw_text: str) -> bool:
         return False
     normalized_listing = listing_text.casefold()
     return any(price.casefold() not in normalized_listing for price in raw_prices)
+
+
+def _missing_price_evidence(listing_text: str) -> bool:
+    if _has_price_evidence(listing_text):
+        return False
+    if _looks_like_non_sale_request(listing_text):
+        return False
+    return bool(re.search(r"\b(?=[a-z0-9/.-]*\d)[a-z0-9]+(?:[./-][a-z0-9]+)*\b", listing_text))
+
+
+def _looks_like_non_sale_request(value: str) -> bool:
+    tokens = value.split()
+    if not tokens:
+        return False
+    head = " ".join(tokens[:4])
+    return bool(
+        tokens[0] in {"lookingfor", "wtb"}
+        or head.startswith("looking for")
+        or head.startswith("want to buy")
+    )
 
 
 def _dedupe_issues(issues: list[SuspiciousIssue]) -> list[SuspiciousIssue]:

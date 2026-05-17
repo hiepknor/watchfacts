@@ -45,6 +45,41 @@ def test_detect_suspicious_result_ignores_price_with_dollar_suffix() -> None:
     assert issues == []
 
 
+def test_detect_suspicious_result_ignores_plain_full_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="FPJ Elegante Titanium 48mm 2019 full set 780000",
+        raw_listing_text=(
+            "126500 black n2 $239000 "
+            "FPJ Elegante Titanium 48mm 2019 full set 780000 "
+            "G0A23172 10/2025 680000"
+        ),
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_numeric_nfc_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="228235a Choco New N2/2026 = 465 NFC",
+        raw_listing_text=(
+            "228235a Eisen y23 = 478 NFC "
+            "228235a Choco New N2/2026 = 465 NFC "
+            "228235a MOP New N2/2026 = 470 NFC"
+        ),
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_flags_missing_price_evidence() -> None:
+    issues = detect_suspicious_result(
+        listing_text="26240BA new 2024",
+        raw_listing_text="I have 26240BA new 2024",
+    )
+
+    assert [issue.reason for issue in issues] == ["missing_price_evidence"]
+
+
 def test_detect_suspicious_result_ignores_tilde_joined_currency_prices() -> None:
     issues = detect_suspicious_result(
         listing_text="7118/1200R White 2021 1.210.000 HKD~155.200 USD"
