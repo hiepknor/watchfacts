@@ -598,8 +598,9 @@ Acceptance:
 - [x] Expand guarded gates to include explicit confidence and risk-flag checks.
 - [x] Expand guarded gates to include explicit separator-boundary and length checks.
 - [x] Rejected suggestions are stored for review or discarded with reason codes.
+- [x] Guarded mode uses raw listing text for allowlisted suspicious cases such as missing price evidence or truncated currency/price markers.
 - [x] Guarded output keeps deterministic fallback if OpenAI is unavailable, slow, or uncertain.
-- [ ] Every newly accepted pattern has a deterministic regression fixture when practical.
+- [x] Every newly accepted pattern has a deterministic regression fixture when practical.
 - [x] Guarded use is covered by tests for accept, reject, low confidence, risk flags, malformed output, substring failure, separator crossing, and length failure.
 - [x] Add explicit timeout test coverage for the OpenAI request boundary.
 

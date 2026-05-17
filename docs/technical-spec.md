@@ -191,8 +191,10 @@ Responsibilities:
 
 - Provide the optional OpenAI-backed refinement boundary.
 - Accept only minimal safe inputs: query, deterministic shown text, bounded raw listing snippet, and issue/suspicion reason codes.
+- Use the raw listing snippet, when available, for allowlisted suspicious cases so OpenAI can recover traceable details that deterministic extraction may have omitted.
 - Request structured JSON output with fields such as `relevant`, `selected_text`, `confidence`, `reasons`, and `risk_flags`.
 - Apply local validation before any suggestion can affect user-facing output.
+- In `guarded`, record accepted and rejected suggestion attempts with gate status and reasons.
 - Return deterministic fallback on timeout, API error, malformed output, unsafe output, or low confidence.
 
 Boundaries:

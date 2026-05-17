@@ -130,7 +130,7 @@ Mode guidance:
 - `off`: deterministic-only production behavior.
 - `shadow`: call OpenAI for eligible snippets and record suggestions without changing Telegram output.
 - `review`: show OpenAI suggestions only in owner review flows.
-- `guarded`: apply suggestions only after strict local validation gates pass.
+- `guarded`: call OpenAI only for eligible hard snippets or allowlisted suspicious reasons, then apply suggestions only after strict local validation gates pass.
 
 Operational rules:
 
@@ -139,6 +139,7 @@ Operational rules:
 - Rotate the key if it appears in logs or chat history.
 - Keep OpenAI timeouts short enough that Telegram users still receive deterministic fallback promptly.
 - Track suggestion accept/reject counts before considering `guarded`.
+- In `guarded`, suggestions must be copied from the raw listing text and pass query, substring, separator, length, confidence, and risk checks before they can change user-facing output.
 
 The older local model experiment has been removed from the supported runtime.
 Do not add new production behavior that depends on local model files.

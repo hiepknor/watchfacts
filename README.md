@@ -196,8 +196,10 @@ OPENAI_MAX_REFINES=3
 ```
 
 Use `shadow` first to record suggestions without changing Telegram output, then
-`review` for owner-visible suggestions. Use `guarded` only after validation
-gates and regression tests prove the pattern is safe.
+`review` for owner-visible suggestions. In `guarded`, OpenAI runs only for
+eligible hard snippets or allowlisted suspicious reasons and can alter output
+only when the suggestion is copied from the raw listing text and passes local
+query, substring, separator, length, confidence, and risk gates.
 
 The older local model experiment has been removed from the supported runtime.
 Do not add new production behavior that depends on local model files.
