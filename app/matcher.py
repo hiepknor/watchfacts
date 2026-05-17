@@ -251,6 +251,8 @@ def _parse_query_terms(query: str) -> tuple[list[list[str]], list[str]]:
 
 
 def _looks_like_query_descriptor_token(token: str) -> bool:
+    if re.fullmatch(r"\d{2}-\d{2}", token):
+        return False
     return (
         _looks_like_year_token(token)
         or _looks_like_price_token(token)
@@ -280,21 +282,29 @@ def _reference_has_local_descriptors(
     descriptor_tokens: list[str],
     listing_tokens: list[str],
 ) -> bool:
-    reference_index = _find_reference_term_index(reference_term, listing_tokens)
-    if reference_index is None:
-        compact_reference = _compact_text("".join(reference_term))
-        if compact_reference in _compact_text("".join(listing_tokens)):
-            return all(descriptor in listing_tokens for descriptor in descriptor_tokens)
+    term_length = len(reference_term)
+    found_reference = False
+    for index in range(len(listing_tokens) - term_length + 1):
+        match_length = _reference_match_length_at(reference_term, listing_tokens, index)
+        if match_length is None:
+            continue
+
+        found_reference = True
+        local_tokens = set(
+            _local_descriptor_tokens(
+                listing_tokens,
+                index + match_length - 1,
+            )
+        )
+        if all(descriptor in local_tokens for descriptor in descriptor_tokens):
+            return True
+
+    if found_reference:
         return False
 
-    local_tokens = set(
-        _local_descriptor_tokens(
-            listing_tokens,
-            reference_index + len(reference_term) - 1,
-        )
-    )
-    if all(descriptor in local_tokens for descriptor in descriptor_tokens):
-        return True
+    compact_reference = _compact_text("".join(reference_term))
+    if compact_reference in _compact_text("".join(listing_tokens)):
+        return all(descriptor in listing_tokens for descriptor in descriptor_tokens)
 
     return False
 
@@ -343,6 +353,8 @@ def _reference_match_length_at(
 
 def _reference_token_matches(query_token: str, listing_token: str) -> bool:
     if listing_token == query_token:
+        return True
+    if listing_token == f"rm{query_token}":
         return True
     return (
         listing_token.startswith(f"{query_token}-")
@@ -511,6 +523,8 @@ def _looks_like_product_reference_boundary(
         return False
     if _looks_like_caliber_token(normalized_token):
         return False
+    if _looks_like_listing_stock_code(normalized_token):
+        return False
     if _looks_like_size_token(normalized_token):
         return False
     if _looks_like_reference_detail_after_size(normalized_token, next_token, previous_token):
@@ -523,6 +537,8 @@ def _looks_like_product_reference_boundary(
 def _looks_like_next_product_brand(token: str, next_token: str) -> bool:
     if (token, next_token) in {("richard", "mille"), ("richard", "miller")}:
         return True
+    if token in {"ap", "pp", "rm", "vc"}:
+        return _looks_like_model_or_price_token(next_token)
     return token in PRODUCT_BRAND_TOKENS and _looks_like_model_or_price_token(next_token)
 
 
@@ -583,7 +599,9 @@ def _trim_trailing_section_marker(listing_text: str, end: int) -> int:
 def _looks_like_price_token(token: str) -> bool:
     return bool(
         re.fullmatch(r"\d+(?:\.\d+)?(?:k|m)", token)
+        or re.fullmatch(r"\d+(?:\.\d+)?(?:k|m)(?:hk|hkd|usd|usdt|eur|aed|chf)?", token)
         or re.fullmatch(r"\d{4,7}u", token)
+        or re.fullmatch(r"\d{5,8}(?:hk|hkd|usd|usdt|eur|aed|chf)", token)
         or re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:hk|hkd)?", token)
         or re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:\.\d+)?", token)
         or re.fullmatch(r"\d{3}\.\d{2}", token)
@@ -626,8 +644,9 @@ def _looks_like_date_or_condition_token(token: str) -> bool:
         or re.fullmatch(r"\d{1,2}-\d{4}new", token)
         or re.fullmatch(r"\d{4}-\d{4}(?:-\d{4})?", token)
         or re.fullmatch(r"\d{1,2}\.\d{4}", token)
-        or re.fullmatch(r"\d{4}(?:y|year|full|like|used)", token)
+        or re.fullmatch(r"\d{4}(?:y|year|full|fullset|like|used|new)", token)
         or re.fullmatch(r"\d{4}n\d{1,2}", token)
+        or re.fullmatch(r"(?:new|n)\d{1,2}[/-]\d{1,4}", token)
         or re.fullmatch(r"[a-z]+\d{4}y?", token)
     )
 
@@ -703,6 +722,10 @@ def _looks_like_plain_price_after_descriptor(token: str, previous_token: str) ->
 
 def _looks_like_caliber_token(token: str) -> bool:
     return bool(re.fullmatch(r"\d{3}[a-z]{1,3}", token))
+
+
+def _looks_like_listing_stock_code(token: str) -> bool:
+    return bool(re.fullmatch(r"sw\d{2,5}", token))
 
 
 def _looks_like_size_token(token: str) -> bool:

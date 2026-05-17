@@ -689,6 +689,78 @@ def test_extract_relevant_listing_text_keeps_full_slash_date_and_emoji_price() -
     )
 
 
+def test_extract_relevant_listing_text_keeps_compact_new_and_currency_price() -> None:
+    listing_text = "❶ 67650ST black 2026new fullset HKD25000 ❷ 77450SR grey 3/2026new fullset HKD348000"
+
+    assert extract_relevant_listing_text("67650st", listing_text) == (
+        "67650ST black 2026new fullset HKD25000"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_fullset_and_compact_hkd_price() -> None:
+    listing_text = "77350sr, 2021fullset, 278000hkd"
+
+    assert extract_relevant_listing_text("77350sr", listing_text) == (
+        "77350sr, 2021fullset, 278000hkd"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_compact_prefixed_date_and_multi_currency() -> None:
+    listing_text = (
+        "127235 new3/26 With white tag 🏷️/No box "
+        "HKD 361k |USD 46.3k USD 46.8k|AED 173.9k"
+    )
+
+    assert extract_relevant_listing_text("127235", listing_text) == listing_text
+
+
+def test_extract_relevant_listing_text_keeps_listing_stock_code_after_reference() -> None:
+    listing_text = (
+        "$39,999.99 + label Audemars Piguet Royal Oak 34MM "
+        "(77350SR.OO.1261SR.01) - Steel & Rose Gold - White Dial - "
+        "2021 Card - (SW649) Amazing Condition, Retail Ready, Full Links"
+    )
+
+    assert extract_relevant_listing_text("77350sr", listing_text) == (
+        "34MM (77350SR.OO.1261SR.01) - Steel & Rose Gold - White Dial - "
+        "2021 Card - (SW649) Amazing Condition, Retail Ready, Full Links"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_split_rm_header() -> None:
+    listing_text = (
+        "AP 77350sr 2020y fullset 259kHKD "
+        "RM 35-03 white 2023y 545kusdt"
+    )
+
+    assert extract_relevant_listing_text("77350sr", listing_text) == (
+        "AP 77350sr 2020y fullset 259kHKD"
+    )
+
+
+def test_listing_matches_rm_reference_without_brand_prefix() -> None:
+    assert listing_matches(
+        "65-01 lebron james",
+        "RM65-01 Lebron James New 12/2025 - 485k usdt",
+    )
+    assert not listing_matches(
+        "65-01 lebron james",
+        "RM65-01 Mclaren New 12/2025 - 475k usdt",
+    )
+
+
+def test_extract_relevant_listing_text_scopes_rm_reference_without_brand_prefix() -> None:
+    listing_text = (
+        "RM65-01 Mclaren New 12/2025 - usdt 475k "
+        "RM65-01 Lebron James New 12/2025 - usdt 485k "
+        "RM30-01 White Ceramic New 2/2026 - usdt 380k"
+    )
+
+    assert extract_relevant_listing_text("65-01 lebron james", listing_text) == (
+        "RM65-01 Lebron James New 12/2025 - usdt 485k"
+    )
+
+
 def test_filter_matching_listings_preserves_original_order() -> None:
     listings = [
         Listing("Rolex 228253A silver dial"),
