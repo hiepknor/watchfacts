@@ -173,6 +173,20 @@ async def fetch_watchfacts_html(
         try:
             context = await browser.new_context(storage_state=state_path)
             try:
+                if query and query.strip():
+                    try:
+                        return await _fetch_search_results_with_request_bootstrap(
+                            context,
+                            settings.watchfacts_url,
+                            query.strip(),
+                            timeout_ms=timeout_ms,
+                            require_search=True,
+                        )
+                    except (BrowserSessionError, ScraperError):
+                        raise
+                    except Exception:
+                        pass
+
                 page = await context.new_page()
                 try:
                     response = await page.goto(
@@ -265,6 +279,7 @@ async def _fetch_search_results_with_request_bootstrap(
     query: str,
     *,
     timeout_ms: int,
+    require_search: bool = False,
 ) -> ScrapeResult:
     response = await context.request.get(url, timeout=max(timeout_ms, SEARCH_TIMEOUT_MS))
     if response.status >= 400:
@@ -283,6 +298,8 @@ async def _fetch_search_results_with_request_bootstrap(
         timeout_ms=timeout_ms,
     )
     if search_result is None:
+        if require_search:
+            raise ValueError("WatchFacts search form not found in request response")
         return ScrapeResult(html=html, final_url=response.url)
     return search_result
 

@@ -363,6 +363,9 @@ async def send_search_results(
         next_offset=0,
         result_limit=result_limit,
     )
+    page = _get_result_page(context, token)
+    if page is not None:
+        _prefetch_page_results(context, page, 0)
     await _maybe_await(
         message.reply_text(
             format_result_summary(

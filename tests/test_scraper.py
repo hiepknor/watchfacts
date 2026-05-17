@@ -277,9 +277,20 @@ def test_fetch_watchfacts_html_loads_state_and_navigates_to_configured_url(tmp_p
 
 def test_fetch_watchfacts_html_posts_query_to_watchfacts_search(tmp_path) -> None:
     settings = make_settings(tmp_path)
-    page = FakeSearchPage("<html><body>Listings</body></html>", settings.watchfacts_url)
-    response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
-    factory, request = make_search_playwright_factory(page, response)
+    page = FakeSearchPage("<html><body>Should not need page navigation</body></html>", settings.watchfacts_url)
+    get_response = FakeSearchResponse(
+        url=settings.watchfacts_url,
+        body=(
+            '<html><body><form id="mode3Form" action="/simon-search-matches">'
+            '<input name="_token" value="csrf-token"></form></body></html>'
+        ),
+    )
+    post_response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
+    factory, request = make_request_bootstrap_playwright_factory(
+        page,
+        get_response=get_response,
+        post_response=post_response,
+    )
 
     result = asyncio.run(
         fetch_watchfacts_html(
@@ -295,6 +306,8 @@ def test_fetch_watchfacts_html_posts_query_to_watchfacts_search(tmp_path) -> Non
         final_url="https://watchfacts.example/simon-search-matches",
         server_filtered=True,
     )
+    assert page.goto_calls == []
+    assert request.gets == [(settings.watchfacts_url, 90_000)]
     assert request.posts == [
         (
             "https://watchfacts.example/simon-search-matches",
