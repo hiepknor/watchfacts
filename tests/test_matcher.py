@@ -416,6 +416,12 @@ def test_extract_relevant_listing_text_keeps_plain_price_before_label_note() -> 
     )
 
 
+def test_extract_relevant_listing_text_keeps_decimal_price_before_lnl_note() -> None:
+    listing_text = "116500 panda Daytona 2017 full link retail ready 28.9+lnl"
+
+    assert extract_relevant_listing_text("116500 panda", listing_text) == listing_text
+
+
 def test_extract_relevant_listing_text_keeps_price_prefix_before_reference() -> None:
     listing_text = "4️⃣1️⃣k + 🚢 5205R blac d1al, 2015 pap3rs no b0x, reta1l r3ady"
 
@@ -463,8 +469,8 @@ def test_rulebook_is_priority_ordered() -> None:
         ),
         (
             "116500 panda",
-            "Naked 116500 panda 26299 + lab",
-            "Naked 116500 panda 26299 + lab",
+            "116500 panda Daytona 2017 full link retail ready 28.9+lnl",
+            "116500 panda Daytona 2017 full link retail ready 28.9+lnl",
         ),
         (
             "77451or white",

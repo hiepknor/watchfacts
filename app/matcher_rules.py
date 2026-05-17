@@ -951,8 +951,8 @@ def _looks_like_plain_price_before_currency(token: str, next_token: str) -> bool
 
 def _looks_like_plain_price_before_label_note(token: str, next_token: str) -> bool:
     return bool(
-        re.fullmatch(r"\d{5,8}", token)
-        and next_token in {"lab", "label", "lbl", "ship", "shipping"}
+        re.fullmatch(r"\d{5,8}|\d{1,3}\.\d{1,3}", token)
+        and next_token in {"lab", "label", "lbl", "lnl", "ship", "shipping"}
     )
 
 

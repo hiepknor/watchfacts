@@ -154,6 +154,36 @@ def test_detect_suspicious_result_ignores_tilde_joined_currency_prices() -> None
     assert issues == []
 
 
+def test_detect_suspicious_result_ignores_decimal_price_with_lnl_suffix() -> None:
+    issues = detect_suspicious_result(
+        listing_text="116500 panda Daytona 2017 full link retail ready 28.9+lnl",
+        raw_listing_text="116500 panda Daytona 2017 full link retail ready 28.9+lnl",
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_euro_symbol_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5990/1R 2026, 248 € inc shipment",
+        raw_listing_text="Brand new w stickers 5990/1R 2026, 248 € inc shipment",
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_best_price_tail_with_prices() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5712/1R fress date 265,000 hkd or 32,800 usd deal to best price",
+        raw_listing_text=(
+            "Patek Phillippe 5712/1R fress date 265,000 hkd or "
+            "32,800 usd deal to best price"
+        ),
+    )
+
+    assert issues == []
+
+
 def test_detect_suspicious_result_ignores_condition_price_before_currency() -> None:
     issues = detect_suspicious_result(listing_text="7118/1r white N3-985k hkd")
 
