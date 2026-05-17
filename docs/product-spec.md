@@ -84,7 +84,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Scraping WatchFacts without authorized access.
 - Storing WatchFacts passwords in source code or config examples.
 - Building a web UI in the initial version.
-- Running local LLM models or supporting llama.cpp in the production runtime.
+- Running local AI models in the production runtime.
 - Adding OpenAI ranking, summarization, or extraction as an uncontrolled primary result source.
 - Letting AI become the uncontrolled source of truth for listing extraction.
 - Letting the bot automatically rewrite matcher/parser code or deploy fixes based on feedback.

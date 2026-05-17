@@ -302,7 +302,7 @@ Each item needs a focused spec before implementation:
 - Exporting result sets.
 - Additional watch sources.
 - Query operators such as optional terms, quoted phrases, or negative filters.
-- OpenAI controlled intelligence: remove local LLM runtime support, then add OpenAI-assisted issue clustering and result refinement in shadow/review mode before any guarded user-facing correction.
+- OpenAI owner review tooling: surface recorded suggestions in Telegram review commands and convert accepted suggestions into regression fixtures.
 
 ## Phase 6: Continuous Improvement Loop
 
@@ -459,9 +459,9 @@ After each phase:
 
 ## Phase 7: OpenAI Controlled Intelligence
 
-Status: planned.
+Status: baseline complete; owner review tooling remains planned.
 
-Goal: remove the local LLM experiment and introduce one controlled AI path through OpenAI API, with deterministic search remaining the default and fallback behavior.
+Goal: remove the local model experiment and introduce one controlled AI path through OpenAI API, with deterministic search remaining the default and fallback behavior.
 
 Reference docs:
 
@@ -470,28 +470,29 @@ Reference docs:
 - [Continuous Improvement Spec](continuous-improvement.md)
 - [ADR-005: Use OpenAI Controlled AI For Result Refinement](decisions/005-controlled-hybrid-ai-refinement.md)
 
-### Task 7.1: Remove Local LLM Runtime Surface
+### Task 7.1: Remove Local Model Runtime Surface
 
-Description: Delete the unsupported local LLM/llama.cpp runtime path so production and docs have one AI integration target.
+Description: Delete the unsupported local model runtime path so production and docs have one AI integration target.
 
 Acceptance:
 
 - [x] Remove `LOCAL_LLM_*` settings from `app/config.py`, `.env.example`, tests, and settings output.
-- [x] Remove `LLAMA_CPP_*` settings from `.env.example`.
-- [x] Remove the `llama-cpp` service from `docker-compose.yml`.
-- [x] Remove `make llm-up`, `make llm-down`, `make llm-logs`, and `make llm-smoke`.
+- [x] Remove retired local-model service settings from `.env.example`.
+- [x] Remove the local model service from `docker-compose.yml`.
+- [x] Remove obsolete local-model Makefile targets.
 - [x] Remove or archive `scripts/smoke_local_llm.py` and local model benchmark docs.
-- [x] Ensure `models/` is no longer required by any documented flow.
+- [x] Ensure local model files are no longer required by any documented flow.
 - [x] Existing deterministic search, feedback, issue review, and suspicious detection tests still pass.
 
 Verify:
 
 ```bash
-rg -n "LOCAL_LLM|LLAMA_CPP|llama.cpp|local LLM|Gemma|GGUF" app tests scripts Makefile docker-compose.yml .env.example README.md docs/operations.md docs/technical-spec.md
 .venv/bin/python -m pytest tests/test_config.py tests/test_search.py tests/test_telegram_bot.py
 make check
 docker compose config
 ```
+
+Also verify that active runtime files and operator docs no longer contain retired local-model config names, services, scripts, or model-file references.
 
 Likely files:
 
@@ -627,12 +628,13 @@ Acceptance:
 - [x] README describes deterministic default behavior and optional OpenAI controlled intelligence.
 - [x] Operations guide includes OpenAI setup, rotation, disabling, timeout, and fallback behavior.
 - [x] Security docs state what may and may not be sent to OpenAI.
-- [x] Technical spec lists OpenAI configuration and removes local LLM/llama.cpp runtime docs.
-- [x] Roadmap and ADRs reflect that local LLM is retired.
+- [x] Technical spec lists OpenAI configuration and removes local model runtime docs.
+- [x] Roadmap and ADRs reflect that local model runtime is retired.
 
 Verify:
 
 ```bash
 git diff --check
-rg -n "LOCAL_LLM|LLAMA_CPP|llama.cpp|Gemma|GGUF" README.md docs/operations.md docs/technical-spec.md .env.example Makefile docker-compose.yml
 ```
+
+Also verify that README, operations docs, technical spec, examples, Makefile, and Compose files no longer contain retired local-model config names, services, scripts, or model-file references.

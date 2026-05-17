@@ -149,39 +149,38 @@ Detailed spec:
 
 ## Milestone 7: OpenAI Controlled Intelligence
 
-Status: planned.
+Status: baseline complete; review tooling remains future work.
 
 Goal: make the bot improve faster on messy listing formats while preserving deterministic, auditable production behavior, using OpenAI API as the only AI provider.
 
 Decision:
 
 - Keep deterministic matching as the default source of truth.
-- Remove the local LLM/llama.cpp experiment from the supported runtime path.
+- Remove the local model experiment from the supported runtime path.
 - Add OpenAI only as a guarded second-opinion/refiner for suspicious, reported, or hard cases.
 - Start in shadow mode: compare AI suggestions with deterministic output, record diffs, and do not change user-facing results.
 - Promote AI-assisted corrections only when confidence gates pass and regression tests cover the pattern.
 
 Deliverables:
 
-- Removal of `LOCAL_LLM_*`, `LLAMA_CPP_*`, local model docs, local smoke script usage, and the Compose llama.cpp service.
-- OpenAI configuration with `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_TIMEOUT_SECONDS`, and `OPENAI_MAX_REFINES`.
-- OpenAI client/refiner using structured JSON output, short timeouts, retries only where safe, and deterministic fallback.
-- Issue-pattern clustering for feedback and suspicious cases.
-- Optional OpenAI refiner that proposes scoped listing text for high-risk results.
-- Confidence gates that require query/reference match, local price/date evidence, and no cross-item leakage.
-- Shadow-mode metrics showing when AI would change output.
-- Owner review commands or digest entries for AI-suggested corrections.
-- Regression fixture generation from reviewed AI suggestions.
+- [x] Removal of local model settings, docs, smoke script usage, and the Compose local model service.
+- [x] OpenAI configuration with `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_TIMEOUT_SECONDS`, and `OPENAI_MAX_REFINES`.
+- [x] OpenAI client/refiner using structured JSON output, short timeouts, and deterministic fallback.
+- [x] Optional OpenAI refiner that proposes scoped listing text for high-risk results.
+- [x] Confidence gates requiring query/reference match, raw substring traceability, confidence, length, and no cross-item leakage.
+- [x] Shadow-mode records showing when OpenAI would change output.
+- [ ] Owner review commands or digest entries for OpenAI-suggested corrections.
+- [ ] Regression fixture generation from reviewed OpenAI suggestions.
 
 Exit criteria:
 
-- [ ] Local LLM runtime support is removed from config, docs, Docker Compose, Makefile, scripts, and tests.
-- [ ] OpenAI is disabled by default and never required for normal search.
-- [ ] Shadow mode records proposed changes without altering Telegram output.
-- [ ] OpenAI responses are parsed through a strict schema and rejected on malformed or unsafe output.
+- [x] Local model runtime support is removed from config, active docs, Docker Compose, Makefile, scripts, and tests.
+- [x] OpenAI is disabled by default and never required for normal search.
+- [x] Shadow mode records proposed changes without altering Telegram output.
+- [x] OpenAI responses are parsed through a strict schema and rejected on malformed or unsafe output.
 - [ ] Accepted AI suggestions become deterministic tests before production behavior changes.
-- [ ] The bot never auto-edits code, auto-deploys, or stores secrets in AI prompts/logs.
-- [ ] Fallback behavior is deterministic when OpenAI is unavailable, slow, or uncertain.
+- [x] The bot never auto-edits code, auto-deploys, or stores secrets in AI prompts/logs.
+- [x] Fallback behavior is deterministic when OpenAI is unavailable, slow, or uncertain.
 
 Architecture decision:
 

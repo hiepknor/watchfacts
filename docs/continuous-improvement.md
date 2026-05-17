@@ -33,7 +33,7 @@ Current matcher/parser quality improves only when the operator manually notices 
 - No public feedback controls for unauthorized users.
 - No LLM-only correction path as the first implementation.
 - No AI-generated correction should bypass query/reference validation, confidence gates, or regression coverage.
-- No local LLM or llama.cpp runtime path in the supported production architecture.
+- No local model runtime path in the supported production architecture.
 
 ## User Roles
 
@@ -268,7 +268,7 @@ The long-term improvement direction is a controlled OpenAI system: deterministic
 
 This is not autonomous learning. The bot should not rewrite code, deploy changes, or blindly trust an AI response. AI suggestions are evidence that must pass guards and become tests.
 
-Local LLM/llama.cpp support is intentionally out of scope for the supported runtime. Keeping one AI provider reduces deployment complexity, avoids local model memory/CPU requirements, and makes validation, metrics, and operator documentation clearer.
+Local model support is intentionally out of scope for the supported runtime. Keeping one AI provider reduces deployment complexity, avoids local model memory/CPU requirements, and makes validation, metrics, and operator documentation clearer.
 
 ### Operating Modes
 
@@ -382,7 +382,7 @@ Recommended workflow:
 
 ### Phase E: OpenAI Controlled Refinement
 
-- Remove the local LLM/llama.cpp runtime surface.
+- Remove the local model runtime surface.
 - Add OpenAI configuration and a stub-testable refiner provider.
 - Use structured output and local validation gates for every suggestion.
 - Record shadow suggestions and review artifacts in SQLite.

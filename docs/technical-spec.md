@@ -66,7 +66,7 @@ Configuration rules:
 - Restrict Telegram handlers to configured user ids when `TELEGRAM_ALLOWED_USER_IDS` is non-empty.
 - Validate Telegram result limit as a positive integer.
 - Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
-- Remove local LLM/llama.cpp runtime support from the production path.
+- Remove local model runtime support from the production path.
 - Keep `HYBRID_AI_MODE=off` by default; use `shadow` or `review` to collect safe suggestions before considering `guarded`.
 - Require `OPENAI_API_KEY` only when OpenAI-assisted modes are enabled.
 - Never log or display `OPENAI_API_KEY`.

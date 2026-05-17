@@ -18,7 +18,7 @@ The operator wants the bot to become smarter over time without requiring constan
 - The bot must not invent listing details.
 - Feedback should not trigger autonomous code changes or deploys.
 - Secrets, cookies, browser state, and full page HTML must not be sent to or stored by AI systems.
-- The production runtime should not depend on local model files, llama.cpp, or machine-specific CPU/RAM capacity.
+- The production runtime should not depend on local model files or machine-specific CPU/RAM capacity.
 
 ## Decision
 
@@ -30,7 +30,7 @@ Use a controlled OpenAI approach:
 4. Owner review mode may expose AI suggestions in issue review/digests.
 5. Guarded user-facing AI correction is allowed only after confidence gates, production evidence, and regression tests exist.
 6. Every accepted AI suggestion should become a deterministic regression fixture where practical.
-7. Local LLM/llama.cpp runtime support should be removed from the supported production path.
+7. Local model runtime support should be removed from the supported production path.
 
 ## Required Guards
 
@@ -79,7 +79,7 @@ Cons:
 
 Rejected because correctness and auditability are more important than broad language flexibility.
 
-### Keep Local LLM/llama.cpp As Provider
+### Keep Local Model Runtime As Provider
 
 Pros:
 
@@ -103,7 +103,7 @@ Pros:
 - Lets OpenAI accelerate triage, clustering, and candidate correction.
 - Can start safely in shadow mode.
 - Converts accepted suggestions into tests and deterministic rules.
-- Avoids local model deployment and llama.cpp service maintenance.
+- Avoids local model deployment and service maintenance.
 
 Cons:
 
@@ -120,4 +120,4 @@ Accepted because it improves long-term quality while preserving control.
 - Search must still work when OpenAI is unavailable.
 - Owner/admin tooling should focus on issue clustering, review summaries, and regression fixture generation.
 - The team should prefer deterministic matcher improvements whenever an AI suggestion reveals a repeatable pattern.
-- Local LLM/llama.cpp docs, config, Makefile targets, Compose service, and smoke scripts should be removed as part of the OpenAI migration.
+- Local model docs, config, Makefile targets, Compose service, and smoke scripts should be removed as part of the OpenAI migration.
