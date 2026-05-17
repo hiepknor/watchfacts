@@ -13,7 +13,7 @@ from app.config import Settings
 from app.db import Database
 from app.dedupe import unique_latest_by_text, unique_latest_listings
 from app.issues import detect_suspicious_result
-from app.llm_matcher import evaluate_refinement_suggestion
+from app.ai_refiner import evaluate_refinement_suggestion
 from app.matcher import extract_relevant_listing_text, filter_matching_listings, normalize_text
 from app.parser import ListingCandidate, parse_listings
 from app.scraper import ScrapeResult, fetch_watchfacts_html
@@ -89,7 +89,7 @@ class WatchFactsSearchWorkflow:
         matched = parsed if scrape_result.server_filtered else filter_matching_listings(query, parsed)
         results = [_to_search_result(query, listing) for listing in matched]
         unique = unique_latest_listings(results)
-        if self.refine_results is not None and self.settings.local_llm_enabled:
+        if self.refine_results is not None and self.settings.hybrid_ai_mode != "off":
             unique = await self._handle_hybrid_refinement(query, unique)
         unique = unique_latest_by_text(unique)
         unique = group_similar_results(unique, query=query)
@@ -192,7 +192,7 @@ class WatchFactsSearchWorkflow:
                     query_text=query,
                     result_rank=rank,
                     mode=mode,
-                    model=self.settings.local_llm_model,
+                    model=self.settings.openai_model,
                     deterministic_text=original.listing_text,
                     suggested_text=suggested.listing_text,
                     raw_listing_text=original.raw_listing_text,
@@ -283,11 +283,10 @@ def _search_cache_key(query: str, settings: Settings) -> str:
         "version": SEARCH_CACHE_VERSION,
         "query": normalize_text(query),
         "watchfacts_url": settings.watchfacts_url,
-        "local_llm_enabled": settings.local_llm_enabled,
-        "hybrid_ai_mode": settings.hybrid_ai_mode if settings.local_llm_enabled else "off",
-        "local_llm_model": settings.local_llm_model if settings.local_llm_enabled else "",
-        "local_llm_max_refines": (
-            settings.local_llm_max_refines if settings.local_llm_enabled else 0
+        "hybrid_ai_mode": settings.hybrid_ai_mode,
+        "openai_model": settings.openai_model if settings.hybrid_ai_mode != "off" else "",
+        "openai_max_refines": (
+            settings.openai_max_refines if settings.hybrid_ai_mode != "off" else 0
         ),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))

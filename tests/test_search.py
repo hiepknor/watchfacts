@@ -375,7 +375,7 @@ def test_search_workflow_logs_error_type_without_query_or_state_path(tmp_path, c
     assert settings.telegram_bot_token not in log_text
 
 
-def test_search_workflow_refines_results_with_local_llm_when_enabled(tmp_path) -> None:
+def test_search_workflow_refines_results_with_openai_when_enabled(tmp_path) -> None:
     settings = Settings(
         telegram_bot_token="token",
         telegram_allowed_user_ids=(),
@@ -388,8 +388,9 @@ def test_search_workflow_refines_results_with_local_llm_when_enabled(tmp_path) -
         logs_dir=tmp_path / "logs",
         db_path=tmp_path / "data" / "bot.db",
         browser_state_path=tmp_path / "data" / "watchfacts_state.json",
-        local_llm_enabled=True,
         hybrid_ai_mode="guarded",
+        openai_api_key="sk-test",
+        openai_model="test-model",
     )
     html = """
     <html>
@@ -437,7 +438,7 @@ def test_search_workflow_refines_results_with_local_llm_when_enabled(tmp_path) -
     assert results[0].listing_text == "FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd"
 
 
-def test_search_workflow_dedupes_again_after_local_llm_refine(tmp_path) -> None:
+def test_search_workflow_dedupes_again_after_openai_refine(tmp_path) -> None:
     settings = Settings(
         telegram_bot_token="token",
         telegram_allowed_user_ids=(),
@@ -450,8 +451,9 @@ def test_search_workflow_dedupes_again_after_local_llm_refine(tmp_path) -> None:
         logs_dir=tmp_path / "logs",
         db_path=tmp_path / "data" / "bot.db",
         browser_state_path=tmp_path / "data" / "watchfacts_state.json",
-        local_llm_enabled=True,
         hybrid_ai_mode="guarded",
+        openai_api_key="sk-test",
+        openai_model="test-model",
     )
     html = """
     {
@@ -519,8 +521,9 @@ def test_search_workflow_records_shadow_ai_suggestions_without_changing_results(
         logs_dir=tmp_path / "logs",
         db_path=tmp_path / "data" / "bot.db",
         browser_state_path=tmp_path / "data" / "watchfacts_state.json",
-        local_llm_enabled=True,
         hybrid_ai_mode="shadow",
+        openai_api_key="sk-test",
+        openai_model="test-model",
     )
     html = """
     {

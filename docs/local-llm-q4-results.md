@@ -1,5 +1,10 @@
 # Local LLM Q4 Experiment
 
+Status: archived. The supported AI direction is now OpenAI controlled
+refinement. Local LLM/llama.cpp runtime support should be removed during Phase 7;
+this document is kept only as historical experiment evidence until that cleanup
+is complete.
+
 Branch: `experiment/local-gemma-q4-llamacpp`
 
 ## Model

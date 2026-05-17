@@ -102,6 +102,8 @@ PROCESSING_MIN_SECONDS_KEY = "processing_min_seconds"
 DEFAULT_PROCESSING_MIN_SECONDS = 1.0
 TELEGRAM_RESULT_LIMIT_KEY = "telegram_result_limit"
 TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY = "telegram_max_concurrent_searches"
+HYBRID_AI_MODE_KEY = "hybrid_ai_mode"
+OPENAI_MODEL_KEY = "openai_model"
 RESULT_PAGES_KEY = "result_pages"
 RESULT_REFINER_KEY = "result_refiner"
 ISSUE_DATABASE_KEY = "issue_database"
@@ -566,7 +568,9 @@ def format_settings_message(context) -> str:
         "⚙️ Cấu hình bot\n\n"
         f"🔐 Quyền truy cập: {access_mode}\n"
         f"👤 ID chủ bot: {owner_count if owner_count else 'Không giới hạn'}\n"
-        f"📨 Kết quả mỗi lượt: {_result_limit(context)}\n\n"
+        f"📨 Kết quả mỗi lượt: {_result_limit(context)}\n"
+        f"🤖 AI mode: {_hybrid_ai_mode(context)}\n"
+        f"🧠 OpenAI model: {_openai_model(context)}\n\n"
         "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
     )
 
@@ -715,6 +719,8 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.bot_data[TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY] = (
         settings.telegram_max_concurrent_searches
     )
+    application.bot_data[HYBRID_AI_MODE_KEY] = settings.hybrid_ai_mode
+    application.bot_data[OPENAI_MODEL_KEY] = settings.openai_model
     application.bot_data[SEARCH_SEMAPHORE_KEY] = asyncio.Semaphore(
         settings.telegram_max_concurrent_searches
     )
@@ -1261,11 +1267,11 @@ def _cancel_prefetch_task(page) -> None:
 
 def _build_result_refiner(settings: Settings) -> RefineResults | None:
     mode = settings.hybrid_ai_mode
-    if not settings.local_llm_enabled or mode == "off":
+    if mode == "off" or not settings.openai_api_key:
         return None
 
     from app.db import Database
-    from app.llm_matcher import evaluate_refinement_suggestion, refine_search_results
+    from app.ai_refiner import evaluate_refinement_suggestion, refine_search_results
 
     database = Database(settings.db_path)
 
@@ -1284,7 +1290,7 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
                         query_text=query,
                         result_rank=rank,
                         mode=mode,
-                        model=settings.local_llm_model,
+                        model=settings.openai_model,
                         deterministic_text=original.listing_text,
                         suggested_text=suggested.listing_text,
                         raw_listing_text=original.raw_listing_text,
@@ -1351,6 +1357,20 @@ async def _maybe_await(value) -> None:
     if inspect.isawaitable(value):
         return await value
     return value
+
+
+def _hybrid_ai_mode(context) -> str:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(HYBRID_AI_MODE_KEY, "off")
+    return str(value or "off")
+
+
+def _openai_model(context) -> str:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(OPENAI_MODEL_KEY, "disabled")
+    return str(value or "disabled")
 
 
 async def _delete_message(message) -> None:

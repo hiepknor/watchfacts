@@ -22,6 +22,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - As an operator, I can ask the bot to list suspicious or reported result issues for review.
 - As a maintainer, I can test matching, parsing, and dedupe behavior without calling external services.
 - As a maintainer, I can convert reported issue cases into deterministic tests.
+- As an operator, I can optionally enable OpenAI-assisted refinement for hard cases without making AI required for normal search.
 
 ## Core Flow
 
@@ -32,9 +33,10 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 5. Bot extracts listing candidates from JSON search responses or HTML fallback.
 6. Bot matches or scopes listings against query tokens.
 7. Bot removes repeated latest reposts.
-8. Bot stores query/cache/dedupe data in SQLite.
-9. Bot returns a summary with an inline "Xem kết quả" button.
-10. User requests batches with "Xem kết quả" / "Xem thêm".
+8. If OpenAI controlled intelligence is enabled, bot may record or apply a guarded suggestion only after strict validation.
+9. Bot stores query/cache/dedupe/issue data in SQLite.
+10. Bot returns a summary with an inline "Xem kết quả" button.
+11. User requests batches with "Xem kết quả" / "Xem thêm".
 
 ## Functional Requirements
 
@@ -61,13 +63,15 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Limit Telegram photo captions and text messages to platform-safe lengths.
 - Notify the owner in Vietnamese when WatchFacts browser session state is missing or expired.
 - Support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
+- Support optional OpenAI-assisted refinement for suspicious, reported, or hard-to-scope results, controlled by explicit modes and validation gates.
 
 ## Non-Functional Requirements
 
 - No LLM is required for core behavior.
 - Matching must be deterministic and testable.
 - Continuous improvement must be evidence collection and review, not autonomous code mutation.
-- AI-assisted refinement, if enabled later, must be controlled by explicit modes, confidence gates, owner review, and deterministic fallback.
+- AI-assisted refinement, if enabled, must use OpenAI API as the only supported AI provider and must be controlled by explicit modes, confidence gates, owner review, and deterministic fallback.
+- OpenAI integration must be disabled by default and must not be required for normal search.
 - Telegram handlers should remain async and avoid blocking network/browser work on the event loop.
 - Secrets and browser session files must never be committed.
 - The bot must fail clearly when configuration or login state is missing.
@@ -80,7 +84,8 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Scraping WatchFacts without authorized access.
 - Storing WatchFacts passwords in source code or config examples.
 - Building a web UI in the initial version.
-- Adding LLM ranking, summarization, or extraction in the initial version.
+- Running local LLM models or supporting llama.cpp in the production runtime.
+- Adding OpenAI ranking, summarization, or extraction as an uncontrolled primary result source.
 - Letting AI become the uncontrolled source of truth for listing extraction.
 - Letting the bot automatically rewrite matcher/parser code or deploy fixes based on feedback.
 - Supporting multiple watch sources before the WatchFacts path is stable.
@@ -128,6 +133,7 @@ at the start of the message or reply to a bot message.
 - Missing config or missing browser state produces actionable operator errors.
 - Expired WatchFacts session notifies the owner without exposing cookies or browser state.
 - Reported or suspicious result issues can be reviewed and converted into regression tests after the continuous-improvement milestone is implemented.
+- OpenAI-assisted suggestions, when enabled, are schema-validated, safely logged, and never required for search availability.
 - Docker image builds successfully.
 - `make init`, `make build`, and `make check` work on a fresh clone.
 - `.env`, `data/watchfacts_state.json`, `data/bot.db`, and `logs/` stay out of git.

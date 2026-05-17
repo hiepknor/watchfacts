@@ -147,23 +147,27 @@ Detailed spec:
 
 - [Continuous Improvement Spec](continuous-improvement.md)
 
-## Milestone 7: Controlled Hybrid Intelligence
+## Milestone 7: OpenAI Controlled Intelligence
 
 Status: planned.
 
-Goal: make the bot improve faster on messy listing formats while preserving deterministic, auditable production behavior.
+Goal: make the bot improve faster on messy listing formats while preserving deterministic, auditable production behavior, using OpenAI API as the only AI provider.
 
 Decision:
 
 - Keep deterministic matching as the default source of truth.
-- Add AI only as a guarded second-opinion/refiner for suspicious or hard cases.
+- Remove the local LLM/llama.cpp experiment from the supported runtime path.
+- Add OpenAI only as a guarded second-opinion/refiner for suspicious, reported, or hard cases.
 - Start in shadow mode: compare AI suggestions with deterministic output, record diffs, and do not change user-facing results.
 - Promote AI-assisted corrections only when confidence gates pass and regression tests cover the pattern.
 
 Deliverables:
 
+- Removal of `LOCAL_LLM_*`, `LLAMA_CPP_*`, local model docs, local smoke script usage, and the Compose llama.cpp service.
+- OpenAI configuration with `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_TIMEOUT_SECONDS`, and `OPENAI_MAX_REFINES`.
+- OpenAI client/refiner using structured JSON output, short timeouts, retries only where safe, and deterministic fallback.
 - Issue-pattern clustering for feedback and suspicious cases.
-- Optional AI refiner that proposes scoped listing text for high-risk results.
+- Optional OpenAI refiner that proposes scoped listing text for high-risk results.
 - Confidence gates that require query/reference match, local price/date evidence, and no cross-item leakage.
 - Shadow-mode metrics showing when AI would change output.
 - Owner review commands or digest entries for AI-suggested corrections.
@@ -171,15 +175,17 @@ Deliverables:
 
 Exit criteria:
 
-- [ ] AI is disabled by default and never required for normal search.
+- [ ] Local LLM runtime support is removed from config, docs, Docker Compose, Makefile, scripts, and tests.
+- [ ] OpenAI is disabled by default and never required for normal search.
 - [ ] Shadow mode records proposed changes without altering Telegram output.
+- [ ] OpenAI responses are parsed through a strict schema and rejected on malformed or unsafe output.
 - [ ] Accepted AI suggestions become deterministic tests before production behavior changes.
 - [ ] The bot never auto-edits code, auto-deploys, or stores secrets in AI prompts/logs.
-- [ ] Fallback behavior is deterministic when AI is unavailable, slow, or uncertain.
+- [ ] Fallback behavior is deterministic when OpenAI is unavailable, slow, or uncertain.
 
 Architecture decision:
 
-- [ADR-005: Use Controlled Hybrid AI For Result Refinement](decisions/005-controlled-hybrid-ai-refinement.md)
+- [ADR-005: Use OpenAI Controlled AI For Result Refinement](decisions/005-controlled-hybrid-ai-refinement.md)
 
 ## Later Ideas
 

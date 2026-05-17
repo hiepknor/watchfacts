@@ -19,6 +19,8 @@ from app.telegram_bot import SearchResult
 Complete = Callable[[str], Awaitable[str]]
 logger = logging.getLogger(__name__)
 MULTI_ITEM_MARKERS = (" - [ ]", "\n-", "\n•", " • ", " | ")
+MIN_REFINEMENT_CONFIDENCE = 0.7
+MAX_REFINED_TEXT_CHARS = 1024
 UNRELATED_BRAND_OR_MODEL_TOKENS = {
     "audemars",
     "cartier",
@@ -47,7 +49,7 @@ async def refine_search_results(
     *,
     database: Database | None = None,
 ) -> list[SearchResult]:
-    if not settings.local_llm_enabled or not results:
+    if settings.hybrid_ai_mode == "off" or not settings.openai_api_key or not results:
         return results
 
     complete = _settings_complete(settings)
@@ -55,7 +57,7 @@ async def refine_search_results(
     refine_count = 0
     for result in results:
         if (
-            refine_count >= settings.local_llm_max_refines
+            refine_count >= settings.openai_max_refines
             or not should_refine_listing_text(result.listing_text)
         ):
             refined.append(result)
@@ -65,7 +67,7 @@ async def refine_search_results(
             database.get_llm_refinement(
                 query,
                 result.listing_text,
-                settings.local_llm_model,
+                settings.openai_model,
             )
             if database is not None
             else None
@@ -80,7 +82,7 @@ async def refine_search_results(
             database.record_llm_refinement(
                 query,
                 result.listing_text,
-                settings.local_llm_model,
+                settings.openai_model,
                 listing_text,
                 latency_ms=int((time.perf_counter() - start) * 1000),
             )
@@ -109,8 +111,16 @@ def evaluate_refinement_suggestion(
     elif suggested_text:
         reasons.append("not_raw_substring")
 
+    if suggested_text and len(suggested_text) > MAX_REFINED_TEXT_CHARS:
+        reasons.append("exceeds_length")
+
+    if suggested_text and _crosses_item_separator(suggested_text):
+        reasons.append("crosses_item_separator")
+
     rejected = {
+        "crosses_item_separator",
         "empty_suggestion",
+        "exceeds_length",
         "query_mismatch",
         "not_raw_substring",
     }
@@ -150,26 +160,49 @@ async def refine_listing_text(
         response_text = await complete(prompt)
         payload = _extract_json_object(response_text)
     except Exception as exc:
-        logger.info("event=llm.refine_fallback error_type=%s", exc.__class__.__name__)
+        logger.info("event=ai.refine_fallback error_type=%s", exc.__class__.__name__)
         return fallback_text
 
-    if payload.get("relevant") is False:
+    if _payload_is_rejected(payload):
         return fallback_text
 
     index = payload.get("index")
     if isinstance(index, int) and 1 <= index <= len(candidates):
         return _post_process_refined_text(query, candidates[index - 1])
 
-    refined_text = payload.get("listing_text")
+    refined_text = payload.get("selected_text") or payload.get("listing_text")
     if not isinstance(refined_text, str):
         return fallback_text
     refined_text = " ".join(refined_text.split())
     if not refined_text:
         return fallback_text
+    if len(refined_text) > MAX_REFINED_TEXT_CHARS:
+        logger.info("event=ai.refine_rejected reason=exceeds_length")
+        return fallback_text
+    if _crosses_item_separator(refined_text):
+        logger.info("event=ai.refine_rejected reason=crosses_item_separator")
+        return fallback_text
     if refined_text not in listing_text:
-        logger.info("event=llm.refine_rejected reason=not_substring")
+        logger.info("event=ai.refine_rejected reason=not_substring")
         return fallback_text
     return _post_process_refined_text(query, refined_text)
+
+
+def _payload_is_rejected(payload: dict[str, object]) -> bool:
+    if payload.get("relevant") is False:
+        return True
+
+    confidence = payload.get("confidence")
+    if isinstance(confidence, int | float) and confidence < MIN_REFINEMENT_CONFIDENCE:
+        logger.info("event=ai.refine_rejected reason=low_confidence")
+        return True
+
+    risk_flags = payload.get("risk_flags")
+    if isinstance(risk_flags, list) and risk_flags:
+        logger.info("event=ai.refine_rejected reason=risk_flags")
+        return True
+
+    return False
 
 
 def deterministic_refine_listing_text(query: str, listing_text: str) -> str:
@@ -188,38 +221,97 @@ def _settings_complete(settings: Settings) -> Complete:
 
 def _complete_sync(prompt: str, settings: Settings) -> str:
     payload = {
-        "model": settings.local_llm_model,
-        "messages": [
+        "model": settings.openai_model,
+        "input": [
             {
                 "role": "system",
-                "content": "Return concise JSON only. Do not invent text.",
+                "content": (
+                    "You refine WatchFacts listing snippets. Return only schema-valid "
+                    "JSON. Do not invent text; selected_text must be copied from the "
+                    "provided raw listing text."
+                ),
             },
             {
                 "role": "user",
                 "content": prompt,
             },
         ],
-        "temperature": 0,
-        "max_tokens": 256,
+        "max_output_tokens": 256,
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "watchfacts_refinement",
+                "strict": True,
+                "schema": _refinement_schema(),
+            }
+        },
     }
     request = urllib.request.Request(
-        f"{settings.local_llm_base_url.rstrip('/')}/v1/chat/completions",
+        "https://api.openai.com/v1/responses",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {settings.openai_api_key}",
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
 
     try:
         with urllib.request.urlopen(
             request,
-            timeout=settings.local_llm_timeout_seconds,
+            timeout=settings.openai_timeout_seconds,
         ) as response:
             data = json.loads(response.read().decode("utf-8"))
-    except urllib.error.URLError as exc:
-        raise RuntimeError("local LLM request failed") from exc
+    except (TimeoutError, urllib.error.URLError) as exc:
+        raise RuntimeError("OpenAI request failed") from exc
 
-    message = data["choices"][0]["message"]
-    return message.get("content") or message.get("reasoning_content", "")
+    return _extract_response_text(data)
+
+
+def _extract_response_text(data: dict[str, object]) -> str:
+    output_text = data.get("output_text")
+    if isinstance(output_text, str):
+        return output_text
+
+    output = data.get("output")
+    if not isinstance(output, list):
+        raise ValueError("OpenAI response missing output")
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for content_item in content:
+            if not isinstance(content_item, dict):
+                continue
+            text = content_item.get("text")
+            if isinstance(text, str):
+                return text
+    raise ValueError("OpenAI response missing output text")
+
+
+def _refinement_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "relevant": {"type": "boolean"},
+            "index": {"type": "integer"},
+            "selected_text": {"type": "string"},
+            "confidence": {"type": "number"},
+            "reasons": {"type": "array", "items": {"type": "string"}},
+            "risk_flags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": [
+            "relevant",
+            "index",
+            "selected_text",
+            "confidence",
+            "reasons",
+            "risk_flags",
+        ],
+    }
 
 
 def _refine_prompt(query: str, listing_text: str, candidates: list[str]) -> str:
@@ -238,8 +330,15 @@ Candidate snippets from the raw listing text:
 Choose the one candidate that best matches the query. Exclude unrelated watch
 models before or after the matching item.
 
-Return only JSON:
-{{"relevant": true, "index": 1}}
+Return JSON matching the required schema:
+{{
+  "relevant": true,
+  "index": 1,
+  "selected_text": "exact substring copied from the best candidate",
+  "confidence": 0.9,
+  "reasons": ["contains query reference"],
+  "risk_flags": []
+}}
 """.strip()
 
 
@@ -267,6 +366,10 @@ def _candidate_snippets(listing_text: str) -> list[str]:
     ]
     candidates = [part for part in parts if part]
     return candidates or [listing_text]
+
+
+def _crosses_item_separator(value: str) -> bool:
+    return bool(re.search(r"\s+-\s+\[\s*\]\s+|\s+[•|]\s+", value))
 
 
 def _clean_candidate(value: str) -> str:

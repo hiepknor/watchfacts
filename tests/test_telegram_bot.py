@@ -66,8 +66,8 @@ def make_settings(tmp_path, *, hybrid_ai_mode: str = "shadow") -> Settings:
         logs_dir=tmp_path / "logs",
         db_path=tmp_path / "data" / "bot.db",
         browser_state_path=tmp_path / "data" / "watchfacts_state.json",
-        local_llm_enabled=True,
-        local_llm_model="test-model",
+        openai_api_key="sk-test",
+        openai_model="test-model",
         hybrid_ai_mode=hybrid_ai_mode,  # type: ignore[arg-type]
     )
 
@@ -225,7 +225,7 @@ def test_build_result_refiner_shadow_records_suggestions_without_changing_output
     async def refine_search_results(query, results, settings, *, database=None):
         return [suggested]
 
-    monkeypatch.setattr("app.llm_matcher.refine_search_results", refine_search_results)
+    monkeypatch.setattr("app.ai_refiner.refine_search_results", refine_search_results)
 
     refiner = _build_result_refiner(settings)
     assert refiner is not None
@@ -254,7 +254,7 @@ def test_build_result_refiner_guarded_rejects_unsafe_suggestion(tmp_path, monkey
     async def refine_search_results(query, results, settings, *, database=None):
         return [suggested]
 
-    monkeypatch.setattr("app.llm_matcher.refine_search_results", refine_search_results)
+    monkeypatch.setattr("app.ai_refiner.refine_search_results", refine_search_results)
 
     refiner = _build_result_refiner(settings)
     assert refiner is not None
@@ -310,7 +310,9 @@ def test_settings_command_returns_safe_runtime_settings() -> None:
             "⚙️ Cấu hình bot\n\n"
             "🔐 Quyền truy cập: Chỉ chủ bot\n"
             "👤 ID chủ bot: 2\n"
-            "📨 Kết quả mỗi lượt: 7\n\n"
+            "📨 Kết quả mỗi lượt: 7\n"
+            "🤖 AI mode: off\n"
+            "🧠 OpenAI model: disabled\n\n"
             "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
         )
     ]
@@ -508,7 +510,9 @@ def test_format_settings_message_shows_public_access() -> None:
         "⚙️ Cấu hình bot\n\n"
         "🔐 Quyền truy cập: Công khai\n"
         "👤 ID chủ bot: Không giới hạn\n"
-        "📨 Kết quả mỗi lượt: 5\n\n"
+        "📨 Kết quả mỗi lượt: 5\n"
+        "🤖 AI mode: off\n"
+        "🧠 OpenAI model: disabled\n\n"
         "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
     )
 

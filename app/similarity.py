@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 from difflib import SequenceMatcher
 
-from app.llm_matcher import deterministic_refine_listing_text
+from app.ai_refiner import deterministic_refine_listing_text
 from app.matcher import normalize_text
 from app.telegram_bot import SearchResult
 

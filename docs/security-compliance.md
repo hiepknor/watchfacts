@@ -19,6 +19,7 @@ Never commit:
 
 - `.env`
 - Telegram bot tokens
+- OpenAI API keys
 - WatchFacts credentials
 - cookies
 - browser storage state
@@ -52,6 +53,7 @@ Logs may include:
 Logs must not include:
 
 - tokens
+- OpenAI API keys
 - passwords
 - cookies
 - authorization headers
@@ -83,12 +85,38 @@ Not allowed:
 - Defeat bot protection.
 - Extract hidden authentication material.
 
+## OpenAI Data Boundary
+
+OpenAI-assisted refinement may only receive the smallest safe data needed for a
+specific suggestion:
+
+- original user query
+- deterministic shown listing text
+- bounded raw listing snippet already available in issue/search context
+- safe reason codes, gate results, prompt version, and model name
+
+OpenAI must never receive:
+
+- `.env`
+- Telegram bot tokens
+- `OPENAI_API_KEY`
+- WatchFacts cookies
+- browser storage state
+- `data/watchfacts_state.json`
+- WatchFacts passwords or credentials
+- full page HTML unless a future ADR explicitly approves it
+- deployment logs containing secrets
+
+Model output is not authoritative. A suggestion can affect user-facing output
+only after local schema, substring, query-match, separator-boundary, length, and
+confidence gates pass.
+
 ## Dependency Changes
 
 Ask before adding dependencies that:
 
 - introduce external services
-- add LLM behavior
+- add AI behavior beyond the OpenAI controlled refiner
 - process secrets
 - change browser automation strategy
 - change data storage strategy

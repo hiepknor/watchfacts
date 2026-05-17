@@ -302,7 +302,7 @@ Each item needs a focused spec before implementation:
 - Exporting result sets.
 - Additional watch sources.
 - Query operators such as optional terms, quoted phrases, or negative filters.
-- Controlled hybrid intelligence: AI-assisted issue clustering and result refinement in shadow/review mode before any guarded user-facing correction.
+- OpenAI controlled intelligence: remove local LLM runtime support, then add OpenAI-assisted issue clustering and result refinement in shadow/review mode before any guarded user-facing correction.
 
 ## Phase 6: Continuous Improvement Loop
 
@@ -456,3 +456,183 @@ After each phase:
 - [x] Docker build passes when runtime files changed.
 - [x] No secrets are staged.
 - [x] README and docs are updated when commands or architecture change.
+
+## Phase 7: OpenAI Controlled Intelligence
+
+Status: planned.
+
+Goal: remove the local LLM experiment and introduce one controlled AI path through OpenAI API, with deterministic search remaining the default and fallback behavior.
+
+Reference docs:
+
+- [Product Spec](product-spec.md)
+- [Technical Spec](technical-spec.md)
+- [Continuous Improvement Spec](continuous-improvement.md)
+- [ADR-005: Use OpenAI Controlled AI For Result Refinement](decisions/005-controlled-hybrid-ai-refinement.md)
+
+### Task 7.1: Remove Local LLM Runtime Surface
+
+Description: Delete the unsupported local LLM/llama.cpp runtime path so production and docs have one AI integration target.
+
+Acceptance:
+
+- [x] Remove `LOCAL_LLM_*` settings from `app/config.py`, `.env.example`, tests, and settings output.
+- [x] Remove `LLAMA_CPP_*` settings from `.env.example`.
+- [x] Remove the `llama-cpp` service from `docker-compose.yml`.
+- [x] Remove `make llm-up`, `make llm-down`, `make llm-logs`, and `make llm-smoke`.
+- [x] Remove or archive `scripts/smoke_local_llm.py` and local model benchmark docs.
+- [x] Ensure `models/` is no longer required by any documented flow.
+- [x] Existing deterministic search, feedback, issue review, and suspicious detection tests still pass.
+
+Verify:
+
+```bash
+rg -n "LOCAL_LLM|LLAMA_CPP|llama.cpp|local LLM|Gemma|GGUF" app tests scripts Makefile docker-compose.yml .env.example README.md docs/operations.md docs/technical-spec.md
+.venv/bin/python -m pytest tests/test_config.py tests/test_search.py tests/test_telegram_bot.py
+make check
+docker compose config
+```
+
+Likely files:
+
+- `app/config.py`
+- `app/ai_refiner.py`
+- `app/search.py`
+- `app/telegram_bot.py`
+- `.env.example`
+- `docker-compose.yml`
+- `Makefile`
+- `docs/`
+- `tests/`
+
+### Task 7.2: Add OpenAI Configuration
+
+Description: Add OpenAI-specific configuration while keeping AI disabled by default.
+
+Acceptance:
+
+- [x] Add `OPENAI_API_KEY` as optional unless `HYBRID_AI_MODE` is not `off`.
+- [x] Add `OPENAI_MODEL` with a cost-conscious default appropriate for structured refinement.
+- [x] Add `OPENAI_TIMEOUT_SECONDS` with a short default suitable for Telegram UX.
+- [x] Add `OPENAI_MAX_REFINES` to cap per-query calls.
+- [x] Fail fast with a clear config error when OpenAI mode is enabled without an API key.
+- [x] `/settings` shows AI mode and model name but never shows `OPENAI_API_KEY`.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_config.py tests/test_telegram_bot.py
+```
+
+Likely files:
+
+- `app/config.py`
+- `app/telegram_bot.py`
+- `.env.example`
+- `tests/test_config.py`
+- `tests/test_telegram_bot.py`
+
+### Task 7.3: Implement OpenAI Refiner Provider
+
+Description: Replace the local OpenAI-compatible HTTP caller with a first-class OpenAI refiner that returns strict structured output.
+
+Acceptance:
+
+- [x] Create an OpenAI client boundary that can be stubbed in tests.
+- [x] Send only minimal safe snippets: query, shown deterministic text, bounded raw listing snippet, and reason codes.
+- [x] Use structured JSON output with fields such as `relevant`, `selected_text`, `confidence`, `reasons`, and `risk_flags`.
+- [x] Reject malformed responses, empty suggestions, low-confidence suggestions, and suggestions that are not substrings of the raw listing text.
+- [x] Never send `.env`, Telegram tokens, WatchFacts cookies, browser state, full storage state, or full page HTML.
+- [x] Timeout or API failure returns deterministic output and logs only safe error categories.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_ai_refiner.py tests/test_search.py
+make check
+```
+
+Likely files:
+
+- new `app/openai_refiner.py` or replacement `app/ai_refiner.py`
+- `app/search.py`
+- `app/db.py`
+- `tests/test_ai_refiner.py`
+- `tests/test_search.py`
+
+### Task 7.4: Wire Shadow And Review Modes
+
+Description: Record OpenAI suggestions in shadow/review modes without changing Telegram output.
+
+Acceptance:
+
+- [x] `HYBRID_AI_MODE=shadow` records deterministic vs suggested output, gate results, model, and latency.
+- [ ] `HYBRID_AI_MODE=review` surfaces suggestions in owner issue review without showing them to normal users.
+- [ ] Suggestions are tied to feedback or suspicious-result records where possible.
+- [ ] Duplicate suggestions are deduped by query, raw snippet hash, model, and prompt version.
+- [x] Owner-facing output is concise Vietnamese and never includes secrets.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_db.py tests/test_telegram_bot.py tests/test_search.py
+```
+
+Likely files:
+
+- `app/db.py`
+- `app/search.py`
+- `app/telegram_bot.py`
+- `tests/test_db.py`
+- `tests/test_search.py`
+- `tests/test_telegram_bot.py`
+
+### Task 7.5: Add Guarded Apply Path
+
+Description: Allow OpenAI suggestions to alter user-facing result text only when all validation gates pass.
+
+Acceptance:
+
+- [x] `HYBRID_AI_MODE=guarded` applies a suggestion only if local gates pass.
+- [x] Expand guarded gates to include explicit confidence and risk-flag checks.
+- [x] Expand guarded gates to include explicit separator-boundary and length checks.
+- [x] Rejected suggestions are stored for review or discarded with reason codes.
+- [x] Guarded output keeps deterministic fallback if OpenAI is unavailable, slow, or uncertain.
+- [ ] Every newly accepted pattern has a deterministic regression fixture when practical.
+- [x] Guarded use is covered by tests for accept, reject, low confidence, risk flags, malformed output, substring failure, separator crossing, and length failure.
+- [x] Add explicit timeout test coverage for the OpenAI request boundary.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_ai_refiner.py tests/test_search.py tests/test_matcher.py
+make check
+```
+
+Likely files:
+
+- `app/ai_refiner.py`
+- `app/search.py`
+- `app/matcher.py`
+- `tests/test_ai_refiner.py`
+- `tests/test_search.py`
+- `tests/test_matcher.py`
+
+### Task 7.6: Update Operations And Security Docs
+
+Description: Make operator documentation match the OpenAI-only AI path.
+
+Acceptance:
+
+- [x] README describes deterministic default behavior and optional OpenAI controlled intelligence.
+- [x] Operations guide includes OpenAI setup, rotation, disabling, timeout, and fallback behavior.
+- [x] Security docs state what may and may not be sent to OpenAI.
+- [x] Technical spec lists OpenAI configuration and removes local LLM/llama.cpp runtime docs.
+- [x] Roadmap and ADRs reflect that local LLM is retired.
+
+Verify:
+
+```bash
+git diff --check
+rg -n "LOCAL_LLM|LLAMA_CPP|llama.cpp|Gemma|GGUF" README.md docs/operations.md docs/technical-spec.md .env.example Makefile docker-compose.yml
+```

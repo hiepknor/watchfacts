@@ -11,10 +11,9 @@ from dotenv import load_dotenv
 DEFAULT_WATCHFACTS_URL = "https://watchfacts.com/simon-match-making"
 DEFAULT_TELEGRAM_RESULT_LIMIT = 5
 DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES = 1
-DEFAULT_LOCAL_LLM_BASE_URL = "http://localhost:8080"
-DEFAULT_LOCAL_LLM_MODEL = "gemma-4-e2b-Q4_K_M.gguf"
-DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS = 30
-DEFAULT_LOCAL_LLM_MAX_REFINES = 3
+DEFAULT_OPENAI_MODEL = "gpt-5-mini"
+DEFAULT_OPENAI_TIMEOUT_SECONDS = 12
+DEFAULT_OPENAI_MAX_REFINES = 3
 DEFAULT_SEARCH_CACHE_TTL_SECONDS = 5 * 60
 HybridAIMode = Literal["off", "shadow", "review", "guarded"]
 DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
@@ -38,12 +37,11 @@ class Settings:
     db_path: Path
     browser_state_path: Path
     telegram_max_concurrent_searches: int = DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES
-    local_llm_enabled: bool = False
-    local_llm_base_url: str = DEFAULT_LOCAL_LLM_BASE_URL
-    local_llm_model: str = DEFAULT_LOCAL_LLM_MODEL
-    local_llm_timeout_seconds: int = DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS
-    local_llm_max_refines: int = DEFAULT_LOCAL_LLM_MAX_REFINES
     hybrid_ai_mode: HybridAIMode = DEFAULT_HYBRID_AI_MODE
+    openai_api_key: str = ""
+    openai_model: str = DEFAULT_OPENAI_MODEL
+    openai_timeout_seconds: int = DEFAULT_OPENAI_TIMEOUT_SECONDS
+    openai_max_refines: int = DEFAULT_OPENAI_MAX_REFINES
     search_cache_ttl_seconds: int = DEFAULT_SEARCH_CACHE_TTL_SECONDS
 
 
@@ -135,27 +133,23 @@ def load_settings(
         source.get("ENABLE_CRAWL4AI", "true"),
         name="ENABLE_CRAWL4AI",
     )
-    local_llm_enabled = parse_bool(
-        source.get("LOCAL_LLM_ENABLED", "false"),
-        name="LOCAL_LLM_ENABLED",
-    )
-    local_llm_base_url = source.get("LOCAL_LLM_BASE_URL", DEFAULT_LOCAL_LLM_BASE_URL).strip()
-    if not local_llm_base_url:
-        raise ConfigError("LOCAL_LLM_BASE_URL must not be empty")
-    local_llm_model = source.get("LOCAL_LLM_MODEL", DEFAULT_LOCAL_LLM_MODEL).strip()
-    if not local_llm_model:
-        raise ConfigError("LOCAL_LLM_MODEL must not be empty")
-    local_llm_timeout_seconds = parse_positive_int(
-        source.get("LOCAL_LLM_TIMEOUT_SECONDS", str(DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS)),
-        name="LOCAL_LLM_TIMEOUT_SECONDS",
-    )
-    local_llm_max_refines = parse_positive_int(
-        source.get("LOCAL_LLM_MAX_REFINES", str(DEFAULT_LOCAL_LLM_MAX_REFINES)),
-        name="LOCAL_LLM_MAX_REFINES",
-    )
     hybrid_ai_mode = parse_hybrid_ai_mode(
         source.get("HYBRID_AI_MODE", DEFAULT_HYBRID_AI_MODE),
         name="HYBRID_AI_MODE",
+    )
+    openai_api_key = source.get("OPENAI_API_KEY", "").strip()
+    if hybrid_ai_mode != "off" and not openai_api_key:
+        raise ConfigError("OPENAI_API_KEY is required when HYBRID_AI_MODE is not off")
+    openai_model = source.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL).strip()
+    if not openai_model:
+        raise ConfigError("OPENAI_MODEL must not be empty")
+    openai_timeout_seconds = parse_positive_int(
+        source.get("OPENAI_TIMEOUT_SECONDS", str(DEFAULT_OPENAI_TIMEOUT_SECONDS)),
+        name="OPENAI_TIMEOUT_SECONDS",
+    )
+    openai_max_refines = parse_positive_int(
+        source.get("OPENAI_MAX_REFINES", str(DEFAULT_OPENAI_MAX_REFINES)),
+        name="OPENAI_MAX_REFINES",
     )
     search_cache_ttl_seconds = parse_positive_int(
         source.get("SEARCH_CACHE_TTL_SECONDS", str(DEFAULT_SEARCH_CACHE_TTL_SECONDS)),
@@ -173,12 +167,11 @@ def load_settings(
         watchfacts_url=watchfacts_url,
         headless=headless,
         enable_crawl4ai=enable_crawl4ai,
-        local_llm_enabled=local_llm_enabled,
-        local_llm_base_url=local_llm_base_url,
-        local_llm_model=local_llm_model,
-        local_llm_timeout_seconds=local_llm_timeout_seconds,
-        local_llm_max_refines=local_llm_max_refines,
         hybrid_ai_mode=hybrid_ai_mode,
+        openai_api_key=openai_api_key,
+        openai_model=openai_model,
+        openai_timeout_seconds=openai_timeout_seconds,
+        openai_max_refines=openai_max_refines,
         search_cache_ttl_seconds=search_cache_ttl_seconds,
         project_root=root,
         data_dir=data_dir,

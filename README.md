@@ -18,10 +18,10 @@ The bot receives a short watch query, searches WatchFacts through the logged-in 
 - WatchFacts session health check and owner alert when login state expires
 - One-tap result feedback and owner issue review commands
 - SQLite local cache
+- Optional OpenAI controlled refinement for hard cases
 - Docker deployment
 - Fully async architecture
 - No LLM required
-- Optional local LLM experiment through llama.cpp
 - Free and self-hosted
 
 ## Stack
@@ -110,10 +110,6 @@ make deploy
 | `make shell` | Open a shell in the bot container |
 | `make run` | Run the bot locally on the host |
 | `make login` | Run the WatchFacts browser login locally on the host |
-| `make llm-up` | Start the experimental llama.cpp service |
-| `make llm-down` | Stop the experimental llama.cpp service |
-| `make llm-logs` | Follow experimental llama.cpp logs |
-| `make llm-smoke` | Call the local LLM chat endpoint |
 | `make check` | Run lightweight repository checks |
 | `python scripts/login.py` | Open Chromium for manual WatchFacts login and save browser state |
 | `python -m app.main` | Run the Telegram bot locally |
@@ -183,22 +179,28 @@ data/watchfacts_state.json
 
 The bot reuses this session automatically when crawling WatchFacts.
 
-## Local LLM Experiment
+## OpenAI Controlled Intelligence
 
-The bot remains deterministic by default. To test a local Gemma GGUF model with
-llama.cpp, place the model file under `models/`, set `LLAMA_CPP_MODEL_FILE` in
-`.env`, then run:
+The bot remains deterministic by default. The AI path is OpenAI-only:
+OpenAI may suggest scoped result refinements for suspicious or reported cases,
+but deterministic parser/matcher behavior remains the baseline and fallback.
+
+Configuration:
 
 ```bash
-make llm-up
-make llm-smoke
+HYBRID_AI_MODE=off
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5-mini
+OPENAI_TIMEOUT_SECONDS=12
+OPENAI_MAX_REFINES=3
 ```
 
-Use `make llm-down` to stop the service. Model files under `models/` are ignored
-by git.
-For Docker bot trials, set `LOCAL_LLM_BASE_URL=http://llama-cpp:8080` in `.env`.
-Set `HYBRID_AI_MODE=shadow` to record AI suggestions without changing Telegram
-results. Keep the default `HYBRID_AI_MODE=off` for deterministic-only behavior.
+Use `shadow` first to record suggestions without changing Telegram output, then
+`review` for owner-visible suggestions. Use `guarded` only after validation
+gates and regression tests prove the pattern is safe.
+
+The older local model experiment has been removed from the supported runtime.
+Do not add new production behavior that depends on local model files.
 
 ## Telegram Usage
 
@@ -282,7 +284,7 @@ The bot sends a result summary first. Press "Xem kết quả" to receive the fir
 
 ## Search And Matching Logic
 
-The bot uses deterministic matching. No AI or LLM is used.
+The bot uses deterministic matching. No AI or LLM is required for core search.
 
 For a query like:
 

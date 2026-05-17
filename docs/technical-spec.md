@@ -9,7 +9,7 @@
 - BeautifulSoup4 + lxml for HTML parsing
 - SQLite for local cache, dedupe, and query history
 - Docker Compose for deployment
-- Optional llama.cpp service for local LLM experiments
+- Optional OpenAI API integration for controlled AI refinement
 - Makefile for repeatable local commands
 
 ## Intended Project Structure
@@ -25,6 +25,7 @@ app/
   db.py            # SQLite schema and persistence
   config.py        # environment/config loading
   issues.py        # suspicious-result heuristics for issue collection
+  ai_refiner.py    # optional OpenAI-backed result refinement boundary
 scripts/
   login.py         # manual WatchFacts login and browser state creation
 data/
@@ -50,18 +51,11 @@ Expected environment:
 | `HEADLESS` | No | `true` | Browser headless mode |
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
 | `SEARCH_CACHE_TTL_SECONDS` | No | `300` | Fresh-result cache lifetime for identical normalized searches before calling WatchFacts again |
-| `LOCAL_LLM_ENABLED` | No | `false` | Enables local LLM experiment code paths when explicitly implemented |
-| `LOCAL_LLM_BASE_URL` | No | `http://localhost:8080` | Local llama.cpp server URL; use `http://llama-cpp:8080` inside Docker Compose |
-| `LOCAL_LLM_MODEL` | No | `gemma-4-e2b-Q4_K_M.gguf` | Local model identifier sent to the chat API |
-| `LOCAL_LLM_TIMEOUT_SECONDS` | No | `30` | Local LLM HTTP timeout for experiments; `8` is recommended for bot trials with CPU inference |
-| `LOCAL_LLM_MAX_REFINES` | No | `3` | Maximum snippets refined by the local LLM per query |
 | `HYBRID_AI_MODE` | No | `off` | Controlled AI mode: `off`, `shadow`, `review`, or `guarded`; only `guarded` can alter search output |
-| `LLAMA_CPP_IMAGE` | No | `ghcr.io/ggml-org/llama.cpp:server` | Docker image for the experimental llama.cpp service |
-| `LLAMA_CPP_PORT` | No | `8080` | Host port for llama.cpp |
-| `LLAMA_CPP_MODELS_DIR` | No | `./models` | Host directory containing GGUF files; ignored by git |
-| `LLAMA_CPP_MODEL_FILE` | No | `gemma-4-e2b-Q4_K_M.gguf` | GGUF filename mounted under `/models` |
-| `LLAMA_CPP_CTX_SIZE` | No | `4096` | llama.cpp context size |
-| `LLAMA_CPP_PREDICT` | No | `256` | llama.cpp max generated token count |
+| `OPENAI_API_KEY` | Required when AI mode is not `off` | None | OpenAI API key; never logged or shown in Telegram |
+| `OPENAI_MODEL` | No | Cost-conscious current model | Model used for structured refinement suggestions |
+| `OPENAI_TIMEOUT_SECONDS` | No | `12` | Maximum OpenAI request time before deterministic fallback |
+| `OPENAI_MAX_REFINES` | No | `3` | Maximum snippets sent to OpenAI per query |
 
 Configuration rules:
 
@@ -72,8 +66,10 @@ Configuration rules:
 - Restrict Telegram handlers to configured user ids when `TELEGRAM_ALLOWED_USER_IDS` is non-empty.
 - Validate Telegram result limit as a positive integer.
 - Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
-- Keep local LLM settings optional and disabled by default.
+- Remove local LLM/llama.cpp runtime support from the production path.
 - Keep `HYBRID_AI_MODE=off` by default; use `shadow` or `review` to collect safe suggestions before considering `guarded`.
+- Require `OPENAI_API_KEY` only when OpenAI-assisted modes are enabled.
+- Never log or display `OPENAI_API_KEY`.
 
 ## Runtime Architecture
 
@@ -85,7 +81,7 @@ Telegram update
   -> matcher filters or scopes listings by query tokens
   -> dedupe removes repeated latest reposts
   -> suspicious-result detector records likely extraction issues
-  -> optional controlled hybrid AI records suggestions or applies guarded refinements
+  -> optional OpenAI controlled refiner records suggestions or applies guarded refinements
   -> db records query/cache/dedupe state
   -> telegram_bot sends a summary first, then paginated result batches
 ```
@@ -188,6 +184,22 @@ Responsibilities:
 - Persist query history and dedupe/cache data.
 - Persist result feedback, suspicious-result flags, issue review status, and fixture export metadata.
 - Use parameterized SQL only.
+
+### `ai_refiner.py`
+
+Responsibilities:
+
+- Provide the optional OpenAI-backed refinement boundary.
+- Accept only minimal safe inputs: query, deterministic shown text, bounded raw listing snippet, and issue/suspicion reason codes.
+- Request structured JSON output with fields such as `relevant`, `selected_text`, `confidence`, `reasons`, and `risk_flags`.
+- Apply local validation before any suggestion can affect user-facing output.
+- Return deterministic fallback on timeout, API error, malformed output, unsafe output, or low confidence.
+
+Boundaries:
+
+- Do not send `.env`, Telegram tokens, WatchFacts cookies, browser state, full storage state, or full page HTML to OpenAI.
+- Do not let OpenAI call WatchFacts, Telegram, the database, or deployment commands.
+- Do not treat model output as authoritative unless local gates pass.
 
 ## Data Model
 
@@ -324,6 +336,7 @@ Preferred tests:
 - Unit tests for suspicious-result detection rules.
 - Database tests for future feedback and issue-review tables.
 - Optional browser smoke test for login/session flow when credentials are available.
+- OpenAI refiner unit tests with stubbed client responses; tests must not call the live OpenAI API.
 
 Recommended commands:
 
@@ -345,7 +358,7 @@ Always:
 Ask first:
 
 - Adding external services.
-- Adding LLM behavior.
+- Adding AI behavior beyond the OpenAI controlled refiner.
 - Changing the dedupe identity.
 - Changing data retention behavior.
 - Adding dependencies beyond the current stack.
@@ -356,3 +369,4 @@ Never:
 - Bypass WatchFacts access controls.
 - Store WatchFacts passwords.
 - Log cookies, tokens, or full storage state.
+- Send secrets, browser state, full page HTML, or raw credentials to OpenAI.

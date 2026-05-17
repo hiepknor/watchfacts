@@ -5,10 +5,9 @@ import pytest
 from app.config import (
     ConfigError,
     DEFAULT_HYBRID_AI_MODE,
-    DEFAULT_LOCAL_LLM_BASE_URL,
-    DEFAULT_LOCAL_LLM_MAX_REFINES,
-    DEFAULT_LOCAL_LLM_MODEL,
-    DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS,
+    DEFAULT_OPENAI_MAX_REFINES,
+    DEFAULT_OPENAI_MODEL,
+    DEFAULT_OPENAI_TIMEOUT_SECONDS,
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
     DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
@@ -92,12 +91,11 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.watchfacts_url == DEFAULT_WATCHFACTS_URL
     assert settings.headless is True
     assert settings.enable_crawl4ai is True
-    assert settings.local_llm_enabled is False
-    assert settings.local_llm_base_url == DEFAULT_LOCAL_LLM_BASE_URL
-    assert settings.local_llm_model == DEFAULT_LOCAL_LLM_MODEL
-    assert settings.local_llm_timeout_seconds == DEFAULT_LOCAL_LLM_TIMEOUT_SECONDS
-    assert settings.local_llm_max_refines == DEFAULT_LOCAL_LLM_MAX_REFINES
     assert settings.hybrid_ai_mode == DEFAULT_HYBRID_AI_MODE
+    assert settings.openai_api_key == ""
+    assert settings.openai_model == DEFAULT_OPENAI_MODEL
+    assert settings.openai_timeout_seconds == DEFAULT_OPENAI_TIMEOUT_SECONDS
+    assert settings.openai_max_refines == DEFAULT_OPENAI_MAX_REFINES
     assert settings.search_cache_ttl_seconds == DEFAULT_SEARCH_CACHE_TTL_SECONDS
     assert settings.data_dir == tmp_path / "data"
     assert settings.logs_dir == tmp_path / "logs"
@@ -141,26 +139,35 @@ def test_load_settings_reads_telegram_max_concurrent_searches(tmp_path: Path) ->
     assert settings.telegram_max_concurrent_searches == 2
 
 
-def test_load_settings_reads_local_llm_options(tmp_path: Path) -> None:
+def test_load_settings_reads_openai_options(tmp_path: Path) -> None:
     settings = load_settings(
         env={
             "TELEGRAM_BOT_TOKEN": "token",
-            "LOCAL_LLM_ENABLED": "true",
-            "LOCAL_LLM_BASE_URL": "http://llama-cpp:8080",
-            "LOCAL_LLM_MODEL": "gemma4-e2b-q4",
-            "LOCAL_LLM_TIMEOUT_SECONDS": "45",
-            "LOCAL_LLM_MAX_REFINES": "2",
             "HYBRID_AI_MODE": "shadow",
+            "OPENAI_API_KEY": "sk-test",
+            "OPENAI_MODEL": "test-model",
+            "OPENAI_TIMEOUT_SECONDS": "45",
+            "OPENAI_MAX_REFINES": "2",
         },
         project_root=tmp_path,
     )
 
-    assert settings.local_llm_enabled is True
-    assert settings.local_llm_base_url == "http://llama-cpp:8080"
-    assert settings.local_llm_model == "gemma4-e2b-q4"
-    assert settings.local_llm_timeout_seconds == 45
-    assert settings.local_llm_max_refines == 2
     assert settings.hybrid_ai_mode == "shadow"
+    assert settings.openai_api_key == "sk-test"
+    assert settings.openai_model == "test-model"
+    assert settings.openai_timeout_seconds == 45
+    assert settings.openai_max_refines == 2
+
+
+def test_load_settings_requires_openai_key_when_ai_mode_enabled(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="OPENAI_API_KEY is required"):
+        load_settings(
+            env={
+                "TELEGRAM_BOT_TOKEN": "token",
+                "HYBRID_AI_MODE": "shadow",
+            },
+            project_root=tmp_path,
+        )
 
 
 def test_load_settings_reads_search_cache_ttl(tmp_path: Path) -> None:

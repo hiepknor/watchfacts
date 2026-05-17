@@ -25,7 +25,7 @@ Architecture Decision Records live in [decisions/](decisions/):
 | [ADR-002](decisions/002-authenticated-browser-session.md) | Use manual login and saved browser state for WatchFacts authentication |
 | [ADR-003](decisions/003-sqlite-local-cache.md) | Use SQLite for local cache, dedupe, and query history |
 | [ADR-004](decisions/004-docker-compose-runtime.md) | Use Docker Compose and Makefile as the primary runtime wrapper |
-| [ADR-005](decisions/005-controlled-hybrid-ai-refinement.md) | Use controlled hybrid AI for result refinement |
+| [ADR-005](decisions/005-controlled-hybrid-ai-refinement.md) | Use OpenAI controlled AI for result refinement |
 
 ## Agent Usage
 
@@ -36,6 +36,7 @@ Agents should read documents selectively:
 - For crawler changes: read `technical-spec.md`, `security-compliance.md`, and ADR-002.
 - For matching/parser changes: read `technical-spec.md` and ADR-001.
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.
+- For OpenAI controlled refinement: read `roadmap.md` Milestone 7, `implementation-plan.md` Phase 7, `technical-spec.md`, `security-compliance.md`, and ADR-005.
 - For commits: follow `AGENT.md` and the workflow in `contributing.md`.
 
 Do not load every document into context by default. Load the smallest set that applies to the task.

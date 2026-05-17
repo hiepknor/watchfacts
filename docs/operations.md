@@ -108,61 +108,40 @@ Status:
 make ps
 ```
 
-## Local LLM Experiment
+## OpenAI Controlled Intelligence
 
-This branch includes an optional llama.cpp service for testing a local Gemma GGUF
-model. The bot does not call the model by default; `LOCAL_LLM_ENABLED=false`
-keeps production matching deterministic.
+The bot remains deterministic by default. OpenAI-assisted refinement is an
+optional controlled layer for suspicious, reported, or hard-to-scope results.
+Normal search must continue to work when OpenAI is disabled,
+unavailable, slow, or uncertain.
 
-Place the GGUF file outside git, for example:
-
-```bash
-mkdir -p models
-# put Gemma4 E2B GGUF here, matching LLAMA_CPP_MODEL_FILE in .env
-```
-
-Set or adjust these `.env` values:
+`.env` values:
 
 ```bash
-LOCAL_LLM_ENABLED=true
-LOCAL_LLM_BASE_URL=http://llama-cpp:8080
-LOCAL_LLM_MODEL=gemma-4-e2b-Q4_K_M.gguf
-LOCAL_LLM_TIMEOUT_SECONDS=8
-LOCAL_LLM_MAX_REFINES=3
-HYBRID_AI_MODE=shadow
-LLAMA_CPP_MODELS_DIR=./models
-LLAMA_CPP_MODEL_FILE=gemma-4-e2b-Q4_K_M.gguf
+HYBRID_AI_MODE=off
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5-mini
+OPENAI_TIMEOUT_SECONDS=12
+OPENAI_MAX_REFINES=3
 ```
 
-`HYBRID_AI_MODE=shadow` records AI suggestions for review without changing
-Telegram output. Keep `HYBRID_AI_MODE=off` for fully deterministic behavior.
-Use `guarded` only after reviewed fixtures prove the pattern is safe.
+Mode guidance:
 
-Start only the local LLM service:
+- `off`: deterministic-only production behavior.
+- `shadow`: call OpenAI for eligible snippets and record suggestions without changing Telegram output.
+- `review`: show OpenAI suggestions only in owner review flows.
+- `guarded`: apply suggestions only after strict local validation gates pass.
 
-```bash
-make llm-up
-```
+Operational rules:
 
-Run a smoke request against the OpenAI-compatible chat endpoint:
+- Store `OPENAI_API_KEY` only in `.env` or the deployment secret store.
+- Do not paste the key into Telegram, logs, issue exports, prompts, or docs.
+- Rotate the key if it appears in logs or chat history.
+- Keep OpenAI timeouts short enough that Telegram users still receive deterministic fallback promptly.
+- Track suggestion accept/reject counts before considering `guarded`.
 
-```bash
-make llm-smoke
-```
-
-`make llm-smoke` runs from the host and uses `http://localhost:8080` unless
-`LOCAL_LLM_SMOKE_BASE_URL` is set. The bot container should use
-`LOCAL_LLM_BASE_URL=http://llama-cpp:8080`.
-
-Inspect or stop it:
-
-```bash
-make llm-logs
-make llm-down
-```
-
-The Compose service uses the official llama.cpp server image and mounts
-`LLAMA_CPP_MODELS_DIR` read-only at `/models`. Do not commit model files.
+The older local model experiment has been removed from the supported runtime.
+Do not add new production behavior that depends on local model files.
 
 ## Logs
 

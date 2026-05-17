@@ -1,19 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
 import time
-from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.config import load_settings
-from app.llm_matcher import (
-    _settings_complete,
+from app.ai_refiner import (
     deterministic_refine_listing_text,
-    refine_listing_text,
 )
 from app.matcher import extract_relevant_listing_text
 
@@ -88,43 +83,20 @@ def _case_passed(case: dict[str, object], refined: str) -> bool:
     )
 
 
-async def main() -> int:
+def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark hard WatchFacts text cases.")
-    parser.add_argument("--llm", action="store_true", help="Run through local LLM refinement.")
-    parser.add_argument("--base-url", default="http://localhost:8080")
-    parser.add_argument("--model", default="gemma-4-e2b-Q4_K_M.gguf")
-    parser.add_argument("--timeout", type=int, default=15)
     args = parser.parse_args()
-
-    complete = None
-    if args.llm:
-        settings = replace(
-            load_settings(),
-            local_llm_enabled=True,
-            local_llm_base_url=args.base_url,
-            local_llm_model=args.model,
-            local_llm_timeout_seconds=args.timeout,
-        )
-        complete = _settings_complete(settings)
 
     passed = 0
     total_start = time.perf_counter()
-    mode = "llm" if args.llm else "deterministic"
-    print(f"mode={mode} cases={len(CASES)}")
+    print(f"mode=deterministic cases={len(CASES)}")
     for case in CASES:
         start = time.perf_counter()
         extracted = extract_relevant_listing_text(str(case["query"]), str(case["text"]))
-        if complete is None:
-            refined = deterministic_refine_listing_text(
-                str(case["query"]),
-                extracted,
-            )
-        else:
-            refined = await refine_listing_text(
-                str(case["query"]),
-                extracted,
-                complete=complete,
-            )
+        refined = deterministic_refine_listing_text(
+            str(case["query"]),
+            extracted,
+        )
         elapsed = time.perf_counter() - start
         ok = _case_passed(case, refined)
         passed += int(ok)
@@ -136,4 +108,4 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
+    raise SystemExit(main())

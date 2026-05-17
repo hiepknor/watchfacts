@@ -23,7 +23,7 @@ Current matcher/parser quality improves only when the operator manually notices 
 - Provide owner commands to list, inspect, and export issue cases.
 - Convert reviewed issue cases into deterministic tests or benchmark fixtures.
 - Keep production behavior deterministic and auditable.
-- Support a controlled hybrid path where AI can suggest corrections for review or guarded refinement without becoming an uncontrolled source of truth.
+- Support a controlled OpenAI path where AI can suggest corrections for review or guarded refinement without becoming an uncontrolled source of truth.
 
 ## Non-Goals
 
@@ -33,6 +33,7 @@ Current matcher/parser quality improves only when the operator manually notices 
 - No public feedback controls for unauthorized users.
 - No LLM-only correction path as the first implementation.
 - No AI-generated correction should bypass query/reference validation, confidence gates, or regression coverage.
+- No local LLM or llama.cpp runtime path in the supported production architecture.
 
 ## User Roles
 
@@ -261,20 +262,22 @@ Example fixture shape:
 - Owner commands must be restricted by `TELEGRAM_ALLOWED_USER_IDS`.
 - Owner commands must not reveal secrets.
 
-## Controlled Hybrid Intelligence
+## OpenAI Controlled Intelligence
 
-The long-term improvement direction is a controlled hybrid system: deterministic matcher/parser first, AI only as a second-opinion/refiner for cases that are already suspicious, reported, or hard to scope.
+The long-term improvement direction is a controlled OpenAI system: deterministic matcher/parser first, OpenAI only as a second-opinion/refiner for cases that are already suspicious, reported, or hard to scope.
 
 This is not autonomous learning. The bot should not rewrite code, deploy changes, or blindly trust an AI response. AI suggestions are evidence that must pass guards and become tests.
+
+Local LLM/llama.cpp support is intentionally out of scope for the supported runtime. Keeping one AI provider reduces deployment complexity, avoids local model memory/CPU requirements, and makes validation, metrics, and operator documentation clearer.
 
 ### Operating Modes
 
 | Mode | Behavior | User-facing impact |
 | --- | --- | --- |
 | `off` | No AI refinement or suggestions | Deterministic behavior only |
-| `shadow` | AI proposes alternative extraction for suspicious cases; bot records diff | No Telegram output changes |
-| `review` | AI suggestions appear in owner issue review/digest | Owner can approve/ignore |
-| `guarded` | AI correction can be used only when strict confidence gates pass | Limited user-facing correction |
+| `shadow` | OpenAI proposes alternative extraction for suspicious cases; bot records diff | No Telegram output changes |
+| `review` | OpenAI suggestions appear in owner issue review/digest | Owner can approve/ignore |
+| `guarded` | OpenAI correction can be used only when strict confidence gates pass | Limited user-facing correction |
 
 Initial rollout should use `shadow`, then `review`. `guarded` requires enough reviewed fixtures and production evidence.
 
@@ -312,7 +315,7 @@ Recommended workflow:
 
 1. Deterministic search runs as usual.
 2. Suspicious detector flags risky results.
-3. AI refiner runs only on flagged snippets when enabled.
+3. OpenAI refiner runs only on flagged snippets when enabled.
 4. Bot records `deterministic_text` vs `suggested_text`.
 5. Owner reviews grouped suggestions in a digest or issue command.
 6. Maintainer converts approved suggestions into regression tests.
@@ -325,13 +328,13 @@ Recommended workflow:
 - Lower false-positive rate in `suspicious_results`.
 - More regression tests generated per owner review session.
 - Fewer repeated reports for the same extraction pattern.
-- AI suggestions accepted by owner at a high enough rate to justify the added complexity.
+- OpenAI suggestions accepted by owner at a high enough rate to justify the added complexity.
 
 ### Safety Requirements
 
-- AI must be optional and disabled by default.
-- Search must still work when AI is unavailable or times out.
-- AI timeout must be short enough not to block normal Telegram UX.
+- OpenAI must be optional and disabled by default.
+- Search must still work when OpenAI is unavailable or times out.
+- OpenAI timeout must be short enough not to block normal Telegram UX.
 - Every AI-assisted user-facing correction must be explainable from raw listing text.
 - Reviewed AI suggestions should strengthen deterministic tests rather than replace them.
 - The bot must continue sending search results even if feedback storage fails; storage failures should be logged safely.
@@ -376,6 +379,14 @@ Recommended workflow:
 - Add export format for test fixtures.
 - Add docs for converting issue exports to tests.
 - Optionally add a script to generate draft test cases from exported JSON.
+
+### Phase E: OpenAI Controlled Refinement
+
+- Remove the local LLM/llama.cpp runtime surface.
+- Add OpenAI configuration and a stub-testable refiner provider.
+- Use structured output and local validation gates for every suggestion.
+- Record shadow suggestions and review artifacts in SQLite.
+- Enable guarded output only for validated, well-tested cases.
 
 ## Acceptance Criteria
 

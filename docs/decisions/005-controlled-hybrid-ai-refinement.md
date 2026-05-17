@@ -1,4 +1,4 @@
-# ADR-005: Use Controlled Hybrid AI For Result Refinement
+# ADR-005: Use OpenAI Controlled AI For Result Refinement
 
 ## Status
 
@@ -18,17 +18,19 @@ The operator wants the bot to become smarter over time without requiring constan
 - The bot must not invent listing details.
 - Feedback should not trigger autonomous code changes or deploys.
 - Secrets, cookies, browser state, and full page HTML must not be sent to or stored by AI systems.
+- The production runtime should not depend on local model files, llama.cpp, or machine-specific CPU/RAM capacity.
 
 ## Decision
 
-Use a controlled hybrid approach:
+Use a controlled OpenAI approach:
 
 1. Deterministic parser/matcher remains the default source of truth.
-2. AI may be added as a second-opinion/refiner only for suspicious, reported, or hard-to-scope cases.
+2. OpenAI may be added as a second-opinion/refiner only for suspicious, reported, or hard-to-scope cases.
 3. Initial rollout must be shadow mode: AI suggestions are recorded for comparison and review, not shown to users.
 4. Owner review mode may expose AI suggestions in issue review/digests.
 5. Guarded user-facing AI correction is allowed only after confidence gates, production evidence, and regression tests exist.
 6. Every accepted AI suggestion should become a deterministic regression fixture where practical.
+7. Local LLM/llama.cpp runtime support should be removed from the supported production path.
 
 ## Required Guards
 
@@ -77,14 +79,31 @@ Cons:
 
 Rejected because correctness and auditability are more important than broad language flexibility.
 
-### Controlled Hybrid
+### Keep Local LLM/llama.cpp As Provider
+
+Pros:
+
+- No external API dependency.
+- Can run fully self-hosted when the host has enough resources.
+
+Cons:
+
+- Requires model files, extra Compose service, memory/CPU sizing, and local smoke tests.
+- Quality and latency depend heavily on the operator machine.
+- Adds a second provider path to prompts, config, docs, tests, and incident debugging.
+- Does not simplify the bot's core risk: suggestions still need strict validation.
+
+Rejected for the supported runtime because a single OpenAI provider is simpler to operate and test.
+
+### Controlled OpenAI
 
 Pros:
 
 - Keeps deterministic behavior as the baseline.
-- Lets AI accelerate triage, clustering, and candidate correction.
+- Lets OpenAI accelerate triage, clustering, and candidate correction.
 - Can start safely in shadow mode.
 - Converts accepted suggestions into tests and deterministic rules.
+- Avoids local model deployment and llama.cpp service maintenance.
 
 Cons:
 
@@ -97,7 +116,8 @@ Accepted because it improves long-term quality while preserving control.
 ## Consequences
 
 - Future AI work must include explicit runtime modes: `off`, `shadow`, `review`, and optionally `guarded`.
-- AI must be optional and disabled by default.
-- Search must still work when AI is unavailable.
+- OpenAI must be optional and disabled by default.
+- Search must still work when OpenAI is unavailable.
 - Owner/admin tooling should focus on issue clustering, review summaries, and regression fixture generation.
 - The team should prefer deterministic matcher improvements whenever an AI suggestion reveals a repeatable pattern.
+- Local LLM/llama.cpp docs, config, Makefile targets, Compose service, and smoke scripts should be removed as part of the OpenAI migration.

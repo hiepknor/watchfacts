@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-
-from dataclasses import replace
+import json
+import urllib.request
 
 from app.config import Settings
 from app.db import Database
-from app.llm_matcher import (
+from app.ai_refiner import (
     deterministic_refine_listing_text,
     evaluate_refinement_suggestion,
     refine_search_results,
@@ -130,6 +130,100 @@ def test_refine_listing_text_rejects_non_substring_output() -> None:
     assert refined == raw_text
 
 
+def test_refine_listing_text_rejects_low_confidence_output() -> None:
+    raw_text = "FPJ Elegante Titanium 48mm 2019 fullset 780000 hkd"
+
+    async def complete(_: str) -> str:
+        return (
+            '{"relevant": true, "index": 1, '
+            '"selected_text": "FPJ Elegante Titanium 48mm 2019 fullset 780000 hkd", '
+            '"confidence": 0.2, "reasons": ["weak"], "risk_flags": []}'
+        )
+
+    refined = asyncio.run(
+        refine_listing_text(
+            "Fpj Elegante Titanium",
+            raw_text,
+            complete=complete,
+        )
+    )
+
+    assert refined == raw_text
+
+
+def test_refine_listing_text_rejects_risk_flags() -> None:
+    raw_text = "FPJ Elegante Titanium 48mm 2019 fullset 780000 hkd"
+
+    async def complete(_: str) -> str:
+        return (
+            '{"relevant": true, "index": 1, '
+            '"selected_text": "FPJ Elegante Titanium 48mm 2019 fullset 780000 hkd", '
+            '"confidence": 0.9, "reasons": ["match"], "risk_flags": ["cross_item"]}'
+        )
+
+    refined = asyncio.run(
+        refine_listing_text(
+            "Fpj Elegante Titanium",
+            raw_text,
+            complete=complete,
+        )
+    )
+
+    assert refined == raw_text
+
+
+def test_refine_listing_text_rejects_cross_item_separator() -> None:
+    raw_text = (
+        "FPJ Elegante Titanium - [ ] "
+        "FPJ Elegante Titanium Rolex Daytona"
+    )
+
+    async def complete(_: str) -> str:
+            return (
+                '{"relevant": true, "index": 0, '
+                '"selected_text": "FPJ Elegante Titanium - [ ] FPJ Elegante Titanium Rolex Daytona", '
+                '"confidence": 0.9, "reasons": ["match"], "risk_flags": []}'
+            )
+
+    refined = asyncio.run(
+        refine_listing_text(
+            "Fpj Elegante Titanium",
+            raw_text,
+            complete=complete,
+        )
+    )
+
+    assert refined == "FPJ Elegante Titanium"
+
+
+def test_refine_listing_text_rejects_overlong_output() -> None:
+    fallback_text = "FPJ Elegante Titanium base"
+    long_text = "FPJ Elegante Titanium " + ("detail " * 220)
+    raw_text = f"{fallback_text} - [ ] {long_text}"
+
+    async def complete(_: str) -> str:
+        return json.dumps(
+            {
+                "relevant": True,
+                "index": 0,
+                "selected_text": long_text,
+                "confidence": 0.9,
+                "reasons": ["match"],
+                "risk_flags": [],
+            }
+        )
+
+    refined = asyncio.run(
+        refine_listing_text(
+            "Fpj Elegante Titanium",
+            raw_text,
+            complete=complete,
+        )
+    )
+
+    assert refined == fallback_text
+
+
 def test_refine_listing_text_falls_back_on_invalid_json() -> None:
     raw_text = "FPJ Elegante titanium ti 48mm"
 
@@ -200,6 +294,29 @@ def test_evaluate_refinement_suggestion_rejects_invented_or_mismatched_text() ->
     assert "not_raw_substring" in gate.reasons
 
 
+def test_evaluate_refinement_suggestion_rejects_cross_item_or_overlong_text() -> None:
+    raw_text = (
+        "FPJ Elegante Titanium 48mm 2019 fullset 780000 hkd - [ ] "
+        f"FPJ Elegante Titanium {'detail ' * 220}"
+    )
+    separator_gate = evaluate_refinement_suggestion(
+        "Fpj Elegante Titanium",
+        SearchResult(raw_text, raw_listing_text=raw_text),
+        SearchResult("FPJ Elegante Titanium 48mm 2019 fullset 780000 hkd - [ ] Rolex"),
+    )
+    long_text = "FPJ Elegante Titanium " + ("detail " * 220)
+    length_gate = evaluate_refinement_suggestion(
+        "Fpj Elegante Titanium",
+        SearchResult(raw_text, raw_listing_text=raw_text),
+        SearchResult(long_text),
+    )
+
+    assert separator_gate.status == "rejected"
+    assert "crosses_item_separator" in separator_gate.reasons
+    assert length_gate.status == "rejected"
+    assert "exceeds_length" in length_gate.reasons
+
+
 def test_refine_search_results_uses_database_cache(tmp_path) -> None:
     settings = Settings(
         telegram_bot_token="token",
@@ -213,7 +330,9 @@ def test_refine_search_results_uses_database_cache(tmp_path) -> None:
         logs_dir=tmp_path / "logs",
         db_path=tmp_path / "data" / "bot.db",
         browser_state_path=tmp_path / "data" / "watchfacts_state.json",
-        local_llm_enabled=True,
+        hybrid_ai_mode="shadow",
+        openai_api_key="sk-test",
+        openai_model="test-model",
     )
     database = Database(settings.db_path)
     result = SearchResult(
@@ -222,7 +341,7 @@ def test_refine_search_results_uses_database_cache(tmp_path) -> None:
     database.record_llm_refinement(
         "Fpj Elegante Titanium",
         result.listing_text,
-        settings.local_llm_model,
+        settings.openai_model,
         "FPJ Elegante Titanium",
     )
 
@@ -230,9 +349,39 @@ def test_refine_search_results_uses_database_cache(tmp_path) -> None:
         refine_search_results(
             "Fpj Elegante Titanium",
             [result],
-            replace(settings, local_llm_max_refines=1),
+            settings,
             database=database,
         )
     )
 
     assert refined == [SearchResult("FPJ Elegante Titanium")]
+
+
+def test_refine_search_results_falls_back_on_openai_timeout(tmp_path, monkeypatch) -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
+        telegram_result_limit=5,
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+        headless=True,
+        enable_crawl4ai=True,
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+        db_path=tmp_path / "data" / "bot.db",
+        browser_state_path=tmp_path / "data" / "watchfacts_state.json",
+        hybrid_ai_mode="shadow",
+        openai_api_key="sk-test",
+        openai_model="test-model",
+        openai_timeout_seconds=1,
+    )
+    result = SearchResult("FPJ Elegante titanium 48mm 2019 fullset HKD785K tudor")
+
+    def fail_timeout(*args, **kwargs):
+        raise TimeoutError
+
+    monkeypatch.setattr(urllib.request, "urlopen", fail_timeout)
+
+    refined = asyncio.run(refine_search_results("Fpj Elegante Titanium", [result], settings))
+
+    assert refined == [SearchResult("FPJ Elegante titanium 48mm 2019 fullset HKD785K")]
