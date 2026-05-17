@@ -107,6 +107,15 @@ def test_detect_suspicious_result_flags_missing_price_evidence() -> None:
     assert [issue.reason for issue in issues] == ["missing_price_evidence"]
 
 
+def test_detect_suspicious_result_does_not_treat_reference_as_plain_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="116500 panda Daytona 2017 full link retail ready",
+        raw_listing_text="116500 panda Daytona 2017 full link retail ready",
+    )
+
+    assert [issue.reason for issue in issues] == ["missing_price_evidence"]
+
+
 def test_detect_suspicious_result_ignores_tilde_joined_currency_prices() -> None:
     issues = detect_suspicious_result(
         listing_text="7118/1200R White 2021 1.210.000 HKD~155.200 USD"
