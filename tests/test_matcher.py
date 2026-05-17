@@ -412,6 +412,14 @@ def test_extract_relevant_listing_text_keeps_plain_price_before_label_note() -> 
     )
 
 
+def test_extract_relevant_listing_text_keeps_price_prefix_before_reference() -> None:
+    listing_text = "4️⃣1️⃣k + 🚢 5205R blac d1al, 2015 pap3rs no b0x, reta1l r3ady"
+
+    assert extract_relevant_listing_text("5205r", listing_text) == (
+        "4️⃣1️⃣k + 🚢 5205R blac d1al, 2015 pap3rs no b0x, reta1l r3ady"
+    )
+
+
 def test_listing_matches_ignores_looking_for_request() -> None:
     assert not listing_matches("228235a choco", "Lookingfor 228235A choco new 2026")
 

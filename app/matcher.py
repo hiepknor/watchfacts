@@ -434,25 +434,52 @@ def _matching_segment_start(
     normalized_tokens: list[str],
     reference_start_index: int,
 ) -> int:
+    keycap_price_start = _keycap_price_prefix_start(normalized_tokens, reference_start_index)
+    if keycap_price_start is not None:
+        return token_matches[keycap_price_start].start()
+
     start_index = reference_start_index
     for index in range(reference_start_index - 1, -1, -1):
         if reference_start_index - index > LOCAL_PREFIX_WINDOW:
             break
 
-        if _has_item_separator_between(
+        token = normalized_tokens[index]
+        separator_between = _has_item_separator_between(
             listing_text,
             token_matches[index].end(),
             token_matches[index + 1].start(),
-        ):
+        )
+        if separator_between and not _separator_keeps_prefix_detail(token):
             break
 
-        token = normalized_tokens[index]
         next_token = normalized_tokens[index + 1] if index + 1 < len(normalized_tokens) else ""
         previous_token = normalized_tokens[index - 1] if index > 0 else ""
         if _looks_like_previous_product_boundary(token, next_token, previous_token):
             break
         start_index = index
     return token_matches[start_index].start()
+
+
+def _keycap_price_prefix_start(
+    normalized_tokens: list[str],
+    reference_start_index: int,
+) -> int | None:
+    price_suffix_index = reference_start_index - 1
+    if price_suffix_index < 1:
+        return None
+    if normalized_tokens[price_suffix_index] not in {"k", "m"}:
+        return None
+
+    start_index = price_suffix_index - 1
+    while start_index >= 0 and normalized_tokens[start_index].isdigit():
+        start_index -= 1
+    start_index += 1
+
+    if price_suffix_index - start_index < 1:
+        return None
+    if price_suffix_index - start_index > 3:
+        return None
+    return start_index
 
 
 def _matching_segment_end(
@@ -544,6 +571,8 @@ def _looks_like_product_reference_boundary(
     if not _looks_like_model_or_price_token(normalized_token):
         return False
     if _looks_like_ordinal_detail_token(normalized_token):
+        return False
+    if _looks_like_leetspeak_detail_token(normalized_token):
         return False
     if token_start > 0 and listing_text[token_start - 1] in CURRENCY_PREFIX_CHARS:
         return False
@@ -703,6 +732,10 @@ def _trim_trailing_section_marker(listing_text: str, end: int) -> int:
     return end
 
 
+def _separator_keeps_prefix_detail(token: str) -> bool:
+    return _looks_like_price_context_token(token)
+
+
 def _separator_keeps_continuation_detail(
     token: str,
     previous_token: str,
@@ -776,6 +809,10 @@ def _looks_like_descriptor_number_token(token: str, next_token: str) -> bool:
 
 def _looks_like_ordinal_detail_token(token: str) -> bool:
     return bool(re.fullmatch(r"\d{1,3}(?:st|nd|rd|th)", token))
+
+
+def _looks_like_leetspeak_detail_token(token: str) -> bool:
+    return token in {"b0x", "d1al", "pap3rs", "r3ady", "reta1l"}
 
 
 def _looks_like_hyphenated_descriptor_number(token: str) -> bool:

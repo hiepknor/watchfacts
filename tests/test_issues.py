@@ -89,6 +89,18 @@ def test_detect_suspicious_result_ignores_keycap_digit_currency_price() -> None:
     assert issues == []
 
 
+def test_detect_suspicious_result_ignores_keycap_shorthand_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="Ref# 5205R-011 Comes box and papers 2023 Yours for 5️⃣3️⃣,5️⃣ shipped",
+        raw_listing_text=(
+            "PP Annual Calendar Green Ref# 5205R-011 Comes box and papers "
+            "2023 Yours for 5️⃣3️⃣,5️⃣ shipped"
+        ),
+    )
+
+    assert issues == []
+
+
 def test_detect_suspicious_result_ignores_duplicated_currency_prefix() -> None:
     issues = detect_suspicious_result(
         listing_text="5726/1A N11/25 Like new HKDHKD1.06m",
