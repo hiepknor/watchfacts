@@ -87,7 +87,10 @@ def listing_matches(query: str, listing_text: str) -> bool:
     listing_tokens = set(listing_token_list)
     compact_listing = _compact_text(normalized_listing)
 
-    if not all(token in listing_tokens for token in descriptor_tokens):
+    if not all(
+        _descriptor_exists_in_listing(token, listing_token_list)
+        for token in descriptor_tokens
+    ):
         return False
 
     if not all(
@@ -141,10 +144,9 @@ def extract_relevant_listing_text(query: str, listing_text: str) -> str:
             reference_index = index + match_length - 1
             if fallback is None:
                 fallback = (index, reference_index)
-            if descriptor_tokens and not all(
-                descriptor
-                in _local_descriptor_tokens(normalized_tokens, reference_index)
-                for descriptor in descriptor_tokens
+            if descriptor_tokens and not _descriptors_match_local_tokens(
+                descriptor_tokens,
+                _local_descriptor_tokens(normalized_tokens, reference_index),
             ):
                 continue
 
@@ -296,7 +298,7 @@ def _reference_has_local_descriptors(
                 index + match_length - 1,
             )
         )
-        if all(descriptor in local_tokens for descriptor in descriptor_tokens):
+        if _descriptors_match_local_tokens(descriptor_tokens, local_tokens):
             return True
 
     if found_reference:
@@ -304,9 +306,48 @@ def _reference_has_local_descriptors(
 
     compact_reference = _compact_text("".join(reference_term))
     if compact_reference in _compact_text("".join(listing_tokens)):
-        return all(descriptor in listing_tokens for descriptor in descriptor_tokens)
+        return all(
+            _descriptor_exists_in_listing(descriptor, listing_tokens)
+            for descriptor in descriptor_tokens
+        )
 
     return False
+
+
+def _descriptors_match_local_tokens(
+    descriptor_tokens: list[str],
+    local_tokens: Iterable[str],
+) -> bool:
+    local_token_list = list(local_tokens)
+    return all(
+        _descriptor_exists_in_listing(descriptor, local_token_list)
+        for descriptor in descriptor_tokens
+    )
+
+
+def _descriptor_exists_in_listing(descriptor: str, listing_tokens: Iterable[str]) -> bool:
+    return any(
+        _descriptor_token_matches(descriptor, listing_token)
+        for listing_token in listing_tokens
+    )
+
+
+def _descriptor_token_matches(descriptor: str, listing_token: str) -> bool:
+    if descriptor == listing_token:
+        return True
+    if not _looks_like_year_token(descriptor):
+        return False
+    return _date_or_condition_token_contains_year(listing_token, descriptor)
+
+
+def _date_or_condition_token_contains_year(token: str, year: str) -> bool:
+    if not _looks_like_date_or_condition_token(token):
+        return False
+    return bool(
+        token.startswith(year)
+        or token.endswith(year)
+        or re.search(rf"(?:[./-]|n){re.escape(year)}(?:$|[a-z./-])", token)
+    )
 
 
 def _find_reference_term_index(

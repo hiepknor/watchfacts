@@ -87,6 +87,20 @@ class WatchFactsSearchWorkflow:
         scrape_result = await self.fetch_html(self.settings, query=query)
         parsed = parse_listings(scrape_result.html)
         matched = parsed if scrape_result.server_filtered else filter_matching_listings(query, parsed)
+        parsed_count = len(parsed)
+        if _should_expand_year_query(query, len(matched)):
+            expanded_query = _query_without_year_descriptors(query)
+            if expanded_query is not None:
+                expanded_scrape_result = await self.fetch_html(
+                    self.settings,
+                    query=expanded_query,
+                )
+                expanded_parsed = parse_listings(expanded_scrape_result.html)
+                parsed_count += len(expanded_parsed)
+                matched = _merge_listing_candidates(
+                    matched,
+                    filter_matching_listings(query, expanded_parsed),
+                )
         results = [_to_search_result(query, listing) for listing in matched]
         unique = unique_latest_listings(results)
         if self.refine_results is not None and self.settings.hybrid_ai_mode != "off":
@@ -99,7 +113,7 @@ class WatchFactsSearchWorkflow:
         self._record_cached_results(cache_key, query, unique)
         logger.info(
             "event=query.end parsed_count=%d matched_count=%d result_count=%d",
-            len(parsed),
+            parsed_count,
             len(matched),
             len(unique),
         )
@@ -276,6 +290,50 @@ def _looks_like_product_reference(token: str) -> bool:
     if len(normalized) < 4 and "/" not in normalized:
         return False
     return True
+
+
+def _should_expand_year_query(query: str, matched_count: int) -> bool:
+    return matched_count < 5 and _query_without_year_descriptors(query) is not None
+
+
+def _query_without_year_descriptors(query: str) -> str | None:
+    parts = query.split()
+    filtered = [part for part in parts if not _is_year_descriptor(part)]
+    if len(filtered) == len(parts) or not filtered:
+        return None
+    return " ".join(filtered)
+
+
+def _is_year_descriptor(value: str) -> bool:
+    normalized = normalize_text(value)
+    if not re.fullmatch(r"\d{4}", normalized):
+        return False
+    year = int(normalized)
+    return 1900 <= year <= 2099
+
+
+def _merge_listing_candidates(
+    primary: list[ListingCandidate],
+    extra: list[ListingCandidate],
+) -> list[ListingCandidate]:
+    seen = {_listing_candidate_key(listing) for listing in primary}
+    merged = list(primary)
+    for listing in extra:
+        key = _listing_candidate_key(listing)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(listing)
+    return merged
+
+
+def _listing_candidate_key(listing: ListingCandidate) -> tuple[str, str, str, str]:
+    return (
+        normalize_text(listing.listing_text),
+        normalize_text(listing.seller or ""),
+        normalize_text(listing.posted_date or ""),
+        listing.source_url or "",
+    )
 
 
 def _search_cache_key(query: str, settings: Settings) -> str:

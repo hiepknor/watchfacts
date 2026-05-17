@@ -218,6 +218,61 @@ def test_search_workflow_keeps_server_filtered_results_without_strict_refilter(t
     assert results[0].source_url == "/flash-sales/40881"
 
 
+def test_search_workflow_expands_sparse_year_query_and_refilters_locally(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        if query == "126500ln white 2026":
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "Rolex 126500ln white 2026 n1 HKD 273000",
+                  "companyName": "AP",
+                  "repostedAt": "2026-03-08 10:00:00",
+                  "number": 1
+                }
+              ]
+            }
+            """
+        else:
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "126500LN White N3/2026 HK$279000 without box",
+                  "companyName": "Dealer A",
+                  "repostedAt": "2026-03-03 10:00:00",
+                  "number": 2
+                },
+                {
+                  "title": "126500LN Black N3/2026 HK$236000",
+                  "companyName": "Dealer B",
+                  "repostedAt": "2026-03-03 10:00:00",
+                  "number": 3
+                }
+              ]
+            }
+            """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("126500ln white 2026"))
+
+    assert fetch_queries == ["126500ln white 2026", "126500ln white"]
+    assert [result.listing_text for result in results] == [
+        "Rolex 126500ln white 2026 n1 HKD 273000",
+        "126500LN White N3/2026 HK$279000 without box",
+    ]
+
+
 def test_search_workflow_omits_bundle_images_for_multi_listing_cards(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """

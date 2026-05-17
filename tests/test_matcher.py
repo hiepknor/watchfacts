@@ -869,6 +869,32 @@ def test_extract_relevant_listing_text_stops_before_numbered_next_item_after_hkd
     )
 
 
+def test_year_descriptor_matches_compact_month_year_condition_tokens() -> None:
+    assert listing_matches(
+        "126500ln white 2026",
+        "126500LN White N3/2026 ⭐️( HK$279,000 / USD35,950 ) without box",
+    )
+    assert listing_matches(
+        "126500ln white 2026",
+        "126500ln white N3-2026 HK$ 274,000 without box Ready In HK",
+    )
+    assert listing_matches(
+        "126500ln white 2026",
+        "126500LN White 2026y HKD 279000",
+    )
+
+
+def test_extract_relevant_listing_text_uses_compact_month_year_as_year_descriptor() -> None:
+    listing_text = (
+        "126500LN Black N2/2026 ⭐️( HK$235,000 / USD30,280 ) "
+        "126500LN White N3/2026 ⭐️( HK$279,000 / USD35,950 ) without box"
+    )
+
+    assert extract_relevant_listing_text("126500ln white 2026", listing_text) == (
+        "126500LN White N3/2026 ⭐️( HK$279,000 / USD35,950 ) without box"
+    )
+
+
 def test_filter_matching_listings_preserves_original_order() -> None:
     listings = [
         Listing("Rolex 228253A silver dial"),
