@@ -78,13 +78,17 @@ def tokenize_query(query: str) -> list[str]:
     return normalize_text(query).split()
 
 
+def is_non_sale_request(listing_text: str) -> bool:
+    return _looks_like_non_sale_request(normalize_text(listing_text))
+
+
 def listing_matches(query: str, listing_text: str) -> bool:
     reference_terms, descriptor_tokens = _parse_query_terms(query)
     if not reference_terms and not descriptor_tokens:
         return False
 
     normalized_listing = normalize_text(listing_text)
-    if _looks_like_non_sale_request(normalized_listing):
+    if is_non_sale_request(listing_text):
         return False
     listing_token_list = normalized_listing.split()
     listing_tokens = set(listing_token_list)

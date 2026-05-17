@@ -71,6 +71,33 @@ def test_detect_suspicious_result_ignores_numeric_nfc_price() -> None:
     assert issues == []
 
 
+def test_detect_suspicious_result_ignores_bare_k_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="228235a Choco N3 470k",
+        raw_listing_text="228235a Choco N3 470k",
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_keycap_digit_currency_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5726/1A Yours for 1️⃣2️⃣4️⃣,9️⃣8️⃣5️⃣ USD + insured shipping",
+        raw_listing_text="5726/1A Yours for 1️⃣2️⃣4️⃣,9️⃣8️⃣5️⃣ USD + insured shipping",
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_duplicated_currency_prefix() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5726/1A N11/25 Like new HKDHKD1.06m",
+        raw_listing_text="5726/1A N11/25 Like new HKDHKD1.06m",
+    )
+
+    assert issues == []
+
+
 def test_detect_suspicious_result_flags_missing_price_evidence() -> None:
     issues = detect_suspicious_result(
         listing_text="26240BA new 2024",

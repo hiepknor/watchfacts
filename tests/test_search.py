@@ -218,6 +218,41 @@ def test_search_workflow_keeps_server_filtered_results_without_strict_refilter(t
     assert results[0].source_url == "/flash-sales/40881"
 
 
+def test_search_workflow_drops_server_filtered_non_sale_requests(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "Lookingfor 228235A choco new 2026",
+          "companyName": "Buyer",
+          "number": 111
+        },
+        {
+          "title": "228235A Choco New 3/26 $58,000 USD",
+          "companyName": "Seller",
+          "number": 222
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("228235a choco"))
+
+    assert [result.listing_text for result in results] == [
+        "228235A Choco New 3/26 $58,000 USD"
+    ]
+
+
 def test_search_workflow_expands_sparse_year_query_and_refilters_locally(tmp_path) -> None:
     settings = make_settings(tmp_path)
     fetch_queries: list[str | None] = []

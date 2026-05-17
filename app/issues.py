@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -84,7 +85,7 @@ def _has_price_before_trailing_marker(value: str) -> bool:
 
 
 def _has_price_evidence(value: str) -> bool:
-    normalized = value.casefold()
+    normalized = _price_scan_text(value)
     amount = r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m|u)?"
     currency = r"(?:hk|hkd|us|usd|usdt|eur|aed|chf)"
     return bool(
@@ -99,6 +100,7 @@ def _has_price_evidence(value: str) -> bool:
         or re.search(rf"\b{amount}\s*{currency}\s*[$💰💲]", normalized)
         or re.search(r"\b(?!19\d{2}\b|20\d{2}\b)\d{5,8}\b", normalized)
         or re.search(r"\b\d{3,4}\s*nfc\b", normalized)
+        or re.search(r"\b\d+(?:\.\d+)?[km]\b", normalized)
     )
 
 
@@ -123,6 +125,15 @@ def _missing_price_after_currency(listing_text: str, raw_text: str) -> bool:
         return False
     normalized_listing = listing_text.casefold()
     return any(price.casefold() not in normalized_listing for price in raw_prices)
+
+
+def _price_scan_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value).casefold()
+    normalized = "".join(
+        char for char in normalized if not unicodedata.category(char).startswith("M")
+    )
+    normalized = re.sub(r"\b(hkd|usd|usdt|eur|aed|chf)\1\b", r"\1", normalized)
+    return normalized
 
 
 def _missing_price_evidence(listing_text: str) -> bool:

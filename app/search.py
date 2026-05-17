@@ -14,7 +14,12 @@ from app.db import Database
 from app.dedupe import unique_latest_by_text, unique_latest_listings
 from app.issues import detect_suspicious_result
 from app.ai_refiner import evaluate_refinement_suggestion
-from app.matcher import extract_relevant_listing_text, filter_matching_listings, normalize_text
+from app.matcher import (
+    extract_relevant_listing_text,
+    filter_matching_listings,
+    is_non_sale_request,
+    normalize_text,
+)
 from app.parser import ListingCandidate, parse_listings
 from app.scraper import ScrapeResult, fetch_watchfacts_html
 from app.similarity import group_similar_results
@@ -86,7 +91,11 @@ class WatchFactsSearchWorkflow:
     async def _search_uncached(self, query: str, cache_key: str) -> list[SearchResult]:
         scrape_result = await self.fetch_html(self.settings, query=query)
         parsed = parse_listings(scrape_result.html)
-        matched = parsed if scrape_result.server_filtered else filter_matching_listings(query, parsed)
+        matched = (
+            [listing for listing in parsed if not is_non_sale_request(listing.listing_text)]
+            if scrape_result.server_filtered
+            else filter_matching_listings(query, parsed)
+        )
         parsed_count = len(parsed)
         if _should_expand_year_query(query, len(matched)):
             expanded_query = _query_without_year_descriptors(query)
