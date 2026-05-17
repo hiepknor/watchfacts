@@ -668,6 +668,75 @@ def test_search_workflow_records_shadow_ai_suggestions_without_changing_results(
     )
 
 
+def test_search_workflow_records_guarded_ai_suggestions_and_applies_safe_result(
+    tmp_path,
+) -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
+        telegram_result_limit=5,
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+        headless=True,
+        enable_crawl4ai=True,
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+        db_path=tmp_path / "data" / "bot.db",
+        browser_state_path=tmp_path / "data" / "watchfacts_state.json",
+        hybrid_ai_mode="guarded",
+        openai_api_key="sk-test",
+        openai_model="test-model",
+    )
+    html = """
+    {
+      "listings": [
+        {
+          "title": "FPJ quantieme perpetuel - [ ] FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd - [ ] FPJ Rose Gold CS",
+          "companyName": "Seller",
+          "number": 12
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    async def refine_results(_: str, results: list[SearchResult]) -> list[SearchResult]:
+        return [
+            SearchResult(
+                listing_text="FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd",
+                seller=result.seller,
+                posted_date=result.posted_date,
+                image_url=result.image_url,
+                source_url=result.source_url,
+                raw_listing_text=result.raw_listing_text,
+            )
+            for result in results
+        ]
+
+    database = Database(settings.db_path)
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=database,
+        fetch_html=fetch_html,
+        refine_results=refine_results,
+    )
+
+    results = asyncio.run(workflow.search("Fpj Elegante Titanium"))
+    suggestions = database.list_ai_refinement_suggestions()
+
+    assert results[0].listing_text == (
+        "FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd"
+    )
+    assert suggestions[0].mode == "guarded"
+    assert suggestions[0].gate_status == "accepted"
+
+
 def test_search_workflow_final_dedupe_keeps_newest_when_text_matches_across_sellers(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """

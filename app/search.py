@@ -190,6 +190,16 @@ class WatchFactsSearchWorkflow:
         guarded: list[SearchResult] = []
         for original, suggested in zip(results, refined):
             gate = evaluate_refinement_suggestion(query, original, suggested)
+            if suggested.listing_text != original.listing_text:
+                self._record_ai_refinement_suggestion(
+                    query,
+                    len(guarded) + 1,
+                    original,
+                    suggested,
+                    mode=mode,
+                    gate=gate,
+                    latency_ms=latency_ms,
+                )
             guarded.append(suggested if gate.status == "accepted" else original)
         guarded.extend(results[len(guarded) :])
         return unique_latest_listings(guarded)
@@ -210,25 +220,46 @@ class WatchFactsSearchWorkflow:
             if suggested.listing_text == original.listing_text:
                 continue
             gate = evaluate_refinement_suggestion(query, original, suggested)
-            try:
-                self.database.record_ai_refinement_suggestion(
-                    query_text=query,
-                    result_rank=rank,
-                    mode=mode,
-                    model=self.settings.openai_model,
-                    deterministic_text=original.listing_text,
-                    suggested_text=suggested.listing_text,
-                    raw_listing_text=original.raw_listing_text,
-                    source_url=original.source_url,
-                    gate_status=gate.status,
-                    gate_reasons=gate.reasons,
-                    latency_ms=latency_ms,
-                )
-            except Exception as exc:
-                logger.info(
-                    "event=query.ai_suggestion_record_failed error_type=%s",
-                    exc.__class__.__name__,
-                )
+            self._record_ai_refinement_suggestion(
+                query,
+                rank,
+                original,
+                suggested,
+                mode=mode,
+                gate=gate,
+                latency_ms=latency_ms,
+            )
+
+    def _record_ai_refinement_suggestion(
+        self,
+        query: str,
+        rank: int,
+        original: SearchResult,
+        suggested: SearchResult,
+        *,
+        mode: str,
+        gate,
+        latency_ms: int,
+    ) -> None:
+        try:
+            self.database.record_ai_refinement_suggestion(
+                query_text=query,
+                result_rank=rank,
+                mode=mode,
+                model=self.settings.openai_model,
+                deterministic_text=original.listing_text,
+                suggested_text=suggested.listing_text,
+                raw_listing_text=original.raw_listing_text,
+                source_url=original.source_url,
+                gate_status=gate.status,
+                gate_reasons=gate.reasons,
+                latency_ms=latency_ms,
+            )
+        except Exception as exc:
+            logger.info(
+                "event=query.ai_suggestion_record_failed error_type=%s",
+                exc.__class__.__name__,
+            )
 
     def _record_suspicious_results(
         self,

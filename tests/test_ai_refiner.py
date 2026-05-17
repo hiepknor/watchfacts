@@ -12,6 +12,7 @@ from app.ai_refiner import (
     refine_search_results,
     refine_listing_text,
     should_refine_listing_text,
+    should_refine_search_result,
 )
 from app.telegram_bot import SearchResult
 
@@ -253,6 +254,15 @@ def test_should_refine_listing_text_detects_multi_item_snippets() -> None:
     )
 
 
+def test_should_refine_search_result_detects_suspicious_missing_price() -> None:
+    assert should_refine_search_result(
+        SearchResult(
+            "116500 panda Daytona 2017 full link retail ready",
+            raw_listing_text="116500 panda Daytona 2017 full link retail ready 31750",
+        )
+    )
+
+
 def test_deterministic_refine_listing_text_selects_clear_candidate_without_llm() -> None:
     raw_text = (
         "FPJ quantieme perpetuel platinum 2022 used Fullset $298,500USD - [ ] "
@@ -355,6 +365,53 @@ def test_refine_search_results_uses_database_cache(tmp_path) -> None:
     )
 
     assert refined == [SearchResult("FPJ Elegante Titanium")]
+
+
+def test_refine_search_results_uses_raw_text_for_suspicious_result(tmp_path, monkeypatch) -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
+        telegram_result_limit=5,
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+        headless=True,
+        enable_crawl4ai=True,
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+        db_path=tmp_path / "data" / "bot.db",
+        browser_state_path=tmp_path / "data" / "watchfacts_state.json",
+        hybrid_ai_mode="guarded",
+        openai_api_key="sk-test",
+        openai_model="test-model",
+    )
+    result = SearchResult(
+        "116500 panda Daytona 2017 full link retail ready",
+        raw_listing_text="116500 panda Daytona 2017 full link retail ready 31750",
+    )
+
+    async def complete(prompt: str) -> str:
+        assert "31750" in prompt
+        return json.dumps(
+            {
+                "relevant": True,
+                "index": 0,
+                "selected_text": "116500 panda Daytona 2017 full link retail ready 31750",
+                "confidence": 0.92,
+                "reasons": ["adds traceable price"],
+                "risk_flags": [],
+            }
+        )
+
+    monkeypatch.setattr("app.ai_refiner._settings_complete", lambda _: complete)
+
+    refined = asyncio.run(refine_search_results("116500 panda", [result], settings))
+
+    assert refined == [
+        SearchResult(
+            "116500 panda Daytona 2017 full link retail ready 31750",
+            raw_listing_text=result.raw_listing_text,
+        )
+    ]
 
 
 def test_refine_search_results_falls_back_on_openai_timeout(tmp_path, monkeypatch) -> None:

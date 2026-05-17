@@ -912,6 +912,7 @@ def _issue_reason_label(reason: str) -> str:
         "ends_with_price_marker": "Có thể thiếu giá sau ký hiệu giá",
         "raw_much_longer": "Raw dài hơn nhiều so với kết quả",
         "missing_price_after_currency": "Thiếu số tiền sau currency",
+        "missing_price_evidence": "Có thể thiếu giá",
     }.get(reason, reason)
 
 
@@ -1288,31 +1289,35 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
                 if suggested.listing_text == original.listing_text:
                     continue
                 gate = evaluate_refinement_suggestion(query, original, suggested)
-                try:
-                    database.record_ai_refinement_suggestion(
-                        query_text=query,
-                        result_rank=rank,
-                        mode=mode,
-                        model=settings.openai_model,
-                        deterministic_text=original.listing_text,
-                        suggested_text=suggested.listing_text,
-                        raw_listing_text=original.raw_listing_text,
-                        source_url=original.source_url,
-                        gate_status=gate.status,
-                        gate_reasons=gate.reasons,
-                        latency_ms=latency_ms,
-                    )
-                except Exception as exc:
-                    logger.info(
-                        "event=telegram.ai_suggestion_record_failed error_type=%s",
-                        exc.__class__.__name__,
-                    )
+                _record_ai_refinement_suggestion(
+                    database,
+                    settings,
+                    query,
+                    rank,
+                    original,
+                    suggested,
+                    mode=mode,
+                    gate=gate,
+                    latency_ms=latency_ms,
+                )
             return results
 
         if mode == "guarded":
             guarded: list[SearchResult] = []
             for original, suggested in zip(results, refined):
                 gate = evaluate_refinement_suggestion(query, original, suggested)
+                if suggested.listing_text != original.listing_text:
+                    _record_ai_refinement_suggestion(
+                        database,
+                        settings,
+                        query,
+                        len(guarded) + 1,
+                        original,
+                        suggested,
+                        mode=mode,
+                        gate=gate,
+                        latency_ms=latency_ms,
+                    )
                 guarded.append(suggested if gate.status == "accepted" else original)
             guarded.extend(results[len(guarded) :])
             return guarded
@@ -1320,6 +1325,39 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
         return results
 
     return refine
+
+
+def _record_ai_refinement_suggestion(
+    database,
+    settings: Settings,
+    query: str,
+    rank: int,
+    original: SearchResult,
+    suggested: SearchResult,
+    *,
+    mode: str,
+    gate,
+    latency_ms: int,
+) -> None:
+    try:
+        database.record_ai_refinement_suggestion(
+            query_text=query,
+            result_rank=rank,
+            mode=mode,
+            model=settings.openai_model,
+            deterministic_text=original.listing_text,
+            suggested_text=suggested.listing_text,
+            raw_listing_text=original.raw_listing_text,
+            source_url=original.source_url,
+            gate_status=gate.status,
+            gate_reasons=gate.reasons,
+            latency_ms=latency_ms,
+        )
+    except Exception as exc:
+        logger.info(
+            "event=telegram.ai_suggestion_record_failed error_type=%s",
+            exc.__class__.__name__,
+        )
 
 
 def _build_session_checker(settings: Settings) -> SessionChecker:

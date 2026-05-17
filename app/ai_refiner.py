@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 
 from app.config import Settings
 from app.db import Database
+from app.issues import detect_suspicious_result
 from app.matcher import listing_matches, tokenize_query
 from app.telegram_bot import SearchResult
 
@@ -21,6 +22,13 @@ logger = logging.getLogger(__name__)
 MULTI_ITEM_MARKERS = (" - [ ]", "\n-", "\n•", " • ", " | ")
 MIN_REFINEMENT_CONFIDENCE = 0.7
 MAX_REFINED_TEXT_CHARS = 1024
+AI_REFINEMENT_REASON_ALLOWLIST = {
+    "ends_with_currency",
+    "ends_with_price_marker",
+    "missing_price_after_currency",
+    "missing_price_evidence",
+    "raw_much_longer",
+}
 UNRELATED_BRAND_OR_MODEL_TOKENS = {
     "audemars",
     "cartier",
@@ -58,15 +66,16 @@ async def refine_search_results(
     for result in results:
         if (
             refine_count >= settings.openai_max_refines
-            or not should_refine_listing_text(result.listing_text)
+            or not should_refine_search_result(result)
         ):
             refined.append(result)
             continue
+        refinement_input = _refinement_input(result)
         refine_count += 1
         cached = (
             database.get_llm_refinement(
                 query,
-                result.listing_text,
+                refinement_input,
                 settings.openai_model,
             )
             if database is not None
@@ -77,11 +86,11 @@ async def refine_search_results(
             continue
 
         start = time.perf_counter()
-        listing_text = await refine_listing_text(query, result.listing_text, complete=complete)
+        listing_text = await refine_listing_text(query, refinement_input, complete=complete)
         if database is not None:
             database.record_llm_refinement(
                 query,
-                result.listing_text,
+                refinement_input,
                 settings.openai_model,
                 listing_text,
                 latency_ms=int((time.perf_counter() - start) * 1000),
@@ -142,6 +151,26 @@ def should_refine_listing_text(listing_text: str) -> bool:
     if "elegante" in normalized and token_hits > 0:
         return True
     return False
+
+
+def should_refine_search_result(result: SearchResult) -> bool:
+    if should_refine_listing_text(result.listing_text):
+        return True
+
+    return any(
+        issue.reason in AI_REFINEMENT_REASON_ALLOWLIST
+        for issue in detect_suspicious_result(
+            listing_text=result.listing_text,
+            raw_listing_text=result.raw_listing_text,
+        )
+    )
+
+
+def _refinement_input(result: SearchResult) -> str:
+    raw_text = result.raw_listing_text or ""
+    if raw_text and result.listing_text in raw_text:
+        return raw_text
+    return result.listing_text
 
 
 async def refine_listing_text(
