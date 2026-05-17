@@ -511,6 +511,8 @@ def _looks_like_product_reference_boundary(
         return False
     if _looks_like_plain_price_after_date(normalized_token, previous_token):
         return False
+    if _looks_like_bare_reference_after_price(normalized_token, next_token, previous_token):
+        return True
     if _looks_like_date_or_condition_token(normalized_token):
         return False
     if _looks_like_descriptor_number_token(normalized_token, next_token):
@@ -537,7 +539,13 @@ def _looks_like_product_reference_boundary(
 def _looks_like_next_product_brand(token: str, next_token: str) -> bool:
     if (token, next_token) in {("richard", "mille"), ("richard", "miller")}:
         return True
-    if token in {"ap", "pp", "rm", "vc"}:
+    if (token, next_token) in {("f.p", "journe")}:
+        return True
+    if token in {"f.p.journe", "fpjourne"}:
+        return True
+    if token in {"ap", "pp", "rm", "vc", "v.c"} and next_token in {"new", "used", "stock"}:
+        return True
+    if token in {"ap", "pp", "rm", "vc", "v.c"}:
         return _looks_like_model_or_price_token(next_token)
     return token in PRODUCT_BRAND_TOKENS and _looks_like_model_or_price_token(next_token)
 
@@ -657,6 +665,20 @@ def _looks_like_descriptor_number_token(token: str, next_token: str) -> bool:
 
 def _looks_like_hyphenated_descriptor_number(token: str) -> bool:
     return bool(re.fullmatch(r"\d{1,3}-[a-z]+", token))
+
+
+def _looks_like_bare_reference_after_price(
+    token: str,
+    next_token: str,
+    previous_token: str,
+) -> bool:
+    if not re.fullmatch(r"\d{2}-\d{2}", token):
+        return False
+    if not next_token.isalpha() or next_token in {"new", "used", "full", "set"}:
+        return False
+    return _looks_like_price_token(previous_token) or _looks_like_compact_currency_prefixed_price(
+        previous_token
+    )
 
 
 def _looks_like_link_count_token(token: str) -> bool:

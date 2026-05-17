@@ -761,6 +761,51 @@ def test_extract_relevant_listing_text_scopes_rm_reference_without_brand_prefix(
     )
 
 
+def test_extract_relevant_listing_text_stops_before_bare_rm_reference_after_price() -> None:
+    listing_text = (
+        "RM65-01 Lebron Jamew 4/2026 Usdt485k "
+        "65-01 McLaren 2026/4 New Usdt476k"
+    )
+
+    assert extract_relevant_listing_text("RM65-01 Lebron", listing_text) == (
+        "RM65-01 Lebron Jamew 4/2026 Usdt485k"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_fp_journe_brand_header() -> None:
+    listing_text = (
+        "RM65-01 Lebron James N12/2025 USDT 485 "
+        "F.P. Journe Tourbillon Souverain Vertical Fullset 2024 1.10m usdt"
+    )
+
+    assert extract_relevant_listing_text("RM65-01 Lebron", listing_text) == (
+        "RM65-01 Lebron James N12/2025 USDT 485"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_compact_fp_journe_brand_header() -> None:
+    listing_text = (
+        "RM65-01 Lebron James N12/2025 USDT 485 "
+        "F.P.Journe Octa Auto Lune salmon RG 38mm only watch HKD2.12m "
+        "V.C 4300v/220r -H144 26/4 HKD895k"
+    )
+
+    assert extract_relevant_listing_text("RM65-01 Lebron", listing_text) == (
+        "RM65-01 Lebron James N12/2025 USDT 485"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_rm_section_header_after_price() -> None:
+    listing_text = (
+        "RM65-01 Lebron James N12/2025 USDT 485 "
+        "RM USED RM72-10WG Full T Diamond 2024 fullset 4.70m HKD"
+    )
+
+    assert extract_relevant_listing_text("RM65-01 Lebron", listing_text) == (
+        "RM65-01 Lebron James N12/2025 USDT 485"
+    )
+
+
 def test_filter_matching_listings_preserves_original_order() -> None:
     listings = [
         Listing("Rolex 228253A silver dial"),
