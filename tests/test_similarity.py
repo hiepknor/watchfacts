@@ -55,6 +55,16 @@ def test_group_similar_results_keeps_different_prices_separate() -> None:
     assert group_similar_results([lower, higher]) == [lower, higher]
 
 
+def test_group_similar_results_ignores_query_reference_when_comparing_prices() -> None:
+    lower = SearchResult("116500 panda 30.5k")
+    higher = SearchResult("116500 panda 31.5k")
+
+    assert group_similar_results([lower, higher], query="116500 panda") == [
+        lower,
+        higher,
+    ]
+
+
 def test_group_similar_results_keeps_new_and_used_separate() -> None:
     used = SearchResult("FPJ Elegante Titanium 48mm 2019 used 780000")
     new = SearchResult("FPJ Elegante Titanium 48mm 2019 new 780000")

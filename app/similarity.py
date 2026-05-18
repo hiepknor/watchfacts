@@ -143,6 +143,7 @@ def _without_similar_results(result: SearchResult) -> SearchResult:
 
 
 def _profile(value: str, *, query: str | None = None) -> dict[str, set[str]]:
+    query_tokens = set(normalize_text(query).split()) if query else set()
     if query:
         value = deterministic_refine_listing_text(query, value)
     normalized = _similarity_text(value)
@@ -152,7 +153,7 @@ def _profile(value: str, *, query: str | None = None) -> dict[str, set[str]]:
         "references": _references(normalized),
         "years": set(YEAR_RE.findall(normalized)),
         "conditions": _conditions(normalized),
-        "prices": _prices(value),
+        "prices": _prices(value, excluded_tokens=query_tokens),
         "product_tokens": {
             token for token in tokens if token.isalpha() and token not in STOP_TOKENS
         },
@@ -198,9 +199,12 @@ def _conditions(normalized: str) -> set[str]:
     return found
 
 
-def _prices(value: str) -> set[str]:
+def _prices(value: str, *, excluded_tokens: set[str] | None = None) -> set[str]:
+    excluded_tokens = excluded_tokens or set()
     prices: set[str] = set()
     for match in PRICE_RE.finditer(value):
+        if normalize_text(match.group(0)) in excluded_tokens:
+            continue
         parsed = _parse_price(match.group(0))
         if parsed is not None:
             prices.add(str(parsed))

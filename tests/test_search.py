@@ -362,6 +362,81 @@ def test_search_workflow_expands_sparse_year_query_and_refilters_locally(tmp_pat
     ]
 
 
+def test_search_workflow_drops_server_filtered_conflicting_color_descriptor(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "126500LN White N3/2026 HK$279000 without box",
+          "companyName": "Dealer A",
+          "repostedAt": "2026-03-03 10:00:00",
+          "number": 2
+        },
+        {
+          "title": "126500LN Black N3/2026 HK$236000",
+          "companyName": "Dealer B",
+          "repostedAt": "2026-03-03 10:00:00",
+          "number": 3
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("126500ln white 2026"))
+
+    assert [result.listing_text for result in results] == [
+        "126500LN White N3/2026 HK$279000 without box",
+    ]
+
+
+def test_search_workflow_keeps_server_filtered_panda_alias_results(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "116500 panda 30.5k",
+          "companyName": "Dealer A",
+          "repostedAt": "2026-04-01 10:00:00",
+          "number": 2
+        },
+        {
+          "title": "116500 white dial 31.5k",
+          "companyName": "Dealer B",
+          "repostedAt": "2026-04-01 10:00:00",
+          "number": 3
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("116500 panda"))
+
+    assert [result.listing_text for result in results] == [
+        "116500 panda 30.5k",
+        "116500 white dial 31.5k",
+    ]
+
+
 def test_search_workflow_omits_bundle_images_for_multi_listing_cards(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """
@@ -673,7 +748,7 @@ def test_search_workflow_records_shadow_ai_suggestions_without_changing_results(
     {
       "listings": [
         {
-          "title": "FPJ quantieme perpetuel - [ ] FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd - [ ] FPJ Rose Gold CS",
+          "title": "FPJ quantieme perpetuel / FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd / FPJ Rose Gold CS",
           "companyName": "Member 9058",
           "repostedAt": "2026-03-28 10:00:00",
           "number": 11
@@ -713,7 +788,7 @@ def test_search_workflow_records_shadow_ai_suggestions_without_changing_results(
     results = asyncio.run(workflow.search("Fpj Elegante Titanium"))
     suggestions = database.list_ai_refinement_suggestions()
 
-    assert results[0].listing_text.startswith("FPJ quantieme perpetuel")
+    assert results[0].listing_text.endswith("FPJ Rose Gold CS")
     assert suggestions[0].mode == "shadow"
     assert suggestions[0].gate_status == "accepted"
     assert suggestions[0].deterministic_text == results[0].listing_text
@@ -745,7 +820,7 @@ def test_search_workflow_records_guarded_ai_suggestions_and_applies_safe_result(
     {
       "listings": [
         {
-          "title": "FPJ quantieme perpetuel - [ ] FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd - [ ] FPJ Rose Gold CS",
+          "title": "FPJ quantieme perpetuel / FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd / FPJ Rose Gold CS",
           "companyName": "Seller",
           "number": 12
         }

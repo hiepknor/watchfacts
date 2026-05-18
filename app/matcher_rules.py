@@ -262,21 +262,32 @@ def _extract_descriptor_only_listing_text_with_trace(
     if not descriptor_tokens:
         return listing_text, None, None
 
-    descriptor_set = set(descriptor_tokens)
+    best_span: tuple[int, int] | None = None
     for index, token in enumerate(normalized_tokens):
-        if token not in descriptor_set:
+        if token not in descriptor_tokens:
             continue
 
         end_index = min(len(normalized_tokens), index + LOCAL_MATCH_WINDOW)
-        local_tokens = set(normalized_tokens[index:end_index])
+        local_tokens = normalized_tokens[index:end_index]
         if not all(descriptor in local_tokens for descriptor in descriptor_tokens):
             continue
+        last_descriptor_offset = max(
+            local_tokens.index(descriptor) for descriptor in descriptor_tokens
+        )
+        span = (index, index + last_descriptor_offset)
+        if best_span is None or (span[1] - span[0], span[0]) < (
+            best_span[1] - best_span[0],
+            best_span[0],
+        ):
+            best_span = span
 
-        end = _descriptor_segment_end(listing_text, token_matches, index)
-        start = token_matches[index].start()
+    if best_span is not None:
+        start_index, end_descriptor_index = best_span
+        end = _descriptor_segment_end(listing_text, token_matches, end_descriptor_index)
+        start = token_matches[start_index].start()
         return (
             _clean_display_text(listing_text[start:end]),
-            (index, index),
+            (start_index, end_descriptor_index),
             (start, end),
         )
 
@@ -300,6 +311,14 @@ def _descriptor_segment_end(
             else ""
         )
         if offset > SEGMENT_MATCH_WINDOW:
+            break
+        previous_match = token_matches[start_index + offset - 1]
+        if _has_section_separator_between(
+            listing_text,
+            previous_match.end(),
+            match.start(),
+        ):
+            end = _trim_trailing_section_marker(listing_text, end)
             break
         if offset > 1 and _looks_like_product_reference_boundary(
             listing_text,
@@ -626,6 +645,11 @@ def _matching_segment_end(
 
 def _has_item_separator_between(listing_text: str, left_end: int, right_start: int) -> bool:
     return bool(re.search(f"[{ITEM_SEPARATOR_CHARS}]", listing_text[left_end:right_start]))
+
+
+def _has_section_separator_between(listing_text: str, left_end: int, right_start: int) -> bool:
+    between = listing_text[left_end:right_start]
+    return bool(re.search(r"(?:-\s*\[\s*\]|[|•])", between))
 
 
 # Boundary rules.

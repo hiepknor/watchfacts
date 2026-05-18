@@ -93,7 +93,7 @@ class WatchFactsSearchWorkflow:
         scrape_result = await self.fetch_html(self.settings, query=query)
         parsed = parse_listings(scrape_result.html)
         matched = (
-            [listing for listing in parsed if not is_non_sale_request(listing.listing_text)]
+            _filter_server_filtered_listings(query, parsed)
             if scrape_result.server_filtered
             else filter_matching_listings(query, parsed)
         )
@@ -336,6 +336,57 @@ def _looks_like_product_reference(token: str) -> bool:
 
 def _should_expand_year_query(query: str, matched_count: int) -> bool:
     return matched_count < 5 and _query_without_year_descriptors(query) is not None
+
+
+COLOR_DESCRIPTOR_GROUP = {
+    "black",
+    "blue",
+    "champ",
+    "champagne",
+    "choco",
+    "chocolate",
+    "gray",
+    "green",
+    "grey",
+    "purple",
+    "red",
+    "silver",
+    "white",
+}
+
+
+def _filter_server_filtered_listings(
+    query: str,
+    listings: list[ListingCandidate],
+) -> list[ListingCandidate]:
+    query_colors = _color_descriptors(query)
+    filtered: list[ListingCandidate] = []
+    for listing in listings:
+        if is_non_sale_request(listing.listing_text):
+            continue
+        if query_colors and _has_conflicting_color_descriptor(query_colors, listing.listing_text):
+            continue
+        filtered.append(listing)
+    return filtered
+
+
+def _color_descriptors(value: str) -> set[str]:
+    tokens = set(normalize_text(value).split())
+    colors = tokens & COLOR_DESCRIPTOR_GROUP
+    if "chocolate" in colors:
+        colors.add("choco")
+    if "choco" in colors:
+        colors.add("chocolate")
+    if "gray" in colors:
+        colors.add("grey")
+    if "grey" in colors:
+        colors.add("gray")
+    return colors
+
+
+def _has_conflicting_color_descriptor(query_colors: set[str], listing_text: str) -> bool:
+    listing_colors = _color_descriptors(listing_text)
+    return bool(listing_colors and query_colors.isdisjoint(listing_colors))
 
 
 def _query_without_year_descriptors(query: str) -> str | None:

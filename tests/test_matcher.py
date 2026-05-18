@@ -112,6 +112,18 @@ def test_extract_relevant_listing_text_scopes_descriptor_only_query() -> None:
     )
 
 
+def test_extract_relevant_listing_text_scopes_descriptor_only_multilist_separator() -> None:
+    listing_text = (
+        "FPJ quantieme perpetuel platinum 2022 used Fullset $298,500USD - [ ] "
+        "FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd - [ ] "
+        "FPJ Rose Gold CS opendate watch"
+    )
+
+    assert extract_relevant_listing_text("Fpj Elegante Titanium", listing_text) == (
+        "FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_fpj_elegante_price_and_drops_trailing_brand_alias() -> None:
     listing_text = "FPJ Elegante Titanium 48mm White Used 2022 Fullset HKD895,000 / USD116,300 PP ⚡"
 
