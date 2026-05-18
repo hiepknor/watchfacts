@@ -235,10 +235,11 @@ def test_build_result_refiner_shadow_records_suggestions_without_changing_output
     refiner = _build_result_refiner(settings)
     assert refiner is not None
 
-    refined = asyncio.run(refiner("Fpj Elegante Titanium", [original]))
+    refined = asyncio.run(refiner("Fpj Elegante Titanium", [original], start_rank=6))
     suggestions = Database(settings.db_path).list_ai_refinement_suggestions()
 
     assert refined == [original]
+    assert suggestions[0].result_rank == 6
     assert suggestions[0].mode == "shadow"
     assert suggestions[0].gate_status == "accepted"
     assert suggestions[0].deterministic_text == original.listing_text

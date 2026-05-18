@@ -192,6 +192,7 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.db_path)
         connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA busy_timeout = 5000")
         return connection
 
     def initialize(self) -> None:
@@ -406,9 +407,11 @@ class Database:
         normalized_query = normalize_text(query_text)
         raw_text_for_key = raw_listing_text or deterministic_text
         raw_listing_hash = _listing_hash(raw_text_for_key)
+        suggested_text_hash = _listing_hash(suggested_text)
         suggestion_key = _suggestion_key(
             normalized_query,
             raw_listing_hash,
+            suggested_text_hash,
             model,
             prompt_version,
         )
@@ -1086,11 +1089,20 @@ def _listing_hash(value: str) -> str:
 def _suggestion_key(
     normalized_query: str,
     raw_listing_hash: str,
+    suggested_text_hash: str,
     model: str,
     prompt_version: str,
 ) -> str:
     return _listing_hash(
-        "\x1f".join((normalized_query, raw_listing_hash, model, prompt_version))
+        "\x1f".join(
+            (
+                normalized_query,
+                raw_listing_hash,
+                suggested_text_hash,
+                model,
+                prompt_version,
+            )
+        )
     )
 
 

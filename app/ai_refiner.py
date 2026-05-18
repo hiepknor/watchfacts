@@ -218,16 +218,42 @@ async def refine_listing_text(
 
 
 def _payload_is_rejected(payload: dict[str, object]) -> bool:
+    if not isinstance(payload.get("relevant"), bool):
+        logger.info("event=ai.refine_rejected reason=invalid_relevant")
+        return True
     if payload.get("relevant") is False:
         return True
 
+    if not isinstance(payload.get("index"), int):
+        logger.info("event=ai.refine_rejected reason=invalid_index")
+        return True
+
+    if not isinstance(payload.get("selected_text"), str):
+        logger.info("event=ai.refine_rejected reason=invalid_selected_text")
+        return True
+
     confidence = payload.get("confidence")
-    if isinstance(confidence, int | float) and confidence < MIN_REFINEMENT_CONFIDENCE:
+    if not isinstance(confidence, int | float):
+        logger.info("event=ai.refine_rejected reason=invalid_confidence")
+        return True
+    if confidence < MIN_REFINEMENT_CONFIDENCE:
         logger.info("event=ai.refine_rejected reason=low_confidence")
         return True
 
+    reasons = payload.get("reasons")
+    if not isinstance(reasons, list) or not all(
+        isinstance(reason, str) for reason in reasons
+    ):
+        logger.info("event=ai.refine_rejected reason=invalid_reasons")
+        return True
+
     risk_flags = payload.get("risk_flags")
-    if isinstance(risk_flags, list) and risk_flags:
+    if not isinstance(risk_flags, list) or not all(
+        isinstance(flag, str) for flag in risk_flags
+    ):
+        logger.info("event=ai.refine_rejected reason=invalid_risk_flags")
+        return True
+    if risk_flags:
         logger.info("event=ai.refine_rejected reason=risk_flags")
         return True
 

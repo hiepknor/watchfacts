@@ -41,6 +41,16 @@ def test_initialize_creates_database_and_tables(tmp_path) -> None:
     } <= tables
 
 
+def test_database_connection_sets_busy_timeout(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    with database.connect() as connection:
+        timeout = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+
+    assert timeout == 5000
+
+
 def test_record_query_results_persists_query_listing_and_relationship(tmp_path) -> None:
     db_path = tmp_path / "data" / "bot.db"
     database = Database(db_path)
@@ -206,6 +216,46 @@ def test_ai_refinement_suggestions_are_deduped_and_linked_to_issues(tmp_path) ->
     assert suggestions[0].mode == "guarded"
     assert suggestions[0].issue_type == "feedback"
     assert suggestions[0].issue_id == issue_id
+
+
+def test_ai_refinement_suggestion_dedupe_keeps_distinct_suggested_texts(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    first_id = database.record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=1,
+        mode="review",
+        model="gpt-5-mini",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        gate_status="accepted",
+        gate_reasons=["matches_query"],
+    )
+    database.mark_ai_refinement_suggestion_status(first_id, status="accepted")
+
+    second_id = database.record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=1,
+        mode="review",
+        model="gpt-5-mini",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 2022 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        gate_status="rejected",
+        gate_reasons=["not_raw_substring"],
+    )
+
+    first = database.get_ai_refinement_suggestion(first_id)
+    second = database.get_ai_refinement_suggestion(second_id)
+
+    assert second_id != first_id
+    assert first is not None
+    assert first.review_status == "accepted"
+    assert first.suggested_text == "FPJ Elegante Titanium 120k"
+    assert second is not None
+    assert second.review_status == "open"
+    assert second.suggested_text == "FPJ Elegante Titanium 2022 120k"
 
 
 def test_reviewed_ai_suggestions_export_as_regression_cases(tmp_path) -> None:

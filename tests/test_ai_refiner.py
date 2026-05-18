@@ -25,7 +25,18 @@ def test_refine_listing_text_accepts_relevant_substring() -> None:
     )
 
     async def complete(_: str) -> str:
-        return '{"relevant": true, "listing_text": "FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd"}'
+        return json.dumps(
+            {
+                "relevant": True,
+                "index": 0,
+                "selected_text": (
+                    "FPJ Elegante Titanium White 48mm 2022 Used Fullset 120,000usd"
+                ),
+                "confidence": 0.92,
+                "reasons": ["match"],
+                "risk_flags": [],
+            }
+        )
 
     refined = asyncio.run(
         refine_listing_text(
@@ -46,7 +57,16 @@ def test_refine_listing_text_accepts_candidate_index() -> None:
     )
 
     async def complete(_: str) -> str:
-        return '{"relevant": true, "index": 2}'
+        return json.dumps(
+            {
+                "relevant": True,
+                "index": 2,
+                "selected_text": "",
+                "confidence": 0.92,
+                "reasons": ["match"],
+                "risk_flags": [],
+            }
+        )
 
     refined = asyncio.run(
         refine_listing_text(
@@ -101,7 +121,16 @@ def test_refine_listing_text_strips_trailing_unrelated_token_after_llm_success()
     raw_text = "FPJ Elegante titanium 48mm 2019 fullset HKD785K tudor"
 
     async def complete(_: str) -> str:
-        return '{"relevant": true, "index": 1}'
+        return json.dumps(
+            {
+                "relevant": True,
+                "index": 1,
+                "selected_text": "",
+                "confidence": 0.92,
+                "reasons": ["match"],
+                "risk_flags": [],
+            }
+        )
 
     refined = asyncio.run(
         refine_listing_text(
@@ -118,7 +147,16 @@ def test_refine_listing_text_rejects_non_substring_output() -> None:
     raw_text = "FPJ Elegante Titanium 48mm 2019 fullset 780000 hkd"
 
     async def complete(_: str) -> str:
-        return '{"relevant": true, "listing_text": "FPJ Elegante Titanium invented price"}'
+        return json.dumps(
+            {
+                "relevant": True,
+                "index": 0,
+                "selected_text": "FPJ Elegante Titanium invented price",
+                "confidence": 0.92,
+                "reasons": ["match"],
+                "risk_flags": [],
+            }
+        )
 
     refined = asyncio.run(
         refine_listing_text(
@@ -230,6 +268,23 @@ def test_refine_listing_text_falls_back_on_invalid_json() -> None:
 
     async def complete(_: str) -> str:
         return "not json"
+
+    refined = asyncio.run(
+        refine_listing_text(
+            "Fpj Elegante Titanium",
+            raw_text,
+            complete=complete,
+        )
+    )
+
+    assert refined == raw_text
+
+
+def test_refine_listing_text_rejects_missing_required_schema_fields() -> None:
+    raw_text = "FPJ Elegante Titanium 48mm 2019 fullset 780000 hkd"
+
+    async def complete(_: str) -> str:
+        return '{"relevant": true, "selected_text": "FPJ Elegante Titanium 48mm 2019 fullset 780000 hkd"}'
 
     refined = asyncio.run(
         refine_listing_text(

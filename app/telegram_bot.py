@@ -138,7 +138,7 @@ class SearchWorkflow(Protocol):
         ...
 
 
-RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
+RefineResults = Callable[..., Awaitable[list[SearchResult]]]
 SessionChecker = Callable[[], Awaitable[BrowserSessionStatus]]
 
 
@@ -1465,7 +1465,12 @@ async def _refine_and_store_page_results(context, page, offset: int) -> None:
         return
 
     try:
-        refined = await refiner(str(page["query"]), raw_results)
+        refined = await _call_result_refiner(
+            refiner,
+            str(page["query"]),
+            raw_results,
+            start_rank=offset + 1,
+        )
     except Exception as exc:
         logger.info("event=telegram.refine_fallback error_type=%s", exc.__class__.__name__)
         refined = raw_results
@@ -1493,13 +1498,21 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
 
     database = Database(settings.db_path)
 
-    async def refine(query: str, results: list[SearchResult]) -> list[SearchResult]:
+    async def refine(
+        query: str,
+        results: list[SearchResult],
+        *,
+        start_rank: int = 1,
+    ) -> list[SearchResult]:
         start = time.perf_counter()
         refined = await refine_search_results(query, results, settings, database=database)
         latency_ms = int((time.perf_counter() - start) * 1000)
 
         if mode in {"shadow", "review"}:
-            for rank, (original, suggested) in enumerate(zip(results, refined), start=1):
+            for rank, (original, suggested) in enumerate(
+                zip(results, refined),
+                start=start_rank,
+            ):
                 if suggested.listing_text == original.listing_text:
                     continue
                 gate = evaluate_refinement_suggestion(query, original, suggested)
@@ -1518,14 +1531,17 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
 
         if mode == "guarded":
             guarded: list[SearchResult] = []
-            for original, suggested in zip(results, refined):
+            for rank, (original, suggested) in enumerate(
+                zip(results, refined),
+                start=start_rank,
+            ):
                 gate = evaluate_refinement_suggestion(query, original, suggested)
                 if suggested.listing_text != original.listing_text:
                     _record_ai_refinement_suggestion(
                         database,
                         settings,
                         query,
-                        len(guarded) + 1,
+                        rank,
                         original,
                         suggested,
                         mode=mode,
@@ -1539,6 +1555,22 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
         return results
 
     return refine
+
+
+async def _call_result_refiner(
+    refiner: RefineResults,
+    query: str,
+    results: list[SearchResult],
+    *,
+    start_rank: int,
+) -> list[SearchResult]:
+    try:
+        signature = inspect.signature(refiner)
+    except (TypeError, ValueError):
+        return await refiner(query, results)
+    if "start_rank" in signature.parameters:
+        return await refiner(query, results, start_rank=start_rank)
+    return await refiner(query, results)
 
 
 def _record_ai_refinement_suggestion(
