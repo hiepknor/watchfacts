@@ -37,6 +37,19 @@ def test_score_result_demotes_missing_price_evidence() -> None:
     assert "suspicious.missing_price_evidence" in score.reasons
 
 
+def test_score_result_does_not_treat_karat_gold_as_price_evidence() -> None:
+    result = SearchResult(
+        "5712R Patek original movement customized 18k rose gold case reservation",
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="5712r")
+
+    assert score.quality_group == 1
+    assert score.price_evidence_score == 0
+    assert "price.missing_visible" in score.reasons
+
+
 def test_score_result_demotes_stronger_suspicious_cases_after_missing_price() -> None:
     missing_price = SearchResult("5205r 2026")
     truncated = SearchResult(

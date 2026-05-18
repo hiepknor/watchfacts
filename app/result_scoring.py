@@ -25,6 +25,10 @@ PRICE_EVIDENCE_RE = re.compile(
     """,
     re.IGNORECASE | re.VERBOSE,
 )
+KARAT_GOLD_RE = re.compile(
+    r"\b(?:9|10|14|18|19|20|21|22|24)k\s+(?:(?:rose|yellow|white|pink)\s+)?gold\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -149,7 +153,7 @@ def _relevance_score(
 
 
 def _price_evidence_score(result: SearchResult) -> tuple[int, tuple[str, ...]]:
-    scan_text = result.listing_text
+    scan_text = KARAT_GOLD_RE.sub(" ", result.listing_text)
     if PRICE_EVIDENCE_RE.search(scan_text):
         return 1, ("price.visible",)
     return 0, ("price.missing_visible",)

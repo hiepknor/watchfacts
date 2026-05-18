@@ -119,6 +119,21 @@ def test_detect_suspicious_result_flags_missing_price_evidence() -> None:
     assert [issue.reason for issue in issues] == ["missing_price_evidence"]
 
 
+def test_detect_suspicious_result_does_not_treat_karat_gold_as_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text=(
+            "5712R Patek Philippe original movement customized "
+            "18k rose gold case negotiable available for reservation"
+        ),
+        raw_listing_text=(
+            "5712R Patek Philippe original movement customized "
+            "18k rose gold case negotiable available for reservation"
+        ),
+    )
+
+    assert [issue.reason for issue in issues] == ["missing_price_evidence"]
+
+
 def test_detect_suspicious_result_does_not_treat_reference_as_plain_price() -> None:
     issues = detect_suspicious_result(
         listing_text="116500 panda Daytona 2017 full link retail ready",

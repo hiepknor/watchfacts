@@ -13,6 +13,10 @@ class SuspiciousIssue:
 
 CURRENCY_TOKENS = {"hkd", "usd", "usdt", "eur", "aed", "chf"}
 PRICE_MARKERS = {"price", "$", "💰", "💲"}
+KARAT_GOLD_RE = re.compile(
+    r"\b(?:9|10|14|18|19|20|21|22|24)k\s+(?:(?:rose|yellow|white|pink)\s+)?gold\b",
+    re.IGNORECASE,
+)
 
 
 def detect_suspicious_result(
@@ -88,6 +92,7 @@ def _has_price_before_trailing_marker(value: str) -> bool:
 
 def _has_price_evidence(value: str) -> bool:
     normalized = _price_scan_text(value)
+    normalized = KARAT_GOLD_RE.sub(" ", normalized)
     amount = r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m|u)?"
     currency = r"(?:hk|hkd|us|usd|usdt|eur|aed|chf)"
     money_symbols = r"$€£¥💰💲"
