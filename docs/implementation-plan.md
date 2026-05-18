@@ -723,13 +723,13 @@ Description: Move quality/date ordering out of `app/search.py` into a dedicated 
 
 Acceptance:
 
-- [ ] Add `app/result_scoring.py` or equivalent dedicated module.
-- [ ] Existing quality-first behavior is preserved.
-- [ ] Clean results sort newest posted date first.
-- [ ] Results with only `missing_price_evidence` rank below clean results.
-- [ ] Results with other suspicious issues rank below missing-price-only results.
-- [ ] Original source order is retained as the final stable tie-breaker.
-- [ ] Search workflow uses the scoring module instead of a private search helper.
+- [x] Add `app/result_scoring.py` or equivalent dedicated module.
+- [x] Existing quality-first behavior is preserved.
+- [x] Clean results sort newest posted date first.
+- [x] Results with only `missing_price_evidence` rank below clean results.
+- [x] Results with other suspicious issues rank below missing-price-only results.
+- [x] Original source order is retained as the final stable tie-breaker.
+- [x] Search workflow uses the scoring module instead of a private search helper.
 
 Verify:
 
@@ -751,11 +751,11 @@ Description: Return score fields and reason codes so ranking decisions can be te
 
 Acceptance:
 
-- [ ] Add a structured score object with quality group, posted date rank,
+- [x] Add a structured score object with quality group, posted date rank,
   reference/descriptor/price signals, original rank, and reason codes.
-- [ ] Tests assert reason codes for clean, missing-price, and suspicious cases.
-- [ ] Logs may include safe score summaries without listing secrets or browser state.
-- [ ] Telegram user-facing output remains unchanged.
+- [x] Tests assert reason codes for clean, missing-price, and suspicious cases.
+- [x] Logs may include safe score summaries without listing secrets or browser state.
+- [x] Telegram user-facing output remains unchanged.
 
 Verify:
 
@@ -776,14 +776,14 @@ Description: Provide a safe way to inspect matcher trace and score reasons for a
 
 Acceptance:
 
-- [ ] Debug output includes normalized query intent, selected reference, selected
+- [x] Debug output includes normalized query intent, selected reference, selected
   token/character span, applied rule ids, score reasons, and suspicious reason
   codes.
-- [ ] Debug output never includes `.env`, tokens, cookies, browser state, full
+- [x] Debug output never includes `.env`, tokens, cookies, browser state, full
   storage state, or full page HTML.
-- [ ] If exposed via Telegram, the command is owner-only and requires
-  `TELEGRAM_ALLOWED_USER_IDS`.
-- [ ] Output is capped for Telegram length limits.
+- [x] Initial debug surface is local-only; Telegram exposure is deferred until
+  `TELEGRAM_ALLOWED_USER_IDS` is configured.
+- [x] Output is capped for Telegram length limits.
 
 Verify:
 

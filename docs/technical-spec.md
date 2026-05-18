@@ -219,6 +219,19 @@ Detailed spec:
 
 - [Result Quality Scoring And Matcher Diagnostics Spec](result-quality-scoring.md)
 
+### `match_debug.py`
+
+Responsibilities:
+
+- Combine `explain_extraction()` trace data with structured result scoring.
+- Format local debug output for one query/listing pair.
+- Cap output length so the same formatter can later be reused in Telegram if an
+  owner-only command is added.
+
+The initial debug surface is local-only through `scripts/debug_match.py`.
+Telegram exposure is deferred until the production bot has a configured
+`TELEGRAM_ALLOWED_USER_IDS` owner allowlist.
+
 ### `dedupe.py`
 
 Responsibilities:

@@ -8,13 +8,12 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
-from datetime import datetime
 
 from app.config import Settings
 from app.db import Database
 from app.dedupe import unique_latest_by_text, unique_latest_listings
-from app.issues import detect_suspicious_result
 from app.ai_refiner import evaluate_refinement_suggestion
+from app.issues import detect_suspicious_result
 from app.matcher import (
     extract_relevant_listing_text,
     filter_matching_listings,
@@ -22,6 +21,7 @@ from app.matcher import (
     normalize_text,
 )
 from app.parser import ListingCandidate, parse_listings
+from app.result_scoring import rank_results_by_quality
 from app.scraper import ScrapeResult, fetch_watchfacts_html
 from app.similarity import group_similar_results
 from app.telegram_bot import SearchResult
@@ -116,7 +116,7 @@ class WatchFactsSearchWorkflow:
         if self.refine_results is not None and self.settings.hybrid_ai_mode != "off":
             unique = await self._handle_hybrid_refinement(query, unique)
         unique = unique_latest_by_text(unique)
-        unique = _rank_quality_results(unique)
+        unique = rank_results_by_quality(unique)
         unique = group_similar_results(unique, query=query)
 
         self.database.record_query_results(query, unique)
@@ -367,56 +367,6 @@ def _merge_listing_candidates(
         seen.add(key)
         merged.append(listing)
     return merged
-
-
-def _rank_quality_results(results: list[SearchResult]) -> list[SearchResult]:
-    if len(results) < 2:
-        return results
-
-    scored = [
-        (
-            _quality_rank(result),
-            _posted_date_rank(result.posted_date),
-            index,
-            result,
-        )
-        for index, result in enumerate(results)
-    ]
-    if all((quality, date) == scored[0][:2] for quality, date, _, _ in scored):
-        return results
-    return [result for _, _, _, result in sorted(scored)]
-
-
-def _quality_rank(result: SearchResult) -> tuple[int, int]:
-    issues = detect_suspicious_result(
-        listing_text=result.listing_text,
-        raw_listing_text=result.raw_listing_text,
-    )
-    if not issues:
-        return (0, 0)
-    missing_price_only = all(issue.reason == "missing_price_evidence" for issue in issues)
-    if missing_price_only:
-        return (1, max(issue.severity for issue in issues))
-    return (2, max(issue.severity for issue in issues))
-
-
-def _posted_date_rank(value: str | None) -> tuple[int, float]:
-    parsed = _parse_posted_date(value)
-    if parsed is None:
-        return (1, 0.0)
-    return (0, -parsed.timestamp())
-
-
-def _parse_posted_date(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    normalized = value.split("·", maxsplit=1)[0].strip()
-    for date_format in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return datetime.strptime(normalized[:19], date_format)
-        except ValueError:
-            continue
-    return None
 
 
 def _listing_candidate_key(listing: ListingCandidate) -> tuple[str, str, str, str]:

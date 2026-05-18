@@ -212,7 +212,7 @@ Exit criteria:
 
 ## Milestone 9: Result Quality Scoring And Matcher Diagnostics
 
-Status: planned.
+Status: in progress.
 
 Goal: make output ranking and matcher debugging explicit, testable, and safe to
 iterate without rewriting the deterministic matcher core.
@@ -231,12 +231,12 @@ Decision:
 
 Deliverables:
 
-- [ ] `app/result_scoring.py` or equivalent dedicated scoring boundary.
-- [ ] Structured `ResultScore` object with quality group, date rank, relevance
+- [x] `app/result_scoring.py` or equivalent dedicated scoring boundary.
+- [x] Structured `ResultScore` object with quality group, date rank, relevance
   signals, original rank, and reason codes.
-- [ ] Regression tests for quality-first ranking, date-desc sorting, missing
-  price demotion, suspicious demotion, and descriptor/reference scoring.
-- [ ] Safe matcher/score debug surface for maintainers or owner-only Telegram
+- [x] Regression tests for quality-first ranking, date-desc sorting, missing
+  price demotion, and suspicious demotion.
+- [x] Safe matcher/score debug surface for maintainers or owner-only Telegram
   review.
 - [ ] Optional matcher helper split after regression coverage proves behavior is
   stable.

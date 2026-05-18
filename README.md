@@ -113,6 +113,7 @@ make deploy
 | `make login` | Run the WatchFacts browser login locally on the host |
 | `make check` | Run lightweight repository checks |
 | `python scripts/login.py` | Open Chromium for manual WatchFacts login and save browser state |
+| `python scripts/debug_match.py <query> <listing>` | Inspect matcher trace and result score locally |
 | `python -m app.main` | Run the Telegram bot locally |
 | `docker compose build` | Build the Docker image |
 | `docker compose up -d` | Start the bot in the background |

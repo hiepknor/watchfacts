@@ -169,6 +169,8 @@ OpenAI can contribute only a bounded review/refinement signal:
 
 ### Phase 9.1: Extract Scoring Module
 
+Status: complete.
+
 Move current quality/date ordering from `app/search.py` into
 `app/result_scoring.py`.
 
@@ -181,6 +183,8 @@ Acceptance:
 
 ### Phase 9.2: Add Structured Score Reasons
 
+Status: complete.
+
 Return reason codes alongside sort values.
 
 Acceptance:
@@ -190,6 +194,9 @@ Acceptance:
 - No Telegram user-facing output changes are required.
 
 ### Phase 9.3: Add Matcher/Score Debug Surface
+
+Status: complete for the local debug script; Telegram exposure is deferred until
+the production bot has a configured owner allowlist.
 
 Add a local script or owner-only command for inspecting one query/listing or one
 stored issue.
@@ -203,7 +210,7 @@ Acceptance:
 
 ### Phase 9.4: Split Matcher Helpers After Coverage
 
-Only after phases 8.1-8.3 are covered, split `matcher_rules.py` into smaller
+Only after phases 9.1-9.3 are covered, split `matcher_rules.py` into smaller
 implementation files if it reduces maintenance risk.
 
 Candidate files:
