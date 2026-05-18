@@ -883,3 +883,133 @@ Verify:
 ```bash
 .venv/bin/python -m pytest tests/test_result_scoring.py tests/test_match_debug.py
 ```
+
+## Phase 11: Production Quality Audit Loop
+
+Status: planned.
+
+Goal: make real production query quality observable, repeatable, and directly
+convertible into regression fixtures.
+
+Reference docs:
+
+- [Production Quality Audit Loop Spec](production-quality-audit.md)
+- [Result Quality Scoring And Matcher Diagnostics Spec](result-quality-scoring.md)
+- [Operations Guide](operations.md)
+
+### Task 11.1: Add Audit Script
+
+Description: Add a safe CLI script that runs a curated query set through the
+normal search workflow and reports quality/scoring diagnostics for the top
+results.
+
+Acceptance:
+
+- [ ] Add `scripts/audit_quality.py`.
+- [ ] Support explicit query arguments.
+- [ ] Provide a default query set matching the production audit spec.
+- [ ] Support `--limit` for top-N results.
+- [ ] Include count, rank, listing snippet, posted date, quality group,
+  severity, relevance scores, price evidence score, and score reason codes.
+- [ ] Use existing search, scoring, and OpenAI guarded-refinement modules.
+- [ ] Do not print `.env`, API keys, Telegram tokens, WatchFacts cookies,
+  browser state, full page HTML, or full raw listings.
+- [ ] Add focused tests for report formatting or extraction of score summaries
+  if the script exposes helper functions.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_result_scoring.py tests/test_search.py
+git diff --check
+```
+
+Likely files:
+
+- `scripts/audit_quality.py`
+- optional `tests/test_audit_quality.py`
+
+### Task 11.2: Add Fixture Workflow For Audit Findings
+
+Description: Define and document how audit findings become regression tests
+before matcher, extraction, scoring, or gate changes are implemented.
+
+Acceptance:
+
+- [ ] Document fixture templates for ranking issues, extraction issues,
+  missing-price issues, descriptor conflicts, and stale-cache discoveries.
+- [ ] Reuse existing `/issues_export` and `scripts/generate_issue_fixtures.py`
+  where applicable.
+- [ ] Require each confirmed production issue to include query, shown text,
+  raw text when available, posted date, and expected behavior.
+- [ ] Add tests before broad rule changes.
+
+Verify:
+
+```bash
+git diff --check
+.venv/bin/python -m pytest tests/test_matcher.py tests/test_search.py tests/test_result_scoring.py
+```
+
+Likely files:
+
+- `docs/production-quality-audit.md`
+- `docs/operations.md`
+- optional test fixtures under `tests/`
+
+### Task 11.3: Normalize Ambiguous Price Policy
+
+Description: Keep accepted dealer shorthand explicit while preventing material
+terms such as karat gold from counting as price evidence.
+
+Acceptance:
+
+- [ ] Document accepted shorthand examples such as `465k`, `HKD785K`,
+  `$36k`, `30+lbl`, `26299 + lab`, `USDT 485`, `110k€`, and `248 €`.
+- [ ] Document non-price material examples such as `18k rose gold`, `22k gold`,
+  and `24k yellow gold`.
+- [ ] Add or maintain tests proving material karat terms do not count as price
+  evidence.
+- [ ] Avoid demoting dealer shorthand without a production issue fixture.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_issues.py tests/test_result_scoring.py
+```
+
+Likely files:
+
+- `app/issues.py`
+- `app/result_scoring.py`
+- `tests/test_issues.py`
+- `tests/test_result_scoring.py`
+- `docs/production-quality-audit.md`
+
+### Task 11.4: Production Verification Checklist
+
+Description: Make production audit part of the deploy flow for matcher,
+scoring, and quality-gate changes.
+
+Acceptance:
+
+- [ ] Run focused audit before deploy when behavior changes.
+- [ ] Run full local tests before commit.
+- [ ] Bump `SEARCH_CACHE_VERSION` when ranking/gate output can change.
+- [ ] Deploy with `make deploy`.
+- [ ] Verify production container health and production git HEAD.
+- [ ] Rerun focused production audit after deploy.
+- [ ] Capture unresolved findings to PMO or docs.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest -q
+git diff --check
+make deploy
+```
+
+Likely files:
+
+- `docs/operations.md`
+- `docs/production-quality-audit.md`

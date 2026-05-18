@@ -32,6 +32,7 @@ app/
   ai_refiner.py    # optional OpenAI-backed result refinement boundary
 scripts/
   login.py         # manual WatchFacts login and browser state creation
+  audit_quality.py # planned safe production/local quality audit script
 data/
   bot.db
   watchfacts_state.json
@@ -90,6 +91,9 @@ Telegram update
   -> db records query/cache/dedupe state
   -> telegram_bot sends a summary first, then paginated result batches
 ```
+
+Production quality audits reuse the same search workflow and scoring modules.
+They must not duplicate matching, scraping, scoring, or OpenAI logic.
 
 ## Module Contracts
 
@@ -226,6 +230,20 @@ become an uncontrolled ranking authority.
 Detailed spec:
 
 - [Result Quality Scoring And Matcher Diagnostics Spec](result-quality-scoring.md)
+- [Production Quality Audit Loop Spec](production-quality-audit.md)
+
+### `scripts/audit_quality.py`
+
+Planned responsibilities:
+
+- Run a curated production/local query set through the normal search workflow.
+- Print bounded top-result snippets and scoring diagnostics for maintainers.
+- Include result count, posted date, quality group, relevance scores, price
+  evidence, and score reason codes.
+- Avoid printing secrets, browser state, full page HTML, or unbounded raw
+  listings.
+- Support focused production verification after matcher, extraction, scoring, or
+  quality-gate changes.
 
 ### `match_debug.py`
 
@@ -450,6 +468,8 @@ Preferred tests:
 - Handler-level tests for `/health`, owner alerts, and future feedback callbacks.
 - Unit tests for suspicious-result detection rules.
 - Database tests for future feedback and issue-review tables.
+- Tests or smoke checks for production audit formatting once the audit script is
+  implemented.
 - Optional browser smoke test for login/session flow when credentials are available.
 - OpenAI refiner unit tests with stubbed client responses; tests must not call the live OpenAI API.
 

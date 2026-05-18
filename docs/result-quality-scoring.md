@@ -25,6 +25,8 @@ Completed baseline behavior:
 - Missing-price listings are demoted, not removed.
 - OpenAI guarded refinement can improve scoped text only after local validation
   gates pass.
+- Production audit planning now lives in
+  [Production Quality Audit Loop Spec](production-quality-audit.md).
 
 ## Problem
 
@@ -253,6 +255,18 @@ Acceptance:
 - Similar-result grouping uses the same quality/relevance/price score fields
   when choosing a group primary, but does not use posted date to replace the
   already-ranked primary.
+
+### Phase 10.2: Production Audit Loop Planning
+
+Status: planned in the dedicated production audit spec.
+
+The scoring layer is now stable enough that the next improvements should come
+from repeatable production audits and regression fixtures, not ad-hoc rank
+changes.
+
+Reference:
+
+- [Production Quality Audit Loop Spec](production-quality-audit.md)
 
 ## Verification
 

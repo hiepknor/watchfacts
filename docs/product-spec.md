@@ -24,6 +24,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - As a maintainer, I can convert reported issue cases into deterministic tests.
 - As an operator, I can optionally enable OpenAI-assisted refinement for hard cases without making AI required for normal search.
 - As a maintainer, I can inspect why a result matched, how it was extracted, and why it ranked above or below nearby results.
+- As a maintainer, I can run a repeatable production-quality audit query set and turn confirmed issues into regression tests.
 
 ## Core Flow
 
@@ -69,6 +70,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
 - Support optional OpenAI-assisted refinement for suspicious, reported, or hard-to-scope results, controlled by explicit modes and validation gates.
 - Support maintainer diagnostics for matcher trace and ranking reasons. See [Result Quality Scoring Spec](result-quality-scoring.md).
+- Support a production quality audit loop for matcher, extraction, scoring, and quality-gate changes. See [Production Quality Audit Spec](production-quality-audit.md).
 
 ## Non-Functional Requirements
 
@@ -76,6 +78,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Matching must be deterministic and testable.
 - Ranking must be deterministic, quality-first, and covered by regression tests.
 - Continuous improvement must be evidence collection and review, not autonomous code mutation.
+- Production quality changes should be backed by audit evidence and regression fixtures.
 - AI-assisted refinement, if enabled, must use OpenAI API as the only supported AI provider and must be controlled by explicit modes, confidence gates, owner review, and deterministic fallback.
 - OpenAI integration must be disabled by default and must not be required for normal search.
 - Telegram handlers should remain async and avoid blocking network/browser work on the event loop.

@@ -157,6 +157,47 @@ Operational rules:
 The older local model experiment has been removed from the supported runtime.
 Do not add new production behavior that depends on local model files.
 
+## Production Quality Audit
+
+Use the production quality audit loop whenever matcher, extraction, scoring, or
+quality-gate behavior changes.
+
+Reference spec:
+
+- [Production Quality Audit Loop Spec](production-quality-audit.md)
+
+Default audit query set:
+
+```text
+5205r 2026
+126500ln white 2026
+7118/1200a grey
+Fpj Elegante Titanium
+228235a choco
+5712r
+5205r green
+5726/1a
+RM65-01 Lebron
+116500 panda
+```
+
+Checklist:
+
+- Run the audit query set before changing broad rules when production behavior
+  is in doubt.
+- Convert confirmed issues into regression tests before implementing fixes.
+- Run focused tests, then the full suite.
+- Bump `SEARCH_CACHE_VERSION` when scoring or quality gates can change cached
+  output.
+- Deploy with `make deploy`.
+- Verify the container is healthy and the production git HEAD matches the
+  deployed commit.
+- Rerun the focused production audit after deploy.
+- Capture unresolved findings to PMO or docs before ending the work.
+
+Audit reports must not print `.env`, API keys, Telegram tokens, WatchFacts
+cookies, browser state, full page HTML, or unbounded raw listings.
+
 ## Logs
 
 Follow logs:
