@@ -132,6 +132,14 @@ Mode guidance:
 - `review`: show OpenAI suggestions only in owner review flows.
 - `guarded`: call OpenAI only for eligible hard snippets or allowlisted suspicious reasons, then apply suggestions only after strict local validation gates pass.
 
+Owner review commands:
+
+- `/ai_suggestions`: list OpenAI suggestions with `review_status=open`.
+- `/ai_suggestion <id>`: inspect deterministic text, AI suggestion, raw snippet, gate status, and linked issue.
+- `/ai_accept <id>`: mark a suggestion as reviewed and ready for regression export.
+- `/ai_ignore <id>`: ignore an unsafe or unhelpful suggestion.
+- `/ai_suggestions_export`: export accepted suggestions as JSON for `scripts/generate_issue_fixtures.py`.
+
 Operational rules:
 
 - Store `OPENAI_API_KEY` only in `.env` or the deployment secret store.
@@ -140,6 +148,7 @@ Operational rules:
 - Keep OpenAI timeouts short enough that Telegram users still receive deterministic fallback promptly.
 - Track suggestion accept/reject counts before considering `guarded`.
 - In `guarded`, suggestions must be copied from the raw listing text and pass query, substring, separator, length, confidence, and risk checks before they can change user-facing output.
+- Accepted AI suggestions should become deterministic matcher tests before the matching rules are changed for that pattern.
 
 The older local model experiment has been removed from the supported runtime.
 Do not add new production behavior that depends on local model files.

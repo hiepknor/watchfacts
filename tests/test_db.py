@@ -161,6 +161,140 @@ def test_ai_refinement_suggestions_are_recorded_for_review(tmp_path) -> None:
     assert suggestions[0].suggested_text == "FPJ Elegante Titanium 120k"
     assert suggestions[0].gate_status == "accepted"
     assert suggestions[0].gate_reasons == ("matches_query", "raw_substring")
+    assert suggestions[0].review_status == "open"
+
+
+def test_ai_refinement_suggestions_are_deduped_and_linked_to_issues(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    issue_id = database.record_result_feedback(
+        query_text="Fpj Elegante Titanium",
+        result_rank=2,
+        reason="missing_info",
+        listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        telegram_user_id=123,
+    )
+
+    first_id = database.record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=2,
+        mode="review",
+        model="gpt-5-mini",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        gate_status="accepted",
+        gate_reasons=["matches_query"],
+    )
+    second_id = database.record_ai_refinement_suggestion(
+        query_text="FPJ elegante titanium",
+        result_rank=2,
+        mode="guarded",
+        model="gpt-5-mini",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        gate_status="accepted",
+        gate_reasons=["matches_query", "raw_substring"],
+    )
+
+    suggestions = database.list_ai_refinement_suggestions()
+
+    assert second_id == first_id
+    assert len(suggestions) == 1
+    assert suggestions[0].mode == "guarded"
+    assert suggestions[0].issue_type == "feedback"
+    assert suggestions[0].issue_id == issue_id
+
+
+def test_reviewed_ai_suggestions_export_as_regression_cases(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    suggestion_id = database.record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=1,
+        mode="review",
+        model="gpt-5-mini",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        gate_status="accepted",
+        gate_reasons=["matches_query", "raw_substring"],
+    )
+
+    database.mark_ai_refinement_suggestion_status(
+        suggestion_id,
+        status="accepted",
+        notes="covered by matcher fixture",
+    )
+    exported = database.export_reviewed_ai_suggestions()
+
+    assert exported == [
+        {
+            "id": suggestion_id,
+            "type": "ai_suggestion",
+            "query": "Fpj Elegante Titanium",
+            "reason": "ai_reviewed_refinement",
+            "shown_text": "FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+            "raw_text": "FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+            "expected_text": "FPJ Elegante Titanium 120k",
+            "suggested_text": "FPJ Elegante Titanium 120k",
+            "source_url": None,
+            "gate_status": "accepted",
+            "gate_reasons": ["matches_query", "raw_substring"],
+            "review_status": "accepted",
+            "issue_type": None,
+            "issue_id": None,
+            "model": "gpt-5-mini",
+            "prompt_version": "watchfacts-refine-v1",
+        }
+    ]
+
+
+def test_ai_refinement_suggestion_schema_migrates_existing_table(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    db_path.parent.mkdir(parents=True)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE ai_refinement_suggestions (
+                id INTEGER PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                query_text TEXT NOT NULL,
+                normalized_query TEXT NOT NULL,
+                result_rank INTEGER NOT NULL,
+                mode TEXT NOT NULL,
+                model TEXT NOT NULL,
+                deterministic_text TEXT NOT NULL,
+                suggested_text TEXT NOT NULL,
+                raw_listing_text TEXT,
+                source_url TEXT,
+                gate_status TEXT NOT NULL,
+                gate_reasons TEXT NOT NULL,
+                latency_ms INTEGER
+            )
+            """
+        )
+
+    database = Database(db_path)
+    suggestion_id = database.record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=1,
+        mode="review",
+        model="gpt-5-mini",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        gate_status="accepted",
+        gate_reasons=["matches_query"],
+    )
+
+    suggestion = database.get_ai_refinement_suggestion(suggestion_id)
+
+    assert suggestion is not None
+    assert suggestion.review_status == "open"
+    assert suggestion.prompt_version == "watchfacts-refine-v1"
 
 
 def test_search_cache_round_trips_fresh_payload_and_expires(tmp_path) -> None:

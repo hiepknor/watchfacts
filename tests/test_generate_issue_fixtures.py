@@ -44,3 +44,23 @@ def test_render_pytest_module_uses_raw_text_as_expected_for_missing_info() -> No
     assert "extract_relevant_listing_text" in text
     assert "'name': 'exported_issue_feedback_26_missing_info_5712r'" in text
     assert "'expected_text': '5712R 2016/ HKD 830000'" in text
+
+
+def test_render_pytest_module_uses_reviewed_ai_suggestion_as_expected_text() -> None:
+    text = render_pytest_module(
+        [
+            {
+                "id": 7,
+                "type": "ai_suggestion",
+                "query": "Fpj Elegante Titanium",
+                "reason": "ai_reviewed_refinement",
+                "shown_text": "FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+                "raw_text": "FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+                "suggested_text": "FPJ Elegante Titanium 120k",
+            }
+        ],
+        case_prefix="reviewed_ai",
+    )
+
+    assert "'name': 'reviewed_ai_ai_suggestion_7_ai_reviewed_refinement_fpj_elegante_titanium'" in text
+    assert "'expected_text': 'FPJ Elegante Titanium 120k'" in text

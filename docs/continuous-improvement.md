@@ -141,6 +141,11 @@ Add owner-only Telegram commands.
 | `/issue_done <id>` | Mark issue as reviewed/fixed after maintainer action |
 | `/issue_ignore <id>` | Ignore a false positive |
 | `/issues_export` | Export open issue cases as JSON or text |
+| `/ai_suggestions` | Show OpenAI suggestions waiting for owner review |
+| `/ai_suggestion <id>` | Show one OpenAI suggestion and gate reasons |
+| `/ai_accept <id>` | Accept a reviewed OpenAI suggestion for regression export |
+| `/ai_ignore <id>` | Ignore an unsafe or unhelpful OpenAI suggestion |
+| `/ai_suggestions_export` | Export accepted OpenAI suggestions as regression JSON |
 
 Implemented command set:
 
@@ -149,6 +154,11 @@ Implemented command set:
 - `/issue_done <id>`
 - `/issue_ignore <id>`
 - `/issues_export`
+- `/ai_suggestions`
+- `/ai_suggestion <id>`
+- `/ai_accept <id>`
+- `/ai_ignore <id>`
+- `/ai_suggestions_export`
 
 Owner command output should be Vietnamese and visual:
 
@@ -175,6 +185,11 @@ The export format should be deterministic and test-friendly:
   "source_url": "/flash-sales/9927122"
 }
 ```
+
+Accepted AI suggestions export the same matcher-fixture shape with
+`expected_text` set to the owner-approved suggestion. Maintainers can pass that
+payload to `scripts/generate_issue_fixtures.py` before changing deterministic
+matcher rules.
 
 ### 4. Automatic Suspicious Result Detection
 

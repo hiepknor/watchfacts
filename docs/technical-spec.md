@@ -209,7 +209,9 @@ Responsibilities:
 - Use the raw listing snippet, when available, for allowlisted suspicious cases so OpenAI can recover traceable details that deterministic extraction may have omitted.
 - Request structured JSON output with fields such as `relevant`, `selected_text`, `confidence`, `reasons`, and `risk_flags`.
 - Apply local validation before any suggestion can affect user-facing output.
-- In `guarded`, record accepted and rejected suggestion attempts with gate status and reasons.
+- In `shadow`, `review`, and `guarded`, record changed suggestion attempts with gate status and reasons.
+- In `review`, surface suggestions only to owner commands; normal users still receive deterministic output.
+- Dedupe suggestions by normalized query, raw listing hash, model, and prompt version.
 - Return deterministic fallback on timeout, API error, malformed output, unsafe output, or low confidence.
 
 Boundaries:
@@ -306,9 +308,36 @@ Minimum fields:
 | `raw_listing_text` | text nullable | Original candidate text when available |
 | `reviewed_at` | text nullable | Set when owner reviews |
 
+### `ai_refinement_suggestions`
+
+This table stores OpenAI suggestion attempts for owner review and regression
+fixture export. It must not store prompts containing secrets or full browser
+state.
+
+Minimum fields:
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | integer primary key | Local ID |
+| `query_text` | text | Original query |
+| `normalized_query` | text | Normalized query |
+| `result_rank` | integer | Rank within the result set |
+| `mode` | text | `shadow`, `review`, or `guarded` |
+| `model` | text | OpenAI model used |
+| `prompt_version` | text | Prompt/schema version for dedupe |
+| `raw_listing_hash` | text | Hash of bounded raw snippet or deterministic text |
+| `suggestion_key` | text | Dedupe key from query, raw hash, model, and prompt version |
+| `issue_type` / `issue_id` | nullable | Link to related feedback or suspicious issue when available |
+| `deterministic_text` | text | Text the bot would otherwise show |
+| `suggested_text` | text | Text suggested by OpenAI after local parsing |
+| `raw_listing_text` | text nullable | Bounded raw listing snippet |
+| `gate_status` | text | `accepted` or `rejected` |
+| `gate_reasons` | text | JSON reason array |
+| `review_status` | text | `open`, `accepted`, or `ignored` |
+
 ## Continuous Improvement Architecture
 
-Future feedback workflow:
+Feedback and AI review workflow:
 
 ```text
 Telegram result batch
@@ -316,6 +345,9 @@ Telegram result batch
   -> db stores issue evidence
   -> owner reviews with /issues and /issue <id>
   -> owner exports issue fixtures
+  -> owner reviews AI suggestions with /ai_suggestions and /ai_suggestion <id>
+  -> owner accepts AI suggestions with /ai_accept <id>
+  -> owner exports accepted AI fixtures with /ai_suggestions_export
   -> maintainer converts fixtures to tests
   -> matcher/parser fix is committed and deployed
 ```

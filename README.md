@@ -252,9 +252,15 @@ Bot commands:
 | `/issue_done F<id>` or `/issue_done S<id>` | Mark an issue as fixed/reviewed |
 | `/issue_ignore F<id>` or `/issue_ignore S<id>` | Ignore a false positive issue |
 | `/issues_export` | Export open issues as JSON for regression tests |
+| `/ai_suggestions` | List OpenAI suggestions waiting for owner review |
+| `/ai_suggestion <id>` | Show one OpenAI suggestion with gate details |
+| `/ai_accept <id>` | Accept a reviewed OpenAI suggestion for regression export |
+| `/ai_ignore <id>` | Ignore an unsafe or unhelpful OpenAI suggestion |
+| `/ai_suggestions_export` | Export accepted OpenAI suggestions as matcher fixtures |
 | `/cancel` | Clear pending result buttons |
 
-Generate a draft matcher regression test from exported issues:
+Generate a draft matcher regression test from exported issues or accepted AI
+suggestions:
 
 ```bash
 python scripts/generate_issue_fixtures.py issues.json > /tmp/test_exported_issues.py

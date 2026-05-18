@@ -104,18 +104,27 @@ CREATE TABLE IF NOT EXISTS search_cache (
 CREATE TABLE IF NOT EXISTS ai_refinement_suggestions (
     id INTEGER PRIMARY KEY,
     created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT '',
     query_text TEXT NOT NULL,
     normalized_query TEXT NOT NULL,
     result_rank INTEGER NOT NULL,
     mode TEXT NOT NULL,
     model TEXT NOT NULL,
+    prompt_version TEXT NOT NULL DEFAULT 'watchfacts-refine-v1',
+    raw_listing_hash TEXT NOT NULL DEFAULT '',
+    suggestion_key TEXT NOT NULL DEFAULT '',
+    issue_type TEXT,
+    issue_id INTEGER,
     deterministic_text TEXT NOT NULL,
     suggested_text TEXT NOT NULL,
     raw_listing_text TEXT,
     source_url TEXT,
     gate_status TEXT NOT NULL,
     gate_reasons TEXT NOT NULL,
-    latency_ms INTEGER
+    latency_ms INTEGER,
+    review_status TEXT NOT NULL DEFAULT 'open',
+    review_notes TEXT,
+    reviewed_at TEXT
 );
 """
 
@@ -161,6 +170,9 @@ class AIRefinementSuggestionRecord:
     result_rank: int
     mode: str
     model: str
+    prompt_version: str
+    issue_type: str | None
+    issue_id: int | None
     deterministic_text: str
     suggested_text: str
     raw_listing_text: str | None
@@ -168,6 +180,8 @@ class AIRefinementSuggestionRecord:
     gate_status: str
     gate_reasons: tuple[str, ...]
     latency_ms: int | None
+    review_status: str
+    review_notes: str | None
 
 
 class Database:
@@ -386,39 +400,115 @@ class Database:
         gate_status: str,
         gate_reasons: Iterable[str],
         latency_ms: int | None = None,
+        prompt_version: str = "watchfacts-refine-v1",
     ) -> int:
         now = _utc_now()
         normalized_query = normalize_text(query_text)
+        raw_text_for_key = raw_listing_text or deterministic_text
+        raw_listing_hash = _listing_hash(raw_text_for_key)
+        suggestion_key = _suggestion_key(
+            normalized_query,
+            raw_listing_hash,
+            model,
+            prompt_version,
+        )
         reasons_json = json.dumps(list(gate_reasons), separators=(",", ":"))
 
         with self.connect() as connection:
             _ensure_schema(connection)
+            issue_type, issue_id = _find_related_issue(
+                connection,
+                normalized_query=normalized_query,
+                result_rank=result_rank,
+                listing_text=deterministic_text,
+                raw_listing_text=raw_listing_text,
+            )
+            existing = connection.execute(
+                """
+                SELECT id
+                FROM ai_refinement_suggestions
+                WHERE suggestion_key = ?
+                LIMIT 1
+                """,
+                (suggestion_key,),
+            ).fetchone()
+            if existing is not None:
+                suggestion_id = int(existing[0])
+                connection.execute(
+                    """
+                    UPDATE ai_refinement_suggestions
+                    SET updated_at = ?,
+                        query_text = ?,
+                        result_rank = ?,
+                        mode = ?,
+                        deterministic_text = ?,
+                        suggested_text = ?,
+                        raw_listing_text = ?,
+                        source_url = ?,
+                        gate_status = ?,
+                        gate_reasons = ?,
+                        latency_ms = ?,
+                        issue_type = COALESCE(?, issue_type),
+                        issue_id = COALESCE(?, issue_id)
+                    WHERE id = ?
+                    """,
+                    (
+                        now,
+                        query_text,
+                        result_rank,
+                        mode,
+                        deterministic_text,
+                        suggested_text,
+                        raw_listing_text,
+                        source_url,
+                        gate_status,
+                        reasons_json,
+                        latency_ms,
+                        issue_type,
+                        issue_id,
+                        suggestion_id,
+                    ),
+                )
+                return suggestion_id
             cursor = connection.execute(
                 """
                 INSERT INTO ai_refinement_suggestions (
                     created_at,
+                    updated_at,
                     query_text,
                     normalized_query,
                     result_rank,
                     mode,
                     model,
+                    prompt_version,
+                    raw_listing_hash,
+                    suggestion_key,
+                    issue_type,
+                    issue_id,
                     deterministic_text,
                     suggested_text,
                     raw_listing_text,
                     source_url,
                     gate_status,
                     gate_reasons,
-                    latency_ms
+                    latency_ms,
+                    review_status
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
                 """,
                 (
+                    now,
                     now,
                     query_text,
                     normalized_query,
                     result_rank,
                     mode,
                     model,
+                    prompt_version,
+                    raw_listing_hash,
+                    suggestion_key,
+                    issue_type,
+                    issue_id,
                     deterministic_text,
                     suggested_text,
                     raw_listing_text,
@@ -434,10 +524,52 @@ class Database:
         self,
         *,
         limit: int = 20,
+        review_status: str | None = None,
     ) -> list[AIRefinementSuggestionRecord]:
         with self.connect() as connection:
             _ensure_schema(connection)
+            where = ""
+            params: tuple[object, ...] = (limit,)
+            if review_status is not None:
+                where = "WHERE review_status = ?"
+                params = (review_status, limit)
             rows = connection.execute(
+                f"""
+                SELECT
+                    id,
+                    query_text,
+                    normalized_query,
+                    result_rank,
+                    mode,
+                    model,
+                    prompt_version,
+                    issue_type,
+                    issue_id,
+                    deterministic_text,
+                    suggested_text,
+                    raw_listing_text,
+                    source_url,
+                    gate_status,
+                    gate_reasons,
+                    latency_ms,
+                    review_status,
+                    review_notes
+                FROM ai_refinement_suggestions
+                {where}
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [_ai_refinement_suggestion_from_row(row) for row in rows]
+
+    def get_ai_refinement_suggestion(
+        self,
+        suggestion_id: int,
+    ) -> AIRefinementSuggestionRecord | None:
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            row = connection.execute(
                 """
                 SELECT
                     id,
@@ -446,20 +578,84 @@ class Database:
                     result_rank,
                     mode,
                     model,
+                    prompt_version,
+                    issue_type,
+                    issue_id,
                     deterministic_text,
                     suggested_text,
                     raw_listing_text,
                     source_url,
                     gate_status,
                     gate_reasons,
-                    latency_ms
+                    latency_ms,
+                    review_status,
+                    review_notes
                 FROM ai_refinement_suggestions
-                ORDER BY id DESC
-                LIMIT ?
+                WHERE id = ?
                 """,
-                (limit,),
-            ).fetchall()
-        return [_ai_refinement_suggestion_from_row(row) for row in rows]
+                (suggestion_id,),
+            ).fetchone()
+        return _ai_refinement_suggestion_from_row(row) if row is not None else None
+
+    def mark_ai_refinement_suggestion_status(
+        self,
+        suggestion_id: int,
+        *,
+        status: str,
+        notes: str | None = None,
+    ) -> AIRefinementSuggestionRecord | None:
+        if status not in {"open", "accepted", "ignored"}:
+            raise ValueError(f"Unsupported AI suggestion status: {status}")
+
+        now = _utc_now()
+        reviewed_at = None if status == "open" else now
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            cursor = connection.execute(
+                """
+                UPDATE ai_refinement_suggestions
+                SET review_status = ?,
+                    review_notes = ?,
+                    reviewed_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (status, notes, reviewed_at, now, suggestion_id),
+            )
+            if not cursor.rowcount:
+                return None
+        return self.get_ai_refinement_suggestion(suggestion_id)
+
+    def export_reviewed_ai_suggestions(
+        self,
+        *,
+        status: str = "accepted",
+        limit: int = 50,
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "id": suggestion.id,
+                "type": "ai_suggestion",
+                "query": suggestion.query_text,
+                "reason": "ai_reviewed_refinement",
+                "shown_text": suggestion.deterministic_text,
+                "raw_text": suggestion.raw_listing_text or suggestion.deterministic_text,
+                "expected_text": suggestion.suggested_text,
+                "suggested_text": suggestion.suggested_text,
+                "source_url": suggestion.source_url,
+                "gate_status": suggestion.gate_status,
+                "gate_reasons": list(suggestion.gate_reasons),
+                "review_status": suggestion.review_status,
+                "issue_type": suggestion.issue_type,
+                "issue_id": suggestion.issue_id,
+                "model": suggestion.model,
+                "prompt_version": suggestion.prompt_version,
+            }
+            for suggestion in self.list_ai_refinement_suggestions(
+                limit=limit,
+                review_status=status,
+            )
+        ]
 
     def record_result_feedback(
         self,
@@ -852,6 +1048,23 @@ def _ensure_schema(connection: sqlite3.Connection) -> None:
         "review_notes",
         "TEXT",
     )
+    for column, definition in {
+        "updated_at": "TEXT NOT NULL DEFAULT ''",
+        "prompt_version": "TEXT NOT NULL DEFAULT 'watchfacts-refine-v1'",
+        "raw_listing_hash": "TEXT NOT NULL DEFAULT ''",
+        "suggestion_key": "TEXT NOT NULL DEFAULT ''",
+        "issue_type": "TEXT",
+        "issue_id": "INTEGER",
+        "review_status": "TEXT NOT NULL DEFAULT 'open'",
+        "review_notes": "TEXT",
+        "reviewed_at": "TEXT",
+    }.items():
+        _add_column_if_missing(
+            connection,
+            "ai_refinement_suggestions",
+            column,
+            definition,
+        )
 
 
 def _add_column_if_missing(
@@ -868,6 +1081,66 @@ def _add_column_if_missing(
 
 def _listing_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _suggestion_key(
+    normalized_query: str,
+    raw_listing_hash: str,
+    model: str,
+    prompt_version: str,
+) -> str:
+    return _listing_hash(
+        "\x1f".join((normalized_query, raw_listing_hash, model, prompt_version))
+    )
+
+
+def _find_related_issue(
+    connection: sqlite3.Connection,
+    *,
+    normalized_query: str,
+    result_rank: int,
+    listing_text: str,
+    raw_listing_text: str | None,
+) -> tuple[str | None, int | None]:
+    params = (
+        normalized_query,
+        result_rank,
+        listing_text,
+        raw_listing_text,
+        raw_listing_text,
+    )
+    feedback = connection.execute(
+        """
+        SELECT id
+        FROM result_feedback
+        WHERE normalized_query = ?
+          AND result_rank = ?
+          AND listing_text = ?
+          AND (? IS NULL OR raw_listing_text = ?)
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        params,
+    ).fetchone()
+    if feedback is not None:
+        return "feedback", int(feedback[0])
+
+    suspicious = connection.execute(
+        """
+        SELECT id
+        FROM suspicious_results
+        WHERE normalized_query = ?
+          AND result_rank = ?
+          AND listing_text = ?
+          AND (? IS NULL OR raw_listing_text = ?)
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        params,
+    ).fetchone()
+    if suspicious is not None:
+        return "suspicious", int(suspicious[0])
+    return None, None
 
 
 def _issue_record_from_row(row) -> IssueRecord:
@@ -890,7 +1163,7 @@ def _issue_record_from_row(row) -> IssueRecord:
 
 def _ai_refinement_suggestion_from_row(row) -> AIRefinementSuggestionRecord:
     try:
-        reasons = json.loads(str(row[11]))
+        reasons = json.loads(str(row[14]))
     except json.JSONDecodeError:
         reasons = []
     if not isinstance(reasons, list):
@@ -902,11 +1175,16 @@ def _ai_refinement_suggestion_from_row(row) -> AIRefinementSuggestionRecord:
         result_rank=int(row[3]),
         mode=str(row[4]),
         model=str(row[5]),
-        deterministic_text=str(row[6]),
-        suggested_text=str(row[7]),
-        raw_listing_text=str(row[8]) if row[8] is not None else None,
-        source_url=str(row[9]) if row[9] is not None else None,
-        gate_status=str(row[10]),
+        prompt_version=str(row[6]),
+        issue_type=str(row[7]) if row[7] is not None else None,
+        issue_id=int(row[8]) if row[8] is not None else None,
+        deterministic_text=str(row[9]),
+        suggested_text=str(row[10]),
+        raw_listing_text=str(row[11]) if row[11] is not None else None,
+        source_url=str(row[12]) if row[12] is not None else None,
+        gate_status=str(row[13]),
         gate_reasons=tuple(str(reason) for reason in reasons),
-        latency_ms=int(row[12]) if row[12] is not None else None,
+        latency_ms=int(row[15]) if row[15] is not None else None,
+        review_status=str(row[16]),
+        review_notes=str(row[17]) if row[17] is not None else None,
     )

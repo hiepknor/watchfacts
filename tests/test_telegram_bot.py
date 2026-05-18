@@ -30,6 +30,11 @@ from app.telegram_bot import (
     RESULT_REFINER_KEY,
     SearchResult,
     _build_result_refiner,
+    ai_accept_command,
+    ai_ignore_command,
+    ai_suggestion_command,
+    ai_suggestions_command,
+    ai_suggestions_export_command,
     cancel_command,
     format_result_summary,
     format_health_message,
@@ -441,6 +446,113 @@ def test_issues_export_command_returns_json(tmp_path) -> None:
     assert "📤 Export issue regression" in message.replies[0]
     assert '"query": "5712r"' in message.replies[0]
     assert '"raw_text": "5712R 2016/ HKD 830000"' in message.replies[0]
+
+
+def test_ai_suggestions_command_lists_open_suggestions(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    suggestion_id = Database(db_path).record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=1,
+        mode="review",
+        model="gpt-5-mini",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        gate_status="accepted",
+        gate_reasons=["matches_query", "raw_substring"],
+    )
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+
+    asyncio.run(ai_suggestions_command(SimpleNamespace(message=message), context))
+
+    assert f"#A{suggestion_id} ✅ accepted" in message.replies[0]
+    assert "🔎 Query: Fpj Elegante Titanium" in message.replies[0]
+    assert "✨ AI đề xuất: FPJ Elegante Titanium 120k" in message.replies[0]
+
+
+def test_ai_suggestion_command_shows_detail(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    suggestion_id = Database(db_path).record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=1,
+        mode="review",
+        model="gpt-5-mini",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        gate_status="accepted",
+        gate_reasons=["matches_query"],
+    )
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+    context.args = [str(suggestion_id)]
+
+    asyncio.run(ai_suggestion_command(SimpleNamespace(message=message), context))
+
+    assert f"🤖 Gợi ý AI #A{suggestion_id}" in message.replies[0]
+    assert "✨ AI đề xuất:\nFPJ Elegante Titanium 120k" in message.replies[0]
+    assert "🔒 Không hiển thị cookie" in message.replies[0]
+
+
+def test_ai_accept_command_marks_suggestion_accepted_and_exportable(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    suggestion_id = Database(db_path).record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=1,
+        mode="review",
+        model="gpt-5-mini",
+        deterministic_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        suggested_text="FPJ Elegante Titanium 120k",
+        raw_listing_text="FPJ quantieme - [ ] FPJ Elegante Titanium 120k",
+        gate_status="accepted",
+        gate_reasons=["matches_query"],
+    )
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+    context.args = [f"A{suggestion_id}", "fixture", "ready"]
+
+    asyncio.run(ai_accept_command(SimpleNamespace(message=message), context))
+
+    assert f"✅ Gợi ý AI #A{suggestion_id} đã duyệt." in message.replies[0]
+    suggestion = Database(db_path).get_ai_refinement_suggestion(suggestion_id)
+    assert suggestion is not None
+    assert suggestion.review_status == "accepted"
+    assert suggestion.review_notes == "fixture ready"
+
+    export_message = FakeMessage()
+    asyncio.run(
+        ai_suggestions_export_command(
+            SimpleNamespace(message=export_message),
+            make_context(db_path=db_path, allowed_user_ids=(123,)),
+        )
+    )
+    assert "📤 Export AI regression" in export_message.replies[0]
+    assert '"expected_text": "FPJ Elegante Titanium 120k"' in export_message.replies[0]
+
+
+def test_ai_ignore_command_marks_suggestion_ignored(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    suggestion_id = Database(db_path).record_ai_refinement_suggestion(
+        query_text="Fpj Elegante Titanium",
+        result_rank=1,
+        mode="review",
+        model="gpt-5-mini",
+        deterministic_text="bad shown text",
+        suggested_text="bad ai text",
+        gate_status="rejected",
+        gate_reasons=["query_mismatch"],
+    )
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+    context.args = [str(suggestion_id)]
+
+    asyncio.run(ai_ignore_command(SimpleNamespace(message=message), context))
+
+    assert f"✅ Gợi ý AI #A{suggestion_id} đã bỏ qua." in message.replies[0]
+    suggestion = Database(db_path).get_ai_refinement_suggestion(suggestion_id)
+    assert suggestion is not None
+    assert suggestion.review_status == "ignored"
 
 
 def test_issue_done_command_marks_feedback_issue_fixed(tmp_path) -> None:

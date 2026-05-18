@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Protocol
 
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
-from app.db import Database, IssueRecord
+from app.db import AIRefinementSuggestionRecord, Database, IssueRecord
 from app.scraper import BrowserSessionError, BrowserSessionStatus
 
 
@@ -47,7 +47,8 @@ HELP_MESSAGE = (
     "🧹 /cancel để xóa các nút kết quả đang chờ.\n"
     "⚙️ /settings để xem cấu hình bot hiện tại.\n"
     "🩺 /health để kiểm tra session WatchFacts.\n"
-    "🧾 /issues để xem feedback và kết quả đáng nghi."
+    "🧾 /issues để xem feedback và kết quả đáng nghi.\n"
+    "🤖 /ai_suggestions để review gợi ý OpenAI."
 )
 EMPTY_QUERY_MESSAGE = (
     "⚠️ Truy vấn đang trống\n\n"
@@ -241,6 +242,72 @@ async def issues_export_command(update, context) -> None:
         message.reply_text(
             _limit_telegram_text(
                 "📤 Export issue regression\n\n"
+                f"```json\n{text}\n```",
+                TELEGRAM_TEXT_MESSAGE_LIMIT,
+            )
+        )
+    )
+
+
+async def ai_suggestions_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    suggestions = _issue_database(context).list_ai_refinement_suggestions(
+        limit=10,
+        review_status="open",
+    )
+    await _maybe_await(message.reply_text(format_ai_suggestions_message(suggestions)))
+
+
+async def ai_suggestion_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    suggestion_id = _first_int_arg(context)
+    if suggestion_id is None:
+        await _maybe_await(
+            message.reply_text(
+                "🤖 Xem gợi ý AI\n\n"
+                "Vui lòng dùng dạng `/ai_suggestion 1`."
+            )
+        )
+        return
+
+    suggestion = _issue_database(context).get_ai_refinement_suggestion(suggestion_id)
+    await _maybe_await(message.reply_text(format_ai_suggestion_detail(suggestion)))
+
+
+async def ai_accept_command(update, context) -> None:
+    await _mark_ai_suggestion_command(update, context, status="accepted")
+
+
+async def ai_ignore_command(update, context) -> None:
+    await _mark_ai_suggestion_command(update, context, status="ignored")
+
+
+async def ai_suggestions_export_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    payload = _issue_database(context).export_reviewed_ai_suggestions(
+        status="accepted",
+        limit=ISSUES_EXPORT_LIMIT,
+    )
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    await _maybe_await(
+        message.reply_text(
+            _limit_telegram_text(
+                "📤 Export AI regression\n\n"
                 f"```json\n{text}\n```",
                 TELEGRAM_TEXT_MESSAGE_LIMIT,
             )
@@ -663,6 +730,96 @@ def format_issue_status_update(issue: IssueRecord | None, status: str) -> str:
     )
 
 
+def format_ai_suggestions_message(
+    suggestions: list[AIRefinementSuggestionRecord],
+) -> str:
+    if not suggestions:
+        return (
+            "🤖 Gợi ý AI cần review\n\n"
+            "✅ Chưa có gợi ý OpenAI đang chờ duyệt."
+        )
+
+    lines = ["🤖 Gợi ý AI cần review", ""]
+    for suggestion in suggestions:
+        lines.extend(
+            [
+                f"#A{suggestion.id} {_ai_gate_icon(suggestion.gate_status)} {suggestion.gate_status}",
+                f"🔎 Query: {suggestion.query_text}",
+                f"🏷️ Bot gửi: {_limit_inline(suggestion.deterministic_text, 110)}",
+                f"✨ AI đề xuất: {_limit_inline(suggestion.suggested_text, 110)}",
+            ]
+        )
+        if suggestion.issue_type and suggestion.issue_id:
+            lines.append(f"🔗 Issue: {_issue_ref_label(suggestion.issue_type, suggestion.issue_id)}")
+        lines.append("")
+    lines.append(
+        "Dùng `/ai_suggestion 1` để xem chi tiết; "
+        "`/ai_accept 1` để duyệt; `/ai_ignore 1` để bỏ qua."
+    )
+    return "\n".join(lines).strip()
+
+
+def format_ai_suggestion_detail(
+    suggestion: AIRefinementSuggestionRecord | None,
+) -> str:
+    if suggestion is None:
+        return (
+            "🤖 Gợi ý AI không tồn tại\n\n"
+            "Kiểm tra lại ID bằng `/ai_suggestions`."
+        )
+
+    sections = [
+        f"🤖 Gợi ý AI #A{suggestion.id}",
+        "",
+        f"📌 Trạng thái review: {suggestion.review_status}",
+        f"🧪 Gate: {suggestion.gate_status}",
+        f"🔎 Query: {suggestion.query_text}",
+        f"📍 Rank: {suggestion.result_rank}",
+        f"🧠 Model: {suggestion.model}",
+        f"🧾 Prompt: {suggestion.prompt_version}",
+        "",
+        f"🏷️ Bot gửi:\n{suggestion.deterministic_text}",
+        "",
+        f"✨ AI đề xuất:\n{suggestion.suggested_text}",
+    ]
+    if suggestion.raw_listing_text:
+        sections.extend(["", f"🧾 Raw candidate:\n{suggestion.raw_listing_text}"])
+    if suggestion.source_url:
+        sections.append(f"🔗 Source: {suggestion.source_url}")
+    if suggestion.issue_type and suggestion.issue_id:
+        sections.append(f"🔗 Issue: {_issue_ref_label(suggestion.issue_type, suggestion.issue_id)}")
+    if suggestion.gate_reasons:
+        sections.append(f"🧪 Reasons: {', '.join(suggestion.gate_reasons)}")
+    if suggestion.review_notes:
+        sections.append(f"📝 Notes: {suggestion.review_notes}")
+    if suggestion.review_status == "open":
+        sections.append("")
+        sections.append(f"✅ Duyệt: /ai_accept {suggestion.id}")
+        sections.append(f"🙈 Bỏ qua: /ai_ignore {suggestion.id}")
+    sections.append("")
+    sections.append("🔒 Không hiển thị cookie, token hoặc browser state.")
+    return _limit_telegram_text("\n".join(sections), TELEGRAM_TEXT_MESSAGE_LIMIT)
+
+
+def format_ai_suggestion_status_update(
+    suggestion: AIRefinementSuggestionRecord | None,
+    status: str,
+) -> str:
+    if suggestion is None:
+        return (
+            "🤖 Gợi ý AI không tồn tại\n\n"
+            "Kiểm tra lại ID bằng `/ai_suggestions`."
+        )
+
+    label = "đã duyệt" if status == "accepted" else "đã bỏ qua"
+    return (
+        f"✅ Gợi ý AI #A{suggestion.id} {label}.\n\n"
+        f"📌 Trạng thái: {suggestion.review_status}\n"
+        f"🔎 Query: {suggestion.query_text}\n"
+        f"✨ AI đề xuất: {_limit_inline(suggestion.suggested_text, 160)}"
+    )
+
+
 def format_health_message(status: BrowserSessionStatus | None) -> str:
     if status is None:
         return (
@@ -734,6 +891,13 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.add_handler(CommandHandler("issues", issues_command))
     application.add_handler(CommandHandler("issue", issue_command))
     application.add_handler(CommandHandler("issues_export", issues_export_command))
+    application.add_handler(CommandHandler("ai_suggestions", ai_suggestions_command))
+    application.add_handler(CommandHandler("ai_suggestion", ai_suggestion_command))
+    application.add_handler(CommandHandler("ai_accept", ai_accept_command))
+    application.add_handler(CommandHandler("ai_ignore", ai_ignore_command))
+    application.add_handler(
+        CommandHandler("ai_suggestions_export", ai_suggestions_export_command)
+    )
     application.add_handler(CommandHandler("issue_done", issue_done_command))
     application.add_handler(CommandHandler("issue_ignore", issue_ignore_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
@@ -853,6 +1017,19 @@ def _first_issue_arg(context) -> tuple[str | None, int] | None:
         return None
 
 
+def _first_int_arg(context) -> int | None:
+    args = getattr(context, "args", None) or []
+    if not args:
+        return None
+    raw = str(args[0]).strip().lstrip("#")
+    if raw[:1].casefold() == "a":
+        raw = raw[1:]
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
 async def _mark_issue_command(update, context, *, status: str) -> None:
     message = getattr(update, "message", None)
     if await _reject_unauthorized(update, context, message):
@@ -882,6 +1059,34 @@ async def _mark_issue_command(update, context, *, status: str) -> None:
     await _maybe_await(message.reply_text(format_issue_status_update(issue, status)))
 
 
+async def _mark_ai_suggestion_command(update, context, *, status: str) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    suggestion_id = _first_int_arg(context)
+    if suggestion_id is None:
+        command = "/ai_accept" if status == "accepted" else "/ai_ignore"
+        await _maybe_await(
+            message.reply_text(
+                "🤖 Cập nhật gợi ý AI\n\n"
+                f"Vui lòng dùng dạng `{command} 1`."
+            )
+        )
+        return
+
+    suggestion = _issue_database(context).mark_ai_refinement_suggestion_status(
+        suggestion_id,
+        status=status,
+        notes=_issue_notes_arg(context),
+    )
+    await _maybe_await(
+        message.reply_text(format_ai_suggestion_status_update(suggestion, status))
+    )
+
+
 def _issue_notes_arg(context) -> str | None:
     args = getattr(context, "args", None) or []
     notes = " ".join(str(arg).strip() for arg in args[1:]).strip()
@@ -891,6 +1096,15 @@ def _issue_notes_arg(context) -> str | None:
 def _issue_key(issue: IssueRecord) -> str:
     prefix = "F" if issue.issue_type == "feedback" else "S"
     return f"{prefix}{issue.id}"
+
+
+def _issue_ref_label(issue_type: str, issue_id: int) -> str:
+    prefix = "F" if issue_type == "feedback" else "S"
+    return f"#{prefix}{issue_id}"
+
+
+def _ai_gate_icon(status: str) -> str:
+    return "✅" if status == "accepted" else "🧪"
 
 
 def _issue_icon(reason: str, issue_type: str) -> str:

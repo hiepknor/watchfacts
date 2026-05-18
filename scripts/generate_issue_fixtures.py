@@ -92,6 +92,10 @@ def _default_expected_text(
     shown_text: str,
     raw_text: str,
 ) -> str:
+    explicit_expected = issue.get("expected_text") or issue.get("suggested_text")
+    if isinstance(explicit_expected, str) and explicit_expected.strip():
+        return explicit_expected
+
     reason = _string_value(issue.get("reason"), "")
     if reason in {
         "missing_info",

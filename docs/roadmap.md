@@ -141,7 +141,7 @@ Exit criteria:
 - [x] No secrets, cookies, browser state, or full page HTML are exposed in issue records or exports.
 - [x] Add status mutation commands such as `/issue_done` and `/issue_ignore`.
 - [x] Add fixture generation script from exported issues.
-- [ ] `python -m pytest` and `make check` pass for every implementation change.
+- [x] `python -m pytest` and `make check` pass for every implementation change.
 
 Detailed spec:
 
@@ -149,7 +149,7 @@ Detailed spec:
 
 ## Milestone 7: OpenAI Controlled Intelligence
 
-Status: baseline complete; review tooling remains future work.
+Status: complete.
 
 Goal: make the bot improve faster on messy listing formats while preserving deterministic, auditable production behavior, using OpenAI API as the only AI provider.
 
@@ -169,8 +169,8 @@ Deliverables:
 - [x] Optional OpenAI refiner that proposes scoped listing text for high-risk results.
 - [x] Confidence gates requiring query/reference match, raw substring traceability, confidence, length, and no cross-item leakage.
 - [x] Shadow-mode records showing when OpenAI would change output.
-- [ ] Owner review commands or digest entries for OpenAI-suggested corrections.
-- [ ] Regression fixture generation from reviewed OpenAI suggestions.
+- [x] Owner review commands or digest entries for OpenAI-suggested corrections.
+- [x] Regression fixture generation from reviewed OpenAI suggestions.
 
 Exit criteria:
 
@@ -178,7 +178,7 @@ Exit criteria:
 - [x] OpenAI is disabled by default and never required for normal search.
 - [x] Shadow mode records proposed changes without altering Telegram output.
 - [x] OpenAI responses are parsed through a strict schema and rejected on malformed or unsafe output.
-- [ ] Accepted AI suggestions become deterministic tests before production behavior changes.
+- [x] Accepted AI suggestions become deterministic tests before production behavior changes.
 - [x] The bot never auto-edits code, auto-deploys, or stores secrets in AI prompts/logs.
 - [x] Fallback behavior is deterministic when OpenAI is unavailable, slow, or uncertain.
 

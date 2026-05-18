@@ -459,7 +459,7 @@ After each phase:
 
 ## Phase 7: OpenAI Controlled Intelligence
 
-Status: baseline complete; owner review tooling remains planned.
+Status: complete.
 
 Goal: remove the local model experiment and introduce one controlled AI path through OpenAI API, with deterministic search remaining the default and fallback behavior.
 
@@ -568,10 +568,18 @@ Description: Record OpenAI suggestions in shadow/review modes without changing T
 Acceptance:
 
 - [x] `HYBRID_AI_MODE=shadow` records deterministic vs suggested output, gate results, model, and latency.
-- [ ] `HYBRID_AI_MODE=review` surfaces suggestions in owner issue review without showing them to normal users.
-- [ ] Suggestions are tied to feedback or suspicious-result records where possible.
-- [ ] Duplicate suggestions are deduped by query, raw snippet hash, model, and prompt version.
+- [x] `HYBRID_AI_MODE=review` surfaces suggestions in owner issue review without showing them to normal users.
+- [x] Suggestions are tied to feedback or suspicious-result records where possible.
+- [x] Duplicate suggestions are deduped by query, raw snippet hash, model, and prompt version.
 - [x] Owner-facing output is concise Vietnamese and never includes secrets.
+
+Implemented owner commands:
+
+- `/ai_suggestions`
+- `/ai_suggestion <id>`
+- `/ai_accept <id>`
+- `/ai_ignore <id>`
+- `/ai_suggestions_export`
 
 Verify:
 
