@@ -81,3 +81,22 @@ def test_group_similar_results_prefers_cleaner_primary() -> None:
     assert len(grouped) == 1
     assert grouped[0].listing_text == clean.listing_text
     assert grouped[0].similar_results == (noisy,)
+
+
+def test_group_similar_results_prefers_scored_primary() -> None:
+    weak = SearchResult(
+        "Patek 5205R blue full set $428000 green strap",
+        seller="A",
+        posted_date="May 17, 2026",
+    )
+    local = SearchResult(
+        "Patek 5205R green full set $428000",
+        seller="B",
+        posted_date="May 17, 2026",
+    )
+
+    grouped = group_similar_results([weak, local], query="5205r green")
+
+    assert len(grouped) == 1
+    assert grouped[0].listing_text == local.listing_text
+    assert grouped[0].similar_results == (weak,)

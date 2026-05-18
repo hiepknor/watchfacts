@@ -102,7 +102,7 @@ Minimum local API:
 
 ```text
 explain_extraction(query, listing_text) -> ExtractionTrace
-score_result(query, result, original_rank) -> ResultScore
+score_result(result, original_rank=..., query=...) -> ResultScore
 ```
 
 Optional owner command for a later implementation:
@@ -250,6 +250,9 @@ Acceptance:
 - Relevance signals only affect order after quality group and posted date are
   equal.
 - Search cache version is bumped for the ranking tie-break change.
+- Similar-result grouping uses the same quality/relevance/price score fields
+  when choosing a group primary, but does not use posted date to replace the
+  already-ranked primary.
 
 ## Verification
 

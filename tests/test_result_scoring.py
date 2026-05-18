@@ -112,6 +112,18 @@ def test_rank_results_by_quality_prefers_visible_price_after_quality_date_and_re
     assert ranked == [with_price, without_price]
 
 
+def test_score_result_detects_split_thousands_price_evidence() -> None:
+    result = SearchResult(
+        "PP 7118/1200A grey N1/2026 790 000HKD",
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="7118/1200a grey")
+
+    assert score.price_evidence_score == 1
+    assert "price.visible" in score.reasons
+
+
 def test_rank_results_by_quality_keeps_date_ahead_of_relevance_signals() -> None:
     older_exact = SearchResult(
         "Patek 5205R green full set $428000",

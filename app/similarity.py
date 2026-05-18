@@ -7,6 +7,7 @@ from difflib import SequenceMatcher
 
 from app.ai_refiner import deterministic_refine_listing_text
 from app.matcher import normalize_text
+from app.result_scoring import score_result
 from app.telegram_bot import SearchResult
 
 
@@ -64,7 +65,7 @@ def group_similar_results(
         for index, existing in enumerate(grouped):
             if not _looks_similar(existing.listing_text, result.listing_text, query=query):
                 continue
-            if _is_better_primary(result, existing):
+            if _is_better_primary(result, existing, query=query):
                 grouped[index] = replace(
                     result,
                     similar_results=(
@@ -102,11 +103,37 @@ def _looks_similar(left: str, right: str, *, query: str | None = None) -> bool:
     return _token_similarity(left_profile["tokens"], right_profile["tokens"]) >= SIMILARITY_THRESHOLD
 
 
-def _is_better_primary(candidate: SearchResult, current: SearchResult) -> bool:
-    return _quality_score(candidate.listing_text) > _quality_score(current.listing_text)
+def _is_better_primary(
+    candidate: SearchResult,
+    current: SearchResult,
+    *,
+    query: str | None = None,
+) -> bool:
+    candidate_score = _group_primary_score(candidate, query=query)
+    current_score = _group_primary_score(current, query=query)
+    if candidate_score != current_score:
+        return candidate_score < current_score
+    return _primary_text_score(candidate.listing_text) > _primary_text_score(
+        current.listing_text
+    )
 
 
-def _quality_score(value: str) -> tuple[int, int]:
+def _group_primary_score(
+    result: SearchResult,
+    *,
+    query: str | None = None,
+) -> tuple[int, int, int, int, int]:
+    score = score_result(result, original_rank=0, query=query)
+    return (
+        score.quality_group,
+        score.quality_severity,
+        -score.exact_reference_score,
+        -score.descriptor_score,
+        -score.price_evidence_score,
+    )
+
+
+def _primary_text_score(value: str) -> tuple[int, int]:
     multi_markers = sum(value.count(marker) for marker in ("- [ ]", " • ", " | "))
     return (-multi_markers, 0)
 

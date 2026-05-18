@@ -16,6 +16,8 @@ PRICE_EVIDENCE_RE = re.compile(
         |
         \b(?:hkd|usd|usdt|eur|aed|chf)\s*\d
         |
+        \b\d{1,3}(?:[,\s.]\d{3})+\s*(?:hkd|usd|usdt|eur|aed|chf)?\b
+        |
         \b\d+(?:[,.]\d+)?[km]\b
         |
         \b\d{5,8}\s*(?:hkd|usd|usdt|eur|aed|chf)?\b

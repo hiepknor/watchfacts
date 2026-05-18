@@ -193,6 +193,9 @@ Responsibilities:
 - Use query-aware relevance tie-breaks for selected reference, descriptor
   locality, and visible price evidence only after quality and posted date are
   equal.
+- Use the same quality/relevance/price score fields when choosing the primary
+  result inside a similar-result group, without letting grouping override the
+  already-established posted-date order.
 - Demote missing-price and suspicious results without removing them.
 - Return structured score reasons suitable for tests and diagnostics.
 - Preserve original source order as a stable final tie-breaker.
