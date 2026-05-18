@@ -263,17 +263,26 @@ def test_search_workflow_demotes_missing_price_result_when_priced_results_exist(
         {
           "title": "5205r 2026",
           "companyName": "H",
+          "repostedAt": "2026-05-18 10:00:00",
           "number": 1
         },
         {
           "title": "5205R 2026-04 $428000",
           "companyName": "Sally",
+          "repostedAt": "2026-05-17 10:00:00",
           "number": 2
         },
         {
           "title": "5205r 2026/3 $435,000",
           "companyName": "Hugh",
+          "repostedAt": "2026-03-16 10:00:00",
           "number": 3
+        },
+        {
+          "title": "5205R 2026-04 436k HKD",
+          "companyName": "Mr Et",
+          "repostedAt": "2026-05-10 10:00:00",
+          "number": 4
         }
       ]
     }
@@ -292,6 +301,7 @@ def test_search_workflow_demotes_missing_price_result_when_priced_results_exist(
 
     assert [result.listing_text for result in results] == [
         "5205R 2026-04 $428000",
+        "5205R 2026-04 436k HKD",
         "5205r 2026/3 $435,000",
         "5205r 2026",
     ]

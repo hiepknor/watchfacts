@@ -8,6 +8,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
+from datetime import datetime
 
 from app.config import Settings
 from app.db import Database
@@ -375,14 +376,15 @@ def _rank_quality_results(results: list[SearchResult]) -> list[SearchResult]:
     scored = [
         (
             _quality_rank(result),
+            _posted_date_rank(result.posted_date),
             index,
             result,
         )
         for index, result in enumerate(results)
     ]
-    if all(score == scored[0][0] for score, _, _ in scored):
+    if all((quality, date) == scored[0][:2] for quality, date, _, _ in scored):
         return results
-    return [result for _, _, result in sorted(scored)]
+    return [result for _, _, _, result in sorted(scored)]
 
 
 def _quality_rank(result: SearchResult) -> tuple[int, int]:
@@ -396,6 +398,25 @@ def _quality_rank(result: SearchResult) -> tuple[int, int]:
     if missing_price_only:
         return (1, max(issue.severity for issue in issues))
     return (2, max(issue.severity for issue in issues))
+
+
+def _posted_date_rank(value: str | None) -> tuple[int, float]:
+    parsed = _parse_posted_date(value)
+    if parsed is None:
+        return (1, 0.0)
+    return (0, -parsed.timestamp())
+
+
+def _parse_posted_date(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.split("·", maxsplit=1)[0].strip()
+    for date_format in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(normalized[:19], date_format)
+        except ValueError:
+            continue
+    return None
 
 
 def _listing_candidate_key(listing: ListingCandidate) -> tuple[str, str, str, str]:
