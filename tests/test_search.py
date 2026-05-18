@@ -253,6 +253,50 @@ def test_search_workflow_drops_server_filtered_non_sale_requests(tmp_path) -> No
     ]
 
 
+def test_search_workflow_demotes_missing_price_result_when_priced_results_exist(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "5205r 2026",
+          "companyName": "H",
+          "number": 1
+        },
+        {
+          "title": "5205R 2026-04 $428000",
+          "companyName": "Sally",
+          "number": 2
+        },
+        {
+          "title": "5205r 2026/3 $435,000",
+          "companyName": "Hugh",
+          "number": 3
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("5205r 2026"))
+
+    assert [result.listing_text for result in results] == [
+        "5205R 2026-04 $428000",
+        "5205r 2026/3 $435,000",
+        "5205r 2026",
+    ]
+
+
 def test_search_workflow_expands_sparse_year_query_and_refilters_locally(tmp_path) -> None:
     settings = make_settings(tmp_path)
     fetch_queries: list[str | None] = []

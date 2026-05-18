@@ -115,6 +115,7 @@ class WatchFactsSearchWorkflow:
         if self.refine_results is not None and self.settings.hybrid_ai_mode != "off":
             unique = await self._handle_hybrid_refinement(query, unique)
         unique = unique_latest_by_text(unique)
+        unique = _rank_quality_results(unique)
         unique = group_similar_results(unique, query=query)
 
         self.database.record_query_results(query, unique)
@@ -365,6 +366,36 @@ def _merge_listing_candidates(
         seen.add(key)
         merged.append(listing)
     return merged
+
+
+def _rank_quality_results(results: list[SearchResult]) -> list[SearchResult]:
+    if len(results) < 2:
+        return results
+
+    scored = [
+        (
+            _quality_rank(result),
+            index,
+            result,
+        )
+        for index, result in enumerate(results)
+    ]
+    if all(score == scored[0][0] for score, _, _ in scored):
+        return results
+    return [result for _, _, result in sorted(scored)]
+
+
+def _quality_rank(result: SearchResult) -> tuple[int, int]:
+    issues = detect_suspicious_result(
+        listing_text=result.listing_text,
+        raw_listing_text=result.raw_listing_text,
+    )
+    if not issues:
+        return (0, 0)
+    missing_price_only = all(issue.reason == "missing_price_evidence" for issue in issues)
+    if missing_price_only:
+        return (1, max(issue.severity for issue in issues))
+    return (2, max(issue.severity for issue in issues))
 
 
 def _listing_candidate_key(listing: ListingCandidate) -> tuple[str, str, str, str]:
