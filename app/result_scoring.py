@@ -2,9 +2,27 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import re
 
 from app.issues import detect_suspicious_result
+from app.matcher import explain_extraction
 from app.telegram_bot import SearchResult
+
+
+PRICE_EVIDENCE_RE = re.compile(
+    r"""
+    (?:
+        [$€£¥]\s*\d
+        |
+        \b(?:hkd|usd|usdt|eur|aed|chf)\s*\d
+        |
+        \b\d+(?:[,.]\d+)?[km]\b
+        |
+        \b\d{5,8}\s*(?:hkd|usd|usdt|eur|aed|chf)?\b
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 
 @dataclass(frozen=True)
@@ -32,12 +50,16 @@ class ResultScore:
         )
 
 
-def rank_results_by_quality(results: list[SearchResult]) -> list[SearchResult]:
+def rank_results_by_quality(
+    results: list[SearchResult],
+    *,
+    query: str | None = None,
+) -> list[SearchResult]:
     if len(results) < 2:
         return results
 
     scored = [
-        (score_result(result, original_rank=index), result)
+        (score_result(result, original_rank=index, query=query), result)
         for index, result in enumerate(results)
     ]
     first_key = scored[0][0].sort_key()
@@ -49,20 +71,31 @@ def rank_results_by_quality(results: list[SearchResult]) -> list[SearchResult]:
     ]
 
 
-def score_result(result: SearchResult, *, original_rank: int) -> ResultScore:
+def score_result(
+    result: SearchResult,
+    *,
+    original_rank: int,
+    query: str | None = None,
+) -> ResultScore:
     quality_group, quality_severity, quality_reasons = _quality_score(result)
     posted_date_group, posted_date_timestamp, date_reason = _posted_date_score(
         result.posted_date
     )
-    reasons = (*quality_reasons, date_reason)
+    (
+        exact_reference_score,
+        descriptor_score,
+        relevance_reasons,
+    ) = _relevance_score(result, query=query)
+    price_evidence_score, price_reasons = _price_evidence_score(result)
+    reasons = (*quality_reasons, date_reason, *relevance_reasons, *price_reasons)
     return ResultScore(
         quality_group=quality_group,
         quality_severity=quality_severity,
         posted_date_group=posted_date_group,
         posted_date_timestamp=posted_date_timestamp,
-        exact_reference_score=0,
-        descriptor_score=0,
-        price_evidence_score=0,
+        exact_reference_score=exact_reference_score,
+        descriptor_score=descriptor_score,
+        price_evidence_score=price_evidence_score,
         original_rank=original_rank,
         reasons=tuple(reason for reason in reasons if reason),
     )
@@ -88,6 +121,36 @@ def _posted_date_score(value: str | None) -> tuple[int, float, str]:
     if parsed is None:
         return 1, 0.0, "date.missing_or_unparseable"
     return 0, parsed.timestamp(), "date.parsed"
+
+
+def _relevance_score(
+    result: SearchResult,
+    *,
+    query: str | None,
+) -> tuple[int, int, tuple[str, ...]]:
+    if not query:
+        return 0, 0, ()
+
+    trace = explain_extraction(query, result.listing_text)
+    reasons: list[str] = []
+    exact_reference_score = 0
+    descriptor_score = 0
+
+    if trace.selected_reference is not None:
+        exact_reference_score = 1
+        reasons.append("reference.selected")
+    if trace.intent.descriptor_tokens and "descriptor.require_local_match" in trace.rule_ids:
+        descriptor_score = len(trace.intent.descriptor_tokens)
+        reasons.append("descriptor.local")
+
+    return exact_reference_score, descriptor_score, tuple(reasons)
+
+
+def _price_evidence_score(result: SearchResult) -> tuple[int, tuple[str, ...]]:
+    scan_text = result.listing_text
+    if PRICE_EVIDENCE_RE.search(scan_text):
+        return 1, ("price.visible",)
+    return 0, ("price.missing_visible",)
 
 
 def parse_posted_date(value: str | None) -> datetime | None:

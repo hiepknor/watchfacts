@@ -14,7 +14,13 @@ def test_format_match_debug_includes_trace_and_score_reasons() -> None:
     assert "selected_reference: ('7118/1200a',)" in output
     assert "reference.match_exact_or_compact" in output
     assert "quality_group: 0" in output
-    assert "score_reasons: quality.clean, date.parsed" in output
+    assert "exact_reference_score: 1" in output
+    assert "descriptor_score: 1" in output
+    assert "price_evidence_score: 1" in output
+    assert (
+        "score_reasons: quality.clean, date.parsed, reference.selected, "
+        "descriptor.local, price.visible"
+    ) in output
     assert "output_text: PP 7118/1200A grey* 💥$790k hkd 💥N1/2026" in output
 
 

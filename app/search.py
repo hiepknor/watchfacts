@@ -30,7 +30,7 @@ from app.telegram_bot import SearchResult
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v2"
+SEARCH_CACHE_VERSION = "search-v3"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -116,7 +116,7 @@ class WatchFactsSearchWorkflow:
         if self.refine_results is not None and self.settings.hybrid_ai_mode != "off":
             unique = await self._handle_hybrid_refinement(query, unique)
         unique = unique_latest_by_text(unique)
-        unique = rank_results_by_quality(unique)
+        unique = rank_results_by_quality(unique, query=query)
         unique = group_similar_results(unique, query=query)
 
         self.database.record_query_results(query, unique)

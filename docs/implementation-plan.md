@@ -835,3 +835,51 @@ Candidate files:
 - `app/matcher_descriptor.py`
 - `app/matcher_boundaries.py`
 - `app/matcher_extraction.py`
+
+## Phase 10: Query-Aware Relevance Scoring
+
+Status: complete.
+
+Goal: fill the relevance score fields introduced in Phase 9 without changing
+the quality-first and date-first ranking contract.
+
+Reference docs:
+
+- [Result Quality Scoring And Matcher Diagnostics Spec](result-quality-scoring.md)
+- [Technical Spec](technical-spec.md)
+
+### Task 10.1: Pass Query Into Scoring
+
+Acceptance:
+
+- [x] Search workflow passes the original query into `rank_results_by_quality`.
+- [x] Search cache version is bumped because same-quality/same-date tie-breaks
+  can change.
+- [x] Existing quality-first and date-first tests still pass.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_search.py tests/test_result_scoring.py
+```
+
+### Task 10.2: Populate Relevance Signals
+
+Acceptance:
+
+- [x] `exact_reference_score` is populated when matcher trace selects a
+  reference.
+- [x] `descriptor_score` is populated when query descriptors are local to the
+  selected reference.
+- [x] `price_evidence_score` is populated when the shown listing has visible
+  price evidence.
+- [x] Score reason codes include reference, descriptor, and price evidence
+  explanations.
+- [x] New relevance signals only affect order after quality group and posted
+  date are equal.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_result_scoring.py tests/test_match_debug.py
+```

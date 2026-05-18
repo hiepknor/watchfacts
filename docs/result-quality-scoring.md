@@ -233,6 +233,24 @@ Acceptance:
 - All matcher, search, AI gate, and Telegram tests pass.
 - No production behavior changes unless explicitly covered by fixtures.
 
+### Phase 10.1: Query-Aware Relevance Signals
+
+Status: complete.
+
+Populate the relevance score fields introduced in Phase 9 while preserving the
+primary quality/date order.
+
+Acceptance:
+
+- Search workflow passes the query into `rank_results_by_quality()`.
+- `exact_reference_score` is populated from matcher trace reference selection.
+- `descriptor_score` is populated when descriptors are local to the selected
+  reference.
+- `price_evidence_score` is populated from visible price evidence in shown text.
+- Relevance signals only affect order after quality group and posted date are
+  equal.
+- Search cache version is bumped for the ranking tie-break change.
+
 ## Verification
 
 Recommended commands for this phase:

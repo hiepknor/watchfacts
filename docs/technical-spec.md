@@ -190,6 +190,9 @@ Responsibilities:
   detection.
 - Keep quality as the primary ordering signal.
 - Sort newest posted date descending inside the same quality group.
+- Use query-aware relevance tie-breaks for selected reference, descriptor
+  locality, and visible price evidence only after quality and posted date are
+  equal.
 - Demote missing-price and suspicious results without removing them.
 - Return structured score reasons suitable for tests and diagnostics.
 - Preserve original source order as a stable final tie-breaker.

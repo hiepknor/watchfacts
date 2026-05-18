@@ -212,7 +212,7 @@ Exit criteria:
 
 ## Milestone 9: Result Quality Scoring And Matcher Diagnostics
 
-Status: in progress.
+Status: complete.
 
 Goal: make output ranking and matcher debugging explicit, testable, and safe to
 iterate without rewriting the deterministic matcher core.
@@ -238,18 +238,20 @@ Deliverables:
   price demotion, and suspicious demotion.
 - [x] Safe matcher/score debug surface for maintainers or owner-only Telegram
   review.
-- [ ] Optional matcher helper split after regression coverage proves behavior is
+- [x] Optional matcher helper split after regression coverage proves behavior is
   stable.
+- [x] Query-aware relevance signals for reference selection, descriptor
+  locality, and visible price evidence.
 
 Exit criteria:
 
-- [ ] Existing production result order is preserved unless a fixture documents a
+- [x] Existing production result order is preserved unless a fixture documents a
   deliberate improvement.
-- [ ] Ranking behavior can be understood from one scoring module.
-- [ ] Reported ranking issues can become focused regression fixtures.
-- [ ] Debug output explains selected reference, applied rule ids, score reasons,
+- [x] Ranking behavior can be understood from one scoring module.
+- [x] Reported ranking issues can become focused regression fixtures.
+- [x] Debug output explains selected reference, applied rule ids, score reasons,
   and suspicious flags without exposing secrets or browser state.
-- [ ] `app.matcher` remains the stable public matcher API.
+- [x] `app.matcher` remains the stable public matcher API.
 
 Detailed spec:
 

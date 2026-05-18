@@ -24,6 +24,7 @@ def format_match_debug(
             raw_listing_text=raw_listing_text or listing_text,
         ),
         original_rank=original_rank,
+        query=query,
     )
     lines = [
         "Match debug",
@@ -37,6 +38,9 @@ def format_match_debug(
         f"quality_group: {score.quality_group}",
         f"quality_severity: {score.quality_severity}",
         f"posted_date_group: {score.posted_date_group}",
+        f"exact_reference_score: {score.exact_reference_score}",
+        f"descriptor_score: {score.descriptor_score}",
+        f"price_evidence_score: {score.price_evidence_score}",
         f"score_reasons: {', '.join(score.reasons)}",
         f"output_text: {_single_line(trace.output_text)}",
     ]
