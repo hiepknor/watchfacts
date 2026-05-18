@@ -158,6 +158,7 @@ Detailed project docs live in [docs/](docs/README.md):
 - [Product Spec](docs/product-spec.md)
 - [Technical Spec](docs/technical-spec.md)
 - [Implementation Plan](docs/implementation-plan.md)
+- [Result Quality Scoring Spec](docs/result-quality-scoring.md)
 - [Roadmap](docs/roadmap.md)
 - [Operations Guide](docs/operations.md)
 - [Security And Compliance](docs/security-compliance.md)
@@ -333,6 +334,10 @@ Normalization includes:
 - Normalizing punctuation
 
 Search results also run a latest-repost pass that groups by normalized listing text and seller, ignores repost date for that grouping, and keeps the newest posted date when the same seller reposts the same item.
+
+Final output ranking is quality-first, then newest posted date descending inside
+the same quality group. Clean results outrank missing-price or suspicious
+results; lower-quality results are demoted, not hidden.
 
 ## Database
 

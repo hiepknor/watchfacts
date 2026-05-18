@@ -302,7 +302,6 @@ Each item needs a focused spec before implementation:
 - Exporting result sets.
 - Additional watch sources.
 - Query operators such as optional terms, quoted phrases, or negative filters.
-- OpenAI owner review tooling: surface recorded suggestions in Telegram review commands and convert accepted suggestions into regression fixtures.
 
 ## Phase 6: Continuous Improvement Loop
 
@@ -621,8 +620,8 @@ make check
 
 Likely files:
 
-- `app/ai_refiner.py`
 - `app/search.py`
+- `app/ai_refiner.py`
 - `app/matcher.py`
 - `tests/test_ai_refiner.py`
 - `tests/test_search.py`
@@ -704,3 +703,127 @@ Latest validation:
 - Production mode: `HYBRID_AI_MODE=guarded`.
 - 10-query smoke set: `5205r`, `126500ln white 2026`, `7118/1200a grey`, `77451or white`, `116500 panda`, `5712/1r`, `5990/1r`, `26240ba new 2024`, `7200r`, `RM65-01 Lebron`.
 - Remaining suspicious flags: 2 true positives in top 20 where raw text has no clear price amount.
+
+## Phase 9: Result Quality Scoring And Matcher Diagnostics
+
+Status: planned.
+
+Goal: make ranking and matcher debugging explicit without changing the
+deterministic matcher public API.
+
+Reference docs:
+
+- [Result Quality Scoring And Matcher Diagnostics Spec](result-quality-scoring.md)
+- [Technical Spec](technical-spec.md)
+- [ADR-001: Use Deterministic Matching For Core Search](decisions/001-deterministic-matching.md)
+
+### Task 9.1: Extract Result Scoring Boundary
+
+Description: Move quality/date ordering out of `app/search.py` into a dedicated scoring module.
+
+Acceptance:
+
+- [ ] Add `app/result_scoring.py` or equivalent dedicated module.
+- [ ] Existing quality-first behavior is preserved.
+- [ ] Clean results sort newest posted date first.
+- [ ] Results with only `missing_price_evidence` rank below clean results.
+- [ ] Results with other suspicious issues rank below missing-price-only results.
+- [ ] Original source order is retained as the final stable tie-breaker.
+- [ ] Search workflow uses the scoring module instead of a private search helper.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_search.py
+.venv/bin/python -m pytest tests/test_matcher.py
+```
+
+Likely files:
+
+- `app/search.py`
+- `app/result_scoring.py`
+- `tests/test_search.py`
+- optional `tests/test_result_scoring.py`
+
+### Task 9.2: Add Structured Score Reasons
+
+Description: Return score fields and reason codes so ranking decisions can be tested and debugged.
+
+Acceptance:
+
+- [ ] Add a structured score object with quality group, posted date rank,
+  reference/descriptor/price signals, original rank, and reason codes.
+- [ ] Tests assert reason codes for clean, missing-price, and suspicious cases.
+- [ ] Logs may include safe score summaries without listing secrets or browser state.
+- [ ] Telegram user-facing output remains unchanged.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_result_scoring.py tests/test_search.py
+git diff --check
+```
+
+Likely files:
+
+- `app/result_scoring.py`
+- `tests/test_result_scoring.py`
+- `app/search.py`
+
+### Task 9.3: Add Matcher And Score Debug Surface
+
+Description: Provide a safe way to inspect matcher trace and score reasons for a query/listing or stored issue.
+
+Acceptance:
+
+- [ ] Debug output includes normalized query intent, selected reference, selected
+  token/character span, applied rule ids, score reasons, and suspicious reason
+  codes.
+- [ ] Debug output never includes `.env`, tokens, cookies, browser state, full
+  storage state, or full page HTML.
+- [ ] If exposed via Telegram, the command is owner-only and requires
+  `TELEGRAM_ALLOWED_USER_IDS`.
+- [ ] Output is capped for Telegram length limits.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest tests/test_telegram_bot.py tests/test_matcher.py tests/test_result_scoring.py
+```
+
+Likely files:
+
+- `app/telegram_bot.py` or a local script under `scripts/`
+- `app/matcher.py`
+- `app/result_scoring.py`
+- relevant tests
+
+### Task 9.4: Split Matcher Helpers After Coverage
+
+Description: Optionally split `matcher_rules.py` into smaller files only after scoring and diagnostics tests are stable.
+
+Acceptance:
+
+- [ ] `app.matcher` public API remains unchanged.
+- [ ] Rule order remains documented as query -> reference -> descriptor -> price
+  -> product boundary -> metadata boundary -> date/condition detail -> noise ->
+  cleanup.
+- [ ] All matcher, search, AI gate, Telegram, and scoring tests pass.
+- [ ] No production behavior changes unless a fixture documents the deliberate
+  improvement.
+
+Verify:
+
+```bash
+.venv/bin/python -m pytest
+git diff --check
+```
+
+Candidate files:
+
+- `app/matcher_normalization.py`
+- `app/matcher_intent.py`
+- `app/matcher_reference.py`
+- `app/matcher_descriptor.py`
+- `app/matcher_boundaries.py`
+- `app/matcher_extraction.py`

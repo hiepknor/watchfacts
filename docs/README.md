@@ -9,6 +9,7 @@ This directory is the project knowledge base for humans and AI agents.
 | [Product Spec](product-spec.md) | Product goals, users, behavior, acceptance criteria, and non-goals |
 | [Technical Spec](technical-spec.md) | Architecture, modules, data model, matching rules, and error handling |
 | [Continuous Improvement Spec](continuous-improvement.md) | Feedback buttons, issue storage, suspicious-result detection, and regression loop |
+| [Result Quality Scoring Spec](result-quality-scoring.md) | Next-phase ranking, matcher diagnostics, score reasons, and refactor guardrails |
 | [Implementation Plan](implementation-plan.md) | Ordered implementation phases and verifiable tasks |
 | [Roadmap](roadmap.md) | Milestones from foundation to production hardening |
 | [Operations Guide](operations.md) | Local, Docker, login/session, data, logs, and deployment operations |
@@ -35,6 +36,7 @@ Agents should read documents selectively:
 - For infrastructure changes: read `operations.md`, `security-compliance.md`, and ADR-004.
 - For crawler changes: read `technical-spec.md`, `security-compliance.md`, and ADR-002.
 - For matching/parser changes: read `technical-spec.md` and ADR-001.
+- For result ranking or next-phase matcher diagnostics: read `result-quality-scoring.md`, `technical-spec.md`, and ADR-001.
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.
 - For OpenAI controlled refinement: read `roadmap.md` Milestone 7, `implementation-plan.md` Phase 7, `technical-spec.md`, `security-compliance.md`, and ADR-005.
 - For commits: follow `AGENT.md` and the workflow in `contributing.md`.

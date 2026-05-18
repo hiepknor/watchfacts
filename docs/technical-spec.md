@@ -20,7 +20,10 @@ app/
   telegram_bot.py  # Telegram handlers and message formatting
   scraper.py       # Playwright browser/session/crawl logic
   parser.py        # HTML/listing extraction
-  matcher.py       # query normalization and deterministic matching
+  matcher.py       # stable public matcher API
+  matcher_rules.py # deterministic matcher implementation
+  matcher_rulebook.py # rule taxonomy and extraction trace types
+  result_scoring.py # planned final quality and recency ordering boundary
   dedupe.py        # listing identity and duplicate filtering
   db.py            # SQLite schema and persistence
   config.py        # environment/config loading
@@ -80,6 +83,7 @@ Telegram update
   -> parser extracts listing candidates from JSON response or HTML fallback
   -> matcher filters or scopes listings by query tokens
   -> dedupe removes repeated latest reposts
+  -> result scoring orders eligible listings by quality and recency
   -> suspicious-result detector records likely extraction issues
   -> optional OpenAI controlled refiner records suggestions or applies guarded refinements
   -> db records query/cache/dedupe state
@@ -175,6 +179,45 @@ rule must run earlier. Each recurring production issue should become a focused
 regression test and, where useful, a traceable rule id in the rulebook.
 
 When WatchFacts returns server-filtered JSON search results, the workflow keeps those results and only uses the matcher to scope display text. This avoids over-filtering server matches that are relevant but do not contain every local descriptor in the same form.
+
+### `result_scoring.py`
+
+Responsibilities:
+
+- Rank already-eligible search results after matching, dedupe, and suspicious
+  detection.
+- Keep quality as the primary ordering signal.
+- Sort newest posted date descending inside the same quality group.
+- Demote missing-price and suspicious results without removing them.
+- Return structured score reasons suitable for tests and diagnostics.
+- Preserve original source order as a stable final tie-breaker.
+
+Initial ordering contract:
+
+```text
+quality_group ASC
+posted_date DESC
+exact_reference_score DESC
+descriptor_score DESC
+price_evidence_score DESC
+original_rank ASC
+```
+
+Quality groups:
+
+```text
+0 = clean result with no suspicious issues
+1 = result with only missing_price_evidence
+2 = result with other suspicious issues
+```
+
+The scoring layer must not admit results that deterministic matching rejected.
+OpenAI guarded refinement may improve shown text after validation, but must not
+become an uncontrolled ranking authority.
+
+Detailed spec:
+
+- [Result Quality Scoring And Matcher Diagnostics Spec](result-quality-scoring.md)
 
 ### `dedupe.py`
 
@@ -379,6 +422,8 @@ User-facing messages should be concise. Logs should include enough detail for op
 Preferred tests:
 
 - Unit tests for `matcher.py`, `dedupe.py`, and parser fixtures.
+- Unit tests for result scoring, including quality-first ordering and date-desc
+  ordering inside a quality group.
 - Integration tests for SQLite schema and query/listing persistence.
 - Handler-level tests for Telegram formatting and error branches.
 - Handler-level tests for `/health`, owner alerts, and future feedback callbacks.
@@ -408,6 +453,7 @@ Ask first:
 
 - Adding external services.
 - Adding AI behavior beyond the OpenAI controlled refiner.
+- Changing the quality-first ranking contract.
 - Changing the dedupe identity.
 - Changing data retention behavior.
 - Adding dependencies beyond the current stack.

@@ -23,6 +23,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - As a maintainer, I can test matching, parsing, and dedupe behavior without calling external services.
 - As a maintainer, I can convert reported issue cases into deterministic tests.
 - As an operator, I can optionally enable OpenAI-assisted refinement for hard cases without making AI required for normal search.
+- As a maintainer, I can inspect why a result matched, how it was extracted, and why it ranked above or below nearby results.
 
 ## Core Flow
 
@@ -33,10 +34,11 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 5. Bot extracts listing candidates from JSON search responses or HTML fallback.
 6. Bot matches or scopes listings against query tokens.
 7. Bot removes repeated latest reposts.
-8. If OpenAI controlled intelligence is enabled, bot may record or apply a guarded suggestion only after strict validation.
-9. Bot stores query/cache/dedupe/issue data in SQLite.
-10. Bot returns a summary with an inline "Xem kết quả" button.
-11. User requests batches with "Xem kết quả" / "Xem thêm".
+8. Bot scores eligible listings by quality first, then newest posted date inside the same quality group.
+9. If OpenAI controlled intelligence is enabled, bot may record or apply a guarded suggestion only after strict validation.
+10. Bot stores query/cache/dedupe/issue data in SQLite.
+11. Bot returns a summary with an inline "Xem kết quả" button.
+12. User requests batches with "Xem kết quả" / "Xem thêm".
 
 ## Functional Requirements
 
@@ -57,6 +59,8 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
   - source URL or stable listing identifier if available
 - Deduplicate listings by normalized listing text, seller, and posted date.
 - Deduplicate same-seller reposts in search output by keeping the newest posted date.
+- Rank final output by explicit quality signals first, then newest posted date descending inside the same quality group.
+- Demote missing-price and suspicious results without hiding them.
 - Persist local cache, query history, and dedupe records in SQLite.
 - Reuse `data/watchfacts_state.json` for authenticated browser state.
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
@@ -64,11 +68,13 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Notify the owner in Vietnamese when WatchFacts browser session state is missing or expired.
 - Support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
 - Support optional OpenAI-assisted refinement for suspicious, reported, or hard-to-scope results, controlled by explicit modes and validation gates.
+- Support maintainer diagnostics for matcher trace and ranking reasons. See [Result Quality Scoring Spec](result-quality-scoring.md).
 
 ## Non-Functional Requirements
 
 - No LLM is required for core behavior.
 - Matching must be deterministic and testable.
+- Ranking must be deterministic, quality-first, and covered by regression tests.
 - Continuous improvement must be evidence collection and review, not autonomous code mutation.
 - AI-assisted refinement, if enabled, must use OpenAI API as the only supported AI provider and must be controlled by explicit modes, confidence gates, owner review, and deterministic fallback.
 - OpenAI integration must be disabled by default and must not be required for normal search.
@@ -87,6 +93,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Running local AI models in the production runtime.
 - Adding OpenAI ranking, summarization, or extraction as an uncontrolled primary result source.
 - Letting AI become the uncontrolled source of truth for listing extraction.
+- Sorting only by newest date while ignoring result quality.
 - Letting the bot automatically rewrite matcher/parser code or deploy fixes based on feedback.
 - Supporting multiple watch sources before the WatchFacts path is stable.
 
@@ -129,6 +136,7 @@ at the start of the message or reply to a bot message.
 - A user can send a Telegram query and receive matching listings.
 - A user gets a result summary first, then explicit paginated batches.
 - Matching is case-insensitive, token-based, and covered by tests.
+- Output order prioritizes quality before recency, and recency is newest-first inside each quality group.
 - Duplicate listings are suppressed across a single search result set.
 - Missing config or missing browser state produces actionable operator errors.
 - Expired WatchFacts session notifies the owner without exposing cookies or browser state.
@@ -146,3 +154,4 @@ at the start of the message or reply to a bot message.
 - Should multi-page crawling be enabled beyond the current WatchFacts search response?
 - Should feedback buttons be shown to all authorized users or owner-only?
 - Should suspicious result flags appear in normal summaries or only in owner review commands?
+- Should matcher/score diagnostics be exposed only through local scripts or also through owner-only Telegram commands?

@@ -186,12 +186,81 @@ Architecture decision:
 
 - [ADR-005: Use OpenAI Controlled AI For Result Refinement](decisions/005-controlled-hybrid-ai-refinement.md)
 
+## Milestone 8: Matcher Rulebook Refactor
+
+Status: complete.
+
+Goal: make matcher rules easier to inspect, improve, and test while preserving
+the deterministic production behavior that users already rely on.
+
+Deliverables:
+
+- Stable `app.matcher` public API for search, dedupe, AI gates, and tests.
+- Dedicated deterministic matcher implementation in `app.matcher_rules`.
+- Rule taxonomy and trace types in `app.matcher_rulebook`.
+- Ordered rule groups for query, reference, descriptor, price, product boundary,
+  metadata boundary, date/condition detail, noise, and cleanup.
+- `explain_extraction()` for maintainers to inspect selected reference,
+  token/character spans, rule ids, and output text.
+
+Exit criteria:
+
+- [x] Public matcher import path remains stable.
+- [x] Rulebook and trace tests pass.
+- [x] Full local suite passed before production deployment.
+- [x] Production validation ran against 10 diverse queries.
+
+## Milestone 9: Result Quality Scoring And Matcher Diagnostics
+
+Status: planned.
+
+Goal: make output ranking and matcher debugging explicit, testable, and safe to
+iterate without rewriting the deterministic matcher core.
+
+Decision:
+
+- Keep deterministic matcher as the eligibility gate.
+- Move output quality ordering into a dedicated scoring layer.
+- Keep quality-first ranking: clean results before missing-price results, and
+  missing-price results before stronger suspicious cases.
+- Sort newest posted date descending inside the same quality group.
+- Add structured score reasons and matcher trace diagnostics for reported
+  cases.
+- Defer splitting `matcher_rules.py` into smaller files until scoring and trace
+  tests are in place.
+
+Deliverables:
+
+- [ ] `app/result_scoring.py` or equivalent dedicated scoring boundary.
+- [ ] Structured `ResultScore` object with quality group, date rank, relevance
+  signals, original rank, and reason codes.
+- [ ] Regression tests for quality-first ranking, date-desc sorting, missing
+  price demotion, suspicious demotion, and descriptor/reference scoring.
+- [ ] Safe matcher/score debug surface for maintainers or owner-only Telegram
+  review.
+- [ ] Optional matcher helper split after regression coverage proves behavior is
+  stable.
+
+Exit criteria:
+
+- [ ] Existing production result order is preserved unless a fixture documents a
+  deliberate improvement.
+- [ ] Ranking behavior can be understood from one scoring module.
+- [ ] Reported ranking issues can become focused regression fixtures.
+- [ ] Debug output explains selected reference, applied rule ids, score reasons,
+  and suspicious flags without exposing secrets or browser state.
+- [ ] `app.matcher` remains the stable public matcher API.
+
+Detailed spec:
+
+- [Result Quality Scoring And Matcher Diagnostics Spec](result-quality-scoring.md)
+
 ## Later Ideas
 
 - Multi-page crawling.
 - Scheduled refresh jobs.
 - Dealer filtering.
-- Price normalization.
+- Price normalization, currency handling, and numeric sorting.
 - Image caching.
 - Export results.
 - Multiple watch sources.
