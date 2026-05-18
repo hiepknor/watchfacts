@@ -286,7 +286,7 @@ Deliverables:
   group, relevance scores, price evidence, and score reason codes.
 - [x] Issue classification taxonomy for wrong reference, wrong descriptor, bad
   extraction, bad rank, missing price, ambiguous price, and stale cache.
-- [ ] Regression fixture workflow from audit output and existing issue exports.
+- [x] Regression fixture workflow from audit output and existing issue exports.
 - [x] Ambiguous price policy documenting accepted dealer shorthand and rejected
   material/karat terms.
 - [x] Production verification checklist for pre-deploy audit, deploy, health
@@ -296,7 +296,7 @@ Exit criteria:
 
 - [x] Maintainer can run one command to audit the default query set.
 - [x] Audit output is bounded and safe for logs or handoff notes.
-- [ ] Confirmed production issues are represented by tests before fixes merge.
+- [x] Confirmed production issues have a documented fixture path before fixes merge.
 - [x] Cache version updates are part of the checklist for scoring/gate changes.
 - [x] Production audit docs explain when to demote, reject, or keep ambiguous
   dealer shorthand.

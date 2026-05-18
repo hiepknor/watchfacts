@@ -1,0 +1,14 @@
+{
+  "issue_class": "bad_rank",
+  "query": "5712r",
+  "observed_rank": 5,
+  "expected_behavior": "Result without visible price should rank below clean priced results from the same or newer date group.",
+  "shown_text": "Patek Philippe 5712R customized 18k rose gold case reservation",
+  "raw_text": "",
+  "posted_date": "May 17, 2026",
+  "seller": "",
+  "source_url": "",
+  "expected_quality_group": 1,
+  "expected_suspicious_reasons": ["missing_price_evidence"],
+  "notes": "Use audit JSON for scoring/ranking fixtures. Use /issues_export when raw_text is needed for extraction fixtures."
+}

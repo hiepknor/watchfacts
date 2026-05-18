@@ -32,7 +32,8 @@ app/
   ai_refiner.py    # optional OpenAI-backed result refinement boundary
 scripts/
   login.py         # manual WatchFacts login and browser state creation
-  audit_quality.py # planned safe production/local quality audit script
+  audit_quality.py # safe production/local quality audit script
+  generate_audit_fixtures.py # audit JSON to scoring regression helper
 data/
   bot.db
   watchfacts_state.json
@@ -234,7 +235,7 @@ Detailed spec:
 
 ### `scripts/audit_quality.py`
 
-Planned responsibilities:
+Responsibilities:
 
 - Run a curated production/local query set through the normal search workflow.
 - Print bounded top-result snippets and scoring diagnostics for maintainers.
@@ -244,6 +245,17 @@ Planned responsibilities:
   listings.
 - Support focused production verification after matcher, extraction, scoring, or
   quality-gate changes.
+
+### `scripts/generate_audit_fixtures.py`
+
+Responsibilities:
+
+- Read `scripts/audit_quality.py --format json` output.
+- Generate draft quality/scoring pytest cases for non-clean audit rows by
+  default.
+- Support `--include-clean` for locking accepted clean shorthand examples.
+- Keep extraction fixtures on the existing `/issues_export` path when full raw
+  listing text is required.
 
 ### `match_debug.py`
 

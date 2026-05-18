@@ -168,6 +168,25 @@ For every confirmed issue:
 6. Bump search cache version if output ordering or gating changes.
 7. Deploy and rerun the audit query.
 
+Fixture sources:
+
+- Use `scripts/audit_quality.py --format json` for ranking, quality-group,
+  missing-price, and suspicious-result fixtures.
+- Use `/issues_export` plus `scripts/generate_issue_fixtures.py` for extraction
+  fixtures that require full raw listing text.
+- Use [docs/templates/audit-issue-fixture.json](templates/audit-issue-fixture.json)
+  when manually documenting an audit finding before turning it into a test.
+
+Generate a draft quality/scoring regression module from audit JSON:
+
+```bash
+python scripts/audit_quality.py "5712r" --format json --limit 10 > audit-report.json
+python scripts/generate_audit_fixtures.py audit-report.json > tests/test_audit_regressions.py
+```
+
+By default, the generator emits only non-clean rows. Add `--include-clean` when
+you need to lock an accepted clean shorthand or a known-good ranking example.
+
 ## Non-Goals
 
 - Replacing deterministic ranking with OpenAI ranking.
@@ -189,11 +208,11 @@ For every confirmed issue:
 
 ### Phase 10.2: Fixture Capture Path
 
-- [ ] Document how to turn audit output into tests.
-- [ ] Reuse existing `/issues_export` and `scripts/generate_issue_fixtures.py`
+- [x] Document how to turn audit output into tests.
+- [x] Reuse existing `/issues_export` and `scripts/generate_issue_fixtures.py`
   where possible.
-- [ ] Add a fixture template for ranking, extraction, and missing-price cases.
-- [ ] Require a failing fixture before broad matcher/scoring changes.
+- [x] Add a fixture template for ranking, extraction, and missing-price cases.
+- [x] Require a failing fixture before broad matcher/scoring changes.
 
 ### Phase 10.3: Ambiguous Price Policy
 

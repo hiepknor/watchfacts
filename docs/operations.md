@@ -200,6 +200,20 @@ Write machine-readable output for handoff or later fixture work:
 python scripts/audit_quality.py --format json --limit 5 > audit-report.json
 ```
 
+Generate draft quality/scoring regression tests from audit JSON:
+
+```bash
+python scripts/generate_audit_fixtures.py audit-report.json > tests/test_audit_regressions.py
+```
+
+The audit fixture generator is for quality group, suspicious-result, missing
+price, and ranking evidence. For extraction bugs that need full raw listing
+text, export issues from Telegram and use:
+
+```bash
+python scripts/generate_issue_fixtures.py issues-export.json > tests/test_issue_regressions.py
+```
+
 Checklist:
 
 - Run the audit query set before changing broad rules when production behavior

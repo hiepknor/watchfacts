@@ -933,31 +933,35 @@ Likely files:
 
 ### Task 11.2: Add Fixture Workflow For Audit Findings
 
+Status: complete.
+
 Description: Define and document how audit findings become regression tests
 before matcher, extraction, scoring, or gate changes are implemented.
 
 Acceptance:
 
-- [ ] Document fixture templates for ranking issues, extraction issues,
+- [x] Document fixture templates for ranking issues, extraction issues,
   missing-price issues, descriptor conflicts, and stale-cache discoveries.
-- [ ] Reuse existing `/issues_export` and `scripts/generate_issue_fixtures.py`
+- [x] Reuse existing `/issues_export` and `scripts/generate_issue_fixtures.py`
   where applicable.
-- [ ] Require each confirmed production issue to include query, shown text,
+- [x] Require each confirmed production issue to include query, shown text,
   raw text when available, posted date, and expected behavior.
-- [ ] Add tests before broad rule changes.
+- [x] Add tests before broad rule changes.
 
 Verify:
 
 ```bash
 git diff --check
-.venv/bin/python -m pytest tests/test_matcher.py tests/test_search.py tests/test_result_scoring.py
+.venv/bin/python -m pytest tests/test_generate_audit_fixtures.py tests/test_generate_issue_fixtures.py tests/test_matcher.py tests/test_search.py tests/test_result_scoring.py
 ```
 
 Likely files:
 
 - `docs/production-quality-audit.md`
 - `docs/operations.md`
-- optional test fixtures under `tests/`
+- `scripts/generate_audit_fixtures.py`
+- `tests/test_generate_audit_fixtures.py`
+- optional generated regression fixtures under `tests/`
 
 ### Task 11.3: Normalize Ambiguous Price Policy
 
