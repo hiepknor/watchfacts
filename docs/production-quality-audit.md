@@ -59,7 +59,7 @@ runtime.
 Recommended file:
 
 ```text
-scripts/audit_quality.py
+scripts/diagnostics/audit_quality.py
 ```
 
 Minimum capabilities:
@@ -170,9 +170,9 @@ For every confirmed issue:
 
 Fixture sources:
 
-- Use `scripts/audit_quality.py --format json` for ranking, quality-group,
+- Use `scripts/diagnostics/audit_quality.py --format json` for ranking, quality-group,
   missing-price, and suspicious-result fixtures.
-- Use `/issues_export` plus `scripts/generate_issue_fixtures.py` for extraction
+- Use `/issues_export` plus `scripts/fixtures/generate_issue_fixtures.py` for extraction
   fixtures that require full raw listing text.
 - Use [docs/templates/audit-issue-fixture.json](templates/audit-issue-fixture.json)
   when manually documenting an audit finding before turning it into a test.
@@ -180,8 +180,8 @@ Fixture sources:
 Generate a draft quality/scoring regression module from audit JSON:
 
 ```bash
-python scripts/audit_quality.py "5712r" --format json --limit 10 > audit-report.json
-python scripts/generate_audit_fixtures.py audit-report.json > tests/test_audit_regressions.py
+python scripts/diagnostics/audit_quality.py "5712r" --format json --limit 10 > audit-report.json
+python scripts/fixtures/generate_audit_fixtures.py audit-report.json > tests/test_audit_regressions.py
 ```
 
 By default, the generator emits only non-clean rows. Add `--include-clean` when
@@ -199,7 +199,7 @@ you need to lock an accepted clean shorthand or a known-good ranking example.
 
 ### Phase 10.1: Audit Script
 
-- [x] Add `scripts/audit_quality.py`.
+- [x] Add `scripts/diagnostics/audit_quality.py`.
 - [x] Support query args and default query set.
 - [x] Support `--limit`.
 - [x] Include score fields and reason codes.
@@ -209,7 +209,7 @@ you need to lock an accepted clean shorthand or a known-good ranking example.
 ### Phase 10.2: Fixture Capture Path
 
 - [x] Document how to turn audit output into tests.
-- [x] Reuse existing `/issues_export` and `scripts/generate_issue_fixtures.py`
+- [x] Reuse existing `/issues_export` and `scripts/fixtures/generate_issue_fixtures.py`
   where possible.
 - [x] Add a fixture template for ranking, extraction, and missing-price cases.
 - [x] Require a failing fixture before broad matcher/scoring changes.

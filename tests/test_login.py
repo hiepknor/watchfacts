@@ -1,4 +1,4 @@
-from scripts import login
+from scripts.ops import login
 
 
 def test_login_settings_default_to_headed_browser(monkeypatch, tmp_path) -> None:

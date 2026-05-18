@@ -247,7 +247,7 @@ def make_request_bootstrap_playwright_factory(
 def test_missing_browser_state_raises_clear_error(tmp_path) -> None:
     settings = make_settings(tmp_path, state_exists=False)
 
-    with pytest.raises(BrowserSessionError, match="Run `python scripts/login.py` first"):
+    with pytest.raises(BrowserSessionError, match="Run `python scripts/ops/login.py` first"):
         asyncio.run(fetch_watchfacts_html(settings))
 
 

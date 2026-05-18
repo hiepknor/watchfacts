@@ -7,7 +7,7 @@
 3. Edit `.env` with the real Telegram bot token and WatchFacts URL if needed.
    Set `TELEGRAM_ALLOWED_USER_IDS` to the owner Telegram user id if the bot
    should be private. Leave it empty to allow everyone.
-4. Create browser state with `python scripts/login.py`.
+4. Create browser state with `python scripts/ops/login.py`.
 5. Run `make deploy`.
 6. Inspect startup with `make logs` if needed.
 
@@ -142,7 +142,7 @@ Owner review commands:
 - `/ai_suggestion <id>`: inspect deterministic text, AI suggestion, raw snippet, gate status, and linked issue.
 - `/ai_accept <id>`: mark a suggestion as reviewed and ready for regression export.
 - `/ai_ignore <id>`: ignore an unsafe or unhelpful suggestion.
-- `/ai_suggestions_export`: export accepted suggestions as JSON for `scripts/generate_issue_fixtures.py`.
+- `/ai_suggestions_export`: export accepted suggestions as JSON for `scripts/fixtures/generate_issue_fixtures.py`.
 
 Operational rules:
 
@@ -184,26 +184,26 @@ RM65-01 Lebron
 Run the default set locally or inside the production container:
 
 ```bash
-python scripts/audit_quality.py --limit 5
-docker compose exec -T bot python scripts/audit_quality.py --limit 5
+python scripts/diagnostics/audit_quality.py --limit 5
+docker compose exec -T bot python scripts/diagnostics/audit_quality.py --limit 5
 ```
 
 Run focused queries:
 
 ```bash
-python scripts/audit_quality.py "5712r" "RM65-01 Lebron" --limit 10
+python scripts/diagnostics/audit_quality.py "5712r" "RM65-01 Lebron" --limit 10
 ```
 
 Write machine-readable output for handoff or later fixture work:
 
 ```bash
-python scripts/audit_quality.py --format json --limit 5 > audit-report.json
+python scripts/diagnostics/audit_quality.py --format json --limit 5 > audit-report.json
 ```
 
 Generate draft quality/scoring regression tests from audit JSON:
 
 ```bash
-python scripts/generate_audit_fixtures.py audit-report.json > tests/test_audit_regressions.py
+python scripts/fixtures/generate_audit_fixtures.py audit-report.json > tests/test_audit_regressions.py
 ```
 
 The audit fixture generator is for quality group, suspicious-result, missing
@@ -211,7 +211,7 @@ price, and ranking evidence. For extraction bugs that need full raw listing
 text, export issues from Telegram and use:
 
 ```bash
-python scripts/generate_issue_fixtures.py issues-export.json > tests/test_issue_regressions.py
+python scripts/fixtures/generate_issue_fixtures.py issues-export.json > tests/test_issue_regressions.py
 ```
 
 Checklist:
@@ -270,7 +270,7 @@ data/watchfacts_state.json
 Create it with:
 
 ```bash
-python scripts/login.py
+python scripts/ops/login.py
 ```
 
 The login script should open Chromium and let the operator log in manually. The bot must not store WatchFacts passwords.
@@ -308,5 +308,5 @@ Treat backups as sensitive if they contain browser state.
 ## Restore Notes
 
 - Restore `.env` separately if needed; it is not part of the `data/` backup.
-- Recreate `data/watchfacts_state.json` with `python scripts/login.py` if the restored session is expired.
+- Recreate `data/watchfacts_state.json` with `python scripts/ops/login.py` if the restored session is expired.
 - `data/bot.db` is the SQLite query history/cache.

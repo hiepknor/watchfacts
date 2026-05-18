@@ -4,7 +4,7 @@ from argparse import Namespace
 import json
 
 from app.telegram_bot import SearchResult
-from scripts.audit_quality import (
+from scripts.diagnostics.audit_quality import (
     DEFAULT_AUDIT_QUERIES,
     build_query_report,
     format_json_report,

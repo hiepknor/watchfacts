@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.generate_audit_fixtures import (
+from scripts.fixtures.generate_audit_fixtures import (
     audit_reports_to_cases,
     load_audit_reports,
     render_pytest_module,

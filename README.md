@@ -76,7 +76,7 @@ calling WatchFacts again; the default is 300 seconds.
 Create an authenticated WatchFacts browser session:
 
 ```bash
-python scripts/login.py
+python scripts/ops/login.py
 ```
 
 Run the bot locally:
@@ -112,8 +112,8 @@ make deploy
 | `make run` | Run the bot locally on the host |
 | `make login` | Run the WatchFacts browser login locally on the host |
 | `make check` | Run lightweight repository checks |
-| `python scripts/login.py` | Open Chromium for manual WatchFacts login and save browser state |
-| `python scripts/debug_match.py <query> <listing>` | Inspect matcher trace and result score locally |
+| `python scripts/ops/login.py` | Open Chromium for manual WatchFacts login and save browser state |
+| `python scripts/diagnostics/debug_match.py <query> <listing>` | Inspect matcher trace and result score locally |
 | `python -m app.main` | Run the Telegram bot locally |
 | `docker compose build` | Build the Docker image |
 | `docker compose up -d` | Start the bot in the background |
@@ -136,7 +136,15 @@ watchfacts-bot/
 │   ├── db.py
 │   └── config.py
 ├── scripts/
-│   └── login.py
+│   ├── ops/
+│   │   └── login.py
+│   ├── diagnostics/
+│   │   ├── audit_quality.py
+│   │   ├── benchmark_hard_cases.py
+│   │   └── debug_match.py
+│   └── fixtures/
+│       ├── generate_audit_fixtures.py
+│       └── generate_issue_fixtures.py
 ├── data/
 │   ├── bot.db
 │   └── watchfacts_state.json
@@ -174,7 +182,7 @@ The bot uses an authenticated browser session. It does not store the WatchFacts 
 Run:
 
 ```bash
-python scripts/login.py
+python scripts/ops/login.py
 ```
 
 The script opens Chromium, lets you log in manually, and saves the authenticated session to:
@@ -267,7 +275,7 @@ Generate a draft matcher regression test from exported issues or accepted AI
 suggestions:
 
 ```bash
-python scripts/generate_issue_fixtures.py issues.json > /tmp/test_exported_issues.py
+python scripts/fixtures/generate_issue_fixtures.py issues.json > /tmp/test_exported_issues.py
 ```
 
 Send a watch query to the bot:

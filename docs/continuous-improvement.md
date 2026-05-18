@@ -188,7 +188,7 @@ The export format should be deterministic and test-friendly:
 
 Accepted AI suggestions export the same matcher-fixture shape with
 `expected_text` set to the owner-approved suggestion. Maintainers can pass that
-payload to `scripts/generate_issue_fixtures.py` before changing deterministic
+payload to `scripts/fixtures/generate_issue_fixtures.py` before changing deterministic
 matcher rules.
 
 ### 4. Automatic Suspicious Result Detection
@@ -234,7 +234,7 @@ Recommended workflow:
 4. Maintainer converts the case into:
    - a unit test in `tests/test_matcher.py`, or
    - a parser fixture, or
-   - a benchmark hard case in `scripts/benchmark_hard_cases.py`.
+   - a benchmark hard case in `scripts/diagnostics/benchmark_hard_cases.py`.
 5. Maintainer implements the smallest deterministic fix.
 6. Full test suite runs before commit and deploy.
 7. Issue is marked `fixed` or `ignored`.
@@ -242,7 +242,7 @@ Recommended workflow:
 Generate a draft matcher regression test from an exported JSON payload:
 
 ```bash
-python scripts/generate_issue_fixtures.py issues.json > /tmp/test_exported_issues.py
+python scripts/fixtures/generate_issue_fixtures.py issues.json > /tmp/test_exported_issues.py
 ```
 
 The script also accepts the Telegram `/issues_export` message from stdin, including

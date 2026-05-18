@@ -97,7 +97,7 @@ async def check_watchfacts_session(
         return BrowserSessionStatus(
             ok=False,
             status="missing",
-            detail="Missing browser session. Run `python scripts/login.py` first.",
+            detail="Missing browser session. Run `python scripts/ops/login.py` first.",
         )
 
     if playwright_factory is None:
@@ -160,7 +160,7 @@ async def fetch_watchfacts_html(
     if not state_path.exists():
         raise BrowserSessionError(
             f"Missing browser session at {state_path}. "
-            "Run `python scripts/login.py` first."
+            "Run `python scripts/ops/login.py` first."
         )
 
     if playwright_factory is None:
@@ -215,7 +215,7 @@ async def fetch_watchfacts_html(
                 if _looks_unauthenticated(final_url, html):
                     raise BrowserSessionError(
                         "Saved browser session appears expired. "
-                        "Run `python scripts/login.py` again."
+                        "Run `python scripts/ops/login.py` again."
                     )
                 if query and query.strip():
                     search_result = await _fetch_search_results(
@@ -288,7 +288,7 @@ async def _fetch_search_results_with_request_bootstrap(
     if _looks_unauthenticated(response.url, html):
         raise BrowserSessionError(
             "Saved browser session appears expired. "
-            "Run `python scripts/login.py` again."
+            "Run `python scripts/ops/login.py` again."
         )
     search_result = await _fetch_search_results_from_html(
         context,

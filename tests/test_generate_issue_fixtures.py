@@ -1,4 +1,4 @@
-from scripts.generate_issue_fixtures import load_exported_issues, render_pytest_module
+from scripts.fixtures.generate_issue_fixtures import load_exported_issues, render_pytest_module
 
 
 def test_load_exported_issues_accepts_telegram_code_fence() -> None:

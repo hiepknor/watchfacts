@@ -63,7 +63,15 @@ app/
   config.py
   utils.py
 scripts/
-  login.py
+  ops/
+    login.py
+  diagnostics/
+    audit_quality.py
+    benchmark_hard_cases.py
+    debug_match.py
+  fixtures/
+    generate_audit_fixtures.py
+    generate_issue_fixtures.py
 data/
   bot.db
   watchfacts_state.json
@@ -89,7 +97,7 @@ Use these commands when the matching files exist:
 | Activate virtualenv | `source .venv/bin/activate` |
 | Install dependencies | `pip install -r requirements.txt` |
 | Install Playwright browser | `playwright install chromium` |
-| Create WatchFacts session | `python scripts/login.py` |
+| Create WatchFacts session | `python scripts/ops/login.py` |
 | Run bot locally | `python -m app.main` |
 | Initialize local runtime files | `make init` |
 | Build Docker image | `make build` |

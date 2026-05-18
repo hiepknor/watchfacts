@@ -82,7 +82,7 @@ run:
 	python -m app.main
 
 login:
-	python scripts/login.py
+	python scripts/ops/login.py
 
 check:
 	git diff --check

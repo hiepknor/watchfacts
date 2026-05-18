@@ -31,9 +31,15 @@ app/
   issues.py        # suspicious-result heuristics for issue collection
   ai_refiner.py    # optional OpenAI-backed result refinement boundary
 scripts/
-  login.py         # manual WatchFacts login and browser state creation
-  audit_quality.py # safe production/local quality audit script
-  generate_audit_fixtures.py # audit JSON to scoring regression helper
+  ops/
+    login.py       # manual WatchFacts login and browser state creation
+  diagnostics/
+    audit_quality.py # safe production/local quality audit script
+    benchmark_hard_cases.py # hard-case matcher benchmark
+    debug_match.py # local matcher/score debug tool
+  fixtures/
+    generate_audit_fixtures.py # audit JSON to scoring regression helper
+    generate_issue_fixtures.py # issue export to matcher regression helper
 data/
   bot.db
   watchfacts_state.json
@@ -233,7 +239,7 @@ Detailed spec:
 - [Result Quality Scoring And Matcher Diagnostics Spec](result-quality-scoring.md)
 - [Production Quality Audit Loop Spec](production-quality-audit.md)
 
-### `scripts/audit_quality.py`
+### `scripts/diagnostics/audit_quality.py`
 
 Responsibilities:
 
@@ -246,11 +252,11 @@ Responsibilities:
 - Support focused production verification after matcher, extraction, scoring, or
   quality-gate changes.
 
-### `scripts/generate_audit_fixtures.py`
+### `scripts/fixtures/generate_audit_fixtures.py`
 
 Responsibilities:
 
-- Read `scripts/audit_quality.py --format json` output.
+- Read `scripts/diagnostics/audit_quality.py --format json` output.
 - Generate draft quality/scoring pytest cases for non-clean audit rows by
   default.
 - Support `--include-clean` for locking accepted clean shorthand examples.
@@ -266,7 +272,7 @@ Responsibilities:
 - Cap output length so the same formatter can later be reused in Telegram if an
   owner-only command is added.
 
-The initial debug surface is local-only through `scripts/debug_match.py`.
+The initial debug surface is local-only through `scripts/diagnostics/debug_match.py`.
 Telegram exposure is deferred until the production bot has a configured
 `TELEGRAM_ALLOWED_USER_IDS` owner allowlist.
 

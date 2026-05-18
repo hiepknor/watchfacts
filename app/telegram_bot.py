@@ -840,7 +840,7 @@ def format_health_message(status: BrowserSessionStatus | None) -> str:
         action_line = "✅ Bot có thể dùng session hiện tại để quét WatchFacts."
     elif status.status == "missing":
         session_line = "🔴 WatchFacts session: chưa có file đăng nhập"
-        action_line = "📌 Chạy `python scripts/login.py` rồi cập nhật server."
+        action_line = "📌 Chạy `python scripts/ops/login.py` rồi cập nhật server."
     elif status.status == "expired":
         session_line = "🟠 WatchFacts session: đã hết hạn"
         action_line = "📌 Đăng nhập lại WatchFacts để tạo session mới."

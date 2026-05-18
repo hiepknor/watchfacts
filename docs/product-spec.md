@@ -112,7 +112,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 | Open container shell | `make shell` |
 | Run lightweight checks | `make check` |
 | Run bot locally | `python -m app.main` |
-| Run login locally | `python scripts/login.py` |
+| Run login locally | `python scripts/ops/login.py` |
 | Deploy latest code | `make deploy` |
 | Deploy local unpushed code | `make deploy SKIP_PULL=1` |
 

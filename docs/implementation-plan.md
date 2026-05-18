@@ -181,7 +181,7 @@ Likely files:
 
 Acceptance:
 
-- [x] `python scripts/login.py` opens Chromium for manual login.
+- [x] `python scripts/ops/login.py` opens Chromium for manual login.
 - [x] Authenticated state is saved to `data/watchfacts_state.json`.
 - [x] Script does not ask for or store passwords.
 
@@ -193,7 +193,7 @@ python -m compileall scripts
 
 Likely files:
 
-- `scripts/login.py`
+- `scripts/ops/login.py`
 
 ### Task 3.2: Scraper
 
@@ -907,7 +907,7 @@ results.
 
 Acceptance:
 
-- [x] Add `scripts/audit_quality.py`.
+- [x] Add `scripts/diagnostics/audit_quality.py`.
 - [x] Support explicit query arguments.
 - [x] Provide a default query set matching the production audit spec.
 - [x] Support `--limit` for top-N results.
@@ -928,7 +928,7 @@ git diff --check
 
 Likely files:
 
-- `scripts/audit_quality.py`
+- `scripts/diagnostics/audit_quality.py`
 - optional `tests/test_audit_quality.py`
 
 ### Task 11.2: Add Fixture Workflow For Audit Findings
@@ -942,7 +942,7 @@ Acceptance:
 
 - [x] Document fixture templates for ranking issues, extraction issues,
   missing-price issues, descriptor conflicts, and stale-cache discoveries.
-- [x] Reuse existing `/issues_export` and `scripts/generate_issue_fixtures.py`
+- [x] Reuse existing `/issues_export` and `scripts/fixtures/generate_issue_fixtures.py`
   where applicable.
 - [x] Require each confirmed production issue to include query, shown text,
   raw text when available, posted date, and expected behavior.
@@ -959,7 +959,7 @@ Likely files:
 
 - `docs/production-quality-audit.md`
 - `docs/operations.md`
-- `scripts/generate_audit_fixtures.py`
+- `scripts/fixtures/generate_audit_fixtures.py`
 - `tests/test_generate_audit_fixtures.py`
 - optional generated regression fixtures under `tests/`
 
