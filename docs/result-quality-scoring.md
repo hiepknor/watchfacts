@@ -210,6 +210,9 @@ Acceptance:
 
 ### Phase 9.4: Split Matcher Helpers After Coverage
 
+Status: complete for normalization/tokenization. Further helper splits are
+deferred until a concrete production issue or test fixture justifies the move.
+
 Only after phases 9.1-9.3 are covered, split `matcher_rules.py` into smaller
 implementation files if it reduces maintenance risk.
 

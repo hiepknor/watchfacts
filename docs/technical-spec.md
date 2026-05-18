@@ -21,6 +21,7 @@ app/
   scraper.py       # Playwright browser/session/crawl logic
   parser.py        # HTML/listing extraction
   matcher.py       # stable public matcher API
+  matcher_normalization.py # normalization and tokenization helpers
   matcher_rules.py # deterministic matcher implementation
   matcher_rulebook.py # rule taxonomy and extraction trace types
   result_scoring.py # planned final quality and recency ordering boundary
@@ -148,6 +149,7 @@ Responsibilities:
 Responsibilities:
 
 - Keep `app.matcher` as the stable public API for search, dedupe, AI gates, and tests.
+- Keep normalization and tokenization helpers in `matcher_normalization.py`.
 - Keep deterministic matcher implementation in `matcher_rules.py`.
 - Keep matcher rule taxonomy, priorities, and trace data types in `matcher_rulebook.py`.
 - Normalize user query and listing text.

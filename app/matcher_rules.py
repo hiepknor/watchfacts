@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from typing import Iterable, Protocol, TypeVar
 
+from app.matcher_normalization import (
+    TOKEN_RE,
+    compact_text as _compact_text,
+    normalize_text,
+    tokenize_query,
+)
 from app.matcher_rulebook import ExtractionTrace, QueryIntent
 
 
-TOKEN_RE = re.compile(r"[a-z0-9]+(?:[./-][a-z0-9]+)*", re.IGNORECASE)
 QUERY_TERM_RE = TOKEN_RE
 LOCAL_MATCH_WINDOW = 12
 SEGMENT_MATCH_WINDOW = 45
@@ -64,23 +68,7 @@ class HasListingText(Protocol):
 T = TypeVar("T", bound=HasListingText)
 
 
-# Normalization and query intent rules.
-def normalize_text(value: str | None) -> str:
-    if not value:
-        return ""
-
-    normalized = unicodedata.normalize("NFKD", value).casefold()
-    normalized = "".join(
-        char for char in normalized if not unicodedata.category(char).startswith("M")
-    )
-    tokens = TOKEN_RE.findall(normalized)
-    return " ".join(tokens)
-
-
-def tokenize_query(query: str) -> list[str]:
-    return normalize_text(query).split()
-
-
+# Query intent rules.
 def is_non_sale_request(listing_text: str) -> bool:
     return _looks_like_non_sale_request(normalize_text(listing_text))
 
@@ -1058,7 +1046,3 @@ def _clean_display_text(value: str) -> str:
     if not re.search(r"\blike\s+new\s*$", cleaned, flags=re.IGNORECASE):
         cleaned = re.sub(r"(?:\s*[^\w\s$./-]*\s*new\s*)+$", "", cleaned, flags=re.IGNORECASE)
     return cleaned
-
-
-def _compact_text(value: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", value.casefold())

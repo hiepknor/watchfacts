@@ -804,13 +804,21 @@ Description: Optionally split `matcher_rules.py` into smaller files only after s
 
 Acceptance:
 
-- [ ] `app.matcher` public API remains unchanged.
-- [ ] Rule order remains documented as query -> reference -> descriptor -> price
+- [x] `app.matcher` public API remains unchanged.
+- [x] Rule order remains documented as query -> reference -> descriptor -> price
   -> product boundary -> metadata boundary -> date/condition detail -> noise ->
   cleanup.
-- [ ] All matcher, search, AI gate, Telegram, and scoring tests pass.
-- [ ] No production behavior changes unless a fixture documents the deliberate
+- [x] All matcher, search, AI gate, Telegram, and scoring tests pass.
+- [x] No production behavior changes unless a fixture documents the deliberate
   improvement.
+
+Implementation note:
+
+- Normalization and tokenization helpers were split into
+  `app/matcher_normalization.py`.
+- Boundary, price, descriptor, and extraction helpers remain in
+  `app/matcher_rules.py` to avoid a high-risk behavior-preserving move without a
+  concrete production issue.
 
 Verify:
 
