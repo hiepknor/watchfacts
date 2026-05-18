@@ -706,7 +706,7 @@ Latest validation:
 
 ## Phase 9: Result Quality Scoring And Matcher Diagnostics
 
-Status: planned.
+Status: complete.
 
 Goal: make ranking and matcher debugging explicit without changing the
 deterministic matcher public API.
@@ -886,7 +886,7 @@ Verify:
 
 ## Phase 11: Production Quality Audit Loop
 
-Status: planned.
+Status: in progress.
 
 Goal: make real production query quality observable, repeatable, and directly
 convertible into regression fixtures.
@@ -899,28 +899,30 @@ Reference docs:
 
 ### Task 11.1: Add Audit Script
 
+Status: complete.
+
 Description: Add a safe CLI script that runs a curated query set through the
 normal search workflow and reports quality/scoring diagnostics for the top
 results.
 
 Acceptance:
 
-- [ ] Add `scripts/audit_quality.py`.
-- [ ] Support explicit query arguments.
-- [ ] Provide a default query set matching the production audit spec.
-- [ ] Support `--limit` for top-N results.
-- [ ] Include count, rank, listing snippet, posted date, quality group,
+- [x] Add `scripts/audit_quality.py`.
+- [x] Support explicit query arguments.
+- [x] Provide a default query set matching the production audit spec.
+- [x] Support `--limit` for top-N results.
+- [x] Include count, rank, listing snippet, posted date, quality group,
   severity, relevance scores, price evidence score, and score reason codes.
-- [ ] Use existing search, scoring, and OpenAI guarded-refinement modules.
-- [ ] Do not print `.env`, API keys, Telegram tokens, WatchFacts cookies,
+- [x] Use existing search, scoring, and OpenAI guarded-refinement modules.
+- [x] Do not print `.env`, API keys, Telegram tokens, WatchFacts cookies,
   browser state, full page HTML, or full raw listings.
-- [ ] Add focused tests for report formatting or extraction of score summaries
+- [x] Add focused tests for report formatting or extraction of score summaries
   if the script exposes helper functions.
 
 Verify:
 
 ```bash
-.venv/bin/python -m pytest tests/test_result_scoring.py tests/test_search.py
+.venv/bin/python -m pytest tests/test_audit_quality.py tests/test_result_scoring.py tests/test_search.py
 git diff --check
 ```
 

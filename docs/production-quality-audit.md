@@ -180,12 +180,12 @@ For every confirmed issue:
 
 ### Phase 10.1: Audit Script
 
-- [ ] Add `scripts/audit_quality.py`.
-- [ ] Support query args and default query set.
-- [ ] Support `--limit`.
-- [ ] Include score fields and reason codes.
-- [ ] Keep output safe and bounded.
-- [ ] Add tests for report formatting and score inclusion where practical.
+- [x] Add `scripts/audit_quality.py`.
+- [x] Support query args and default query set.
+- [x] Support `--limit`.
+- [x] Include score fields and reason codes.
+- [x] Keep output safe and bounded.
+- [x] Add tests for report formatting and score inclusion where practical.
 
 ### Phase 10.2: Fixture Capture Path
 

@@ -259,7 +259,7 @@ Detailed spec:
 
 ## Milestone 10: Production Quality Audit Loop
 
-Status: planned.
+Status: in progress.
 
 Goal: make production result quality measurable after each matcher, scoring, or
 gate change, and make every confirmed issue become a regression fixture before
@@ -279,26 +279,26 @@ Decision:
 
 Deliverables:
 
-- [ ] CLI audit script for curated production/local query sets.
-- [ ] Default 10-query audit set covering reference, descriptor, year, FPJ/RM,
+- [x] CLI audit script for curated production/local query sets.
+- [x] Default 10-query audit set covering reference, descriptor, year, FPJ/RM,
   multi-list, and price shorthand risks.
-- [ ] Safe audit report showing top result text snippets, posted dates, quality
+- [x] Safe audit report showing top result text snippets, posted dates, quality
   group, relevance scores, price evidence, and score reason codes.
-- [ ] Issue classification taxonomy for wrong reference, wrong descriptor, bad
+- [x] Issue classification taxonomy for wrong reference, wrong descriptor, bad
   extraction, bad rank, missing price, ambiguous price, and stale cache.
 - [ ] Regression fixture workflow from audit output and existing issue exports.
-- [ ] Ambiguous price policy documenting accepted dealer shorthand and rejected
+- [x] Ambiguous price policy documenting accepted dealer shorthand and rejected
   material/karat terms.
-- [ ] Production verification checklist for pre-deploy audit, deploy, health
+- [x] Production verification checklist for pre-deploy audit, deploy, health
   check, focused post-deploy audit, and PMO/docs capture.
 
 Exit criteria:
 
-- [ ] Maintainer can run one command to audit the default query set.
-- [ ] Audit output is bounded and safe for logs or handoff notes.
+- [x] Maintainer can run one command to audit the default query set.
+- [x] Audit output is bounded and safe for logs or handoff notes.
 - [ ] Confirmed production issues are represented by tests before fixes merge.
-- [ ] Cache version updates are part of the checklist for scoring/gate changes.
-- [ ] Production audit docs explain when to demote, reject, or keep ambiguous
+- [x] Cache version updates are part of the checklist for scoring/gate changes.
+- [x] Production audit docs explain when to demote, reject, or keep ambiguous
   dealer shorthand.
 - [ ] Full tests and production health checks pass before marking the milestone
   complete.

@@ -181,6 +181,25 @@ RM65-01 Lebron
 116500 panda
 ```
 
+Run the default set locally or inside the production container:
+
+```bash
+python scripts/audit_quality.py --limit 5
+docker compose exec -T bot python scripts/audit_quality.py --limit 5
+```
+
+Run focused queries:
+
+```bash
+python scripts/audit_quality.py "5712r" "RM65-01 Lebron" --limit 10
+```
+
+Write machine-readable output for handoff or later fixture work:
+
+```bash
+python scripts/audit_quality.py --format json --limit 5 > audit-report.json
+```
+
 Checklist:
 
 - Run the audit query set before changing broad rules when production behavior
