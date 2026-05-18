@@ -19,6 +19,9 @@ def configure_logging() -> None:
 def main() -> int:
     configure_logging()
 
+    if "--healthcheck" in sys.argv[1:]:
+        return 0
+
     try:
         settings = load_settings()
     except ConfigError as exc:

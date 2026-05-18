@@ -323,6 +323,12 @@ async def issue_ignore_command(update, context) -> None:
     await _mark_issue_command(update, context, status="ignored")
 
 
+async def error_handler(update, context) -> None:
+    error = getattr(context, "error", None)
+    error_type = error.__class__.__name__ if error is not None else "Unknown"
+    logger.info("event=telegram.error_handler error_type=%s", error_type)
+
+
 async def cancel_command(update, context) -> None:
     message = getattr(update, "message", None)
     if await _reject_unauthorized(update, context, message):
@@ -906,6 +912,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
     )
+    application.add_error_handler(error_handler)
     return application
 
 

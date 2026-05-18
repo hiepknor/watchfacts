@@ -93,8 +93,9 @@ Restart after updating code:
 make deploy
 ```
 
-`make deploy` runs `git pull --ff-only`, builds the Docker image, force-recreates
-the bot container, prints Compose status, and shows recent startup logs.
+`make deploy` runs `git pull --ff-only`, builds the Docker image, runs pytest
+and compile checks inside the Compose image, force-recreates the bot container,
+prints Compose status, and shows recent startup logs.
 
 If you are deploying local unpushed changes, use:
 
@@ -107,6 +108,9 @@ Status:
 ```bash
 make ps
 ```
+
+Docker Compose also configures a lightweight container healthcheck and rotates
+JSON logs with `max-size=10m` and `max-file=5`.
 
 ## OpenAI Controlled Intelligence
 

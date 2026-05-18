@@ -13,6 +13,17 @@ def test_main_returns_config_error_exit_code(monkeypatch) -> None:
     assert app_main.main() == 2
 
 
+def test_main_healthcheck_exits_without_loading_settings(monkeypatch) -> None:
+    monkeypatch.setattr(app_main.sys, "argv", ["python", "--healthcheck"])
+
+    def fail_load_settings():
+        raise AssertionError("healthcheck should not load settings")
+
+    monkeypatch.setattr(app_main, "load_settings", fail_load_settings)
+
+    assert app_main.main() == 0
+
+
 def test_main_starts_bot_with_loaded_settings(monkeypatch, tmp_path) -> None:
     settings = Settings(
         telegram_bot_token="token",

@@ -36,6 +36,7 @@ from app.telegram_bot import (
     ai_suggestions_command,
     ai_suggestions_export_command,
     cancel_command,
+    error_handler,
     format_result_summary,
     format_health_message,
     format_issue_detail,
@@ -303,6 +304,15 @@ def test_help_command_rejects_unauthorized_user() -> None:
     asyncio.run(help_command(SimpleNamespace(message=message), context))
 
     assert message.replies == [UNAUTHORIZED_MESSAGE]
+
+
+def test_error_handler_logs_error_type(caplog) -> None:
+    context = SimpleNamespace(error=RuntimeError("boom"))
+
+    with caplog.at_level(logging.INFO, logger="app.telegram_bot"):
+        asyncio.run(error_handler(None, context))
+
+    assert "event=telegram.error_handler error_type=RuntimeError" in caplog.text
 
 
 def test_settings_command_returns_safe_runtime_settings() -> None:

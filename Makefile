@@ -7,7 +7,7 @@ SKIP_PULL ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build deploy update up down restart logs ps shell run login check clean
+.PHONY: help init verify-env pull build predeploy-check deploy update up down restart logs ps shell run login check clean
 
 help:
 	@printf "%s\n" "watchfacts-bot commands"
@@ -16,6 +16,7 @@ help:
 	@printf "%s\n" "  make verify-env Check server runtime files before deploy"
 	@printf "%s\n" "  make pull     Pull latest git changes unless SKIP_PULL=1"
 	@printf "%s\n" "  make build    Build Docker image"
+	@printf "%s\n" "  make predeploy-check Run tests and lightweight checks before deploy"
 	@printf "%s\n" "  make deploy   Pull, build, recreate bot, show status and startup logs"
 	@printf "%s\n" "  make update   Alias for deploy"
 	@printf "%s\n" "  make up       Start bot with Docker Compose"
@@ -47,7 +48,12 @@ pull:
 build:
 	$(COMPOSE) build
 
-deploy: verify-env pull build
+predeploy-check:
+	git diff --check
+	$(COMPOSE) run --rm $(SERVICE) python -m pytest -q
+	$(COMPOSE) run --rm $(SERVICE) python -m compileall app scripts
+
+deploy: verify-env pull build predeploy-check
 	$(COMPOSE) up -d --force-recreate $(SERVICE)
 	$(COMPOSE) ps
 	$(COMPOSE) logs --tail=$(LOG_LINES) $(SERVICE)

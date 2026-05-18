@@ -98,6 +98,7 @@ make deploy
 | --- | --- |
 | `make init` | Create `data/`, `logs/`, and `.env` from `.env.example` when missing |
 | `make verify-env` | Check `.env` and `data/watchfacts_state.json` before deploy |
+| `make predeploy-check` | Run pytest plus lightweight repository checks |
 | `make deploy` | Pull latest code, build, recreate the bot, and show startup logs |
 | `make deploy SKIP_PULL=1` | Deploy local unpushed changes |
 | `make pull` | Pull latest git changes unless `SKIP_PULL=1` |
