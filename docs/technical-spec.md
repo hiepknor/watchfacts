@@ -22,6 +22,7 @@ app/
   parser.py        # HTML/listing extraction
   matcher.py       # stable public matcher API
   matcher_normalization.py # normalization and tokenization helpers
+  matcher_token_classification.py # query intent and token classifiers
   matcher_rules.py # deterministic matcher implementation
   matcher_rulebook.py # rule taxonomy and extraction trace types
   result_scoring.py # planned final quality and recency ordering boundary
@@ -155,12 +156,14 @@ Responsibilities:
 - Normalize missing fields to `None` or empty strings consistently.
 - Keep extraction deterministic and unit-testable with HTML fixtures.
 
-### `matcher.py`, `matcher_rules.py`, and `matcher_rulebook.py`
+### `matcher.py`, `matcher_rules.py`, `matcher_token_classification.py`, and `matcher_rulebook.py`
 
 Responsibilities:
 
 - Keep `app.matcher` as the stable public API for search, dedupe, AI gates, and tests.
 - Keep normalization and tokenization helpers in `matcher_normalization.py`.
+- Keep query intent and token classification helpers in
+  `matcher_token_classification.py`.
 - Keep deterministic matcher implementation in `matcher_rules.py`.
 - Keep matcher rule taxonomy, priorities, and trace data types in `matcher_rulebook.py`.
 - Normalize user query and listing text.

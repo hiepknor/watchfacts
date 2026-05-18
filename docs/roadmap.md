@@ -197,6 +197,7 @@ Deliverables:
 
 - Stable `app.matcher` public API for search, dedupe, AI gates, and tests.
 - Dedicated deterministic matcher implementation in `app.matcher_rules`.
+- Query intent and token classifiers in `app.matcher_token_classification`.
 - Rule taxonomy and trace types in `app.matcher_rulebook`.
 - Ordered rule groups for query, reference, descriptor, price, product boundary,
   metadata boundary, date/condition detail, noise, and cleanup.

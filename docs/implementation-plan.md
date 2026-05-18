@@ -816,7 +816,9 @@ Implementation note:
 
 - Normalization and tokenization helpers were split into
   `app/matcher_normalization.py`.
-- Boundary, price, descriptor, and extraction helpers remain in
+- Query intent and token classifiers were split into
+  `app/matcher_token_classification.py`.
+- Boundary, descriptor, and extraction helpers remain in
   `app/matcher_rules.py` to avoid a high-risk behavior-preserving move without a
   concrete production issue.
 
@@ -830,7 +832,7 @@ git diff --check
 Candidate files:
 
 - `app/matcher_normalization.py`
-- `app/matcher_intent.py`
+- `app/matcher_token_classification.py`
 - `app/matcher_reference.py`
 - `app/matcher_descriptor.py`
 - `app/matcher_boundaries.py`

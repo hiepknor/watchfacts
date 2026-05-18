@@ -130,6 +130,7 @@ watchfacts-bot/
 │   ├── parser.py
 │   ├── matcher.py          # stable public matcher API
 │   ├── matcher_normalization.py # normalization and tokenization helpers
+│   ├── matcher_token_classification.py # query/token classifiers
 │   ├── matcher_rules.py    # deterministic matcher implementation
 │   ├── matcher_rulebook.py # rule taxonomy and extraction trace types
 │   ├── dedupe.py
