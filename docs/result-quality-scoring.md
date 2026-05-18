@@ -15,6 +15,9 @@ Completed baseline behavior:
 
 - `app.matcher` is a stable public matcher API.
 - `app.matcher_rules` contains deterministic matching and extraction rules.
+- `app.matcher_normalization` contains normalization/tokenization helpers.
+- `app.matcher_token_classification` contains query intent and token
+  classification helpers.
 - `app.matcher_rulebook` contains rule groups, priorities, and extraction trace
   types.
 - Search output is quality-first:
@@ -212,8 +215,9 @@ Acceptance:
 
 ### Phase 9.4: Split Matcher Helpers After Coverage
 
-Status: complete for normalization/tokenization. Further helper splits are
-deferred until a concrete production issue or test fixture justifies the move.
+Status: complete for normalization/tokenization and token classification.
+Further helper splits are deferred until a concrete production issue or test
+fixture justifies the move.
 
 Only after phases 9.1-9.3 are covered, split `matcher_rules.py` into smaller
 implementation files if it reduces maintenance risk.
@@ -222,7 +226,7 @@ Candidate files:
 
 ```text
 app/matcher_normalization.py
-app/matcher_intent.py
+app/matcher_token_classification.py
 app/matcher_reference.py
 app/matcher_descriptor.py
 app/matcher_boundaries.py

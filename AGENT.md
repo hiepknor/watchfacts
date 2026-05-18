@@ -58,10 +58,18 @@ app/
   scraper.py
   parser.py
   matcher.py
+  matcher_normalization.py
+  matcher_token_classification.py
+  matcher_rules.py
+  matcher_rulebook.py
+  result_scoring.py
+  similarity.py
+  issues.py
+  ai_refiner.py
+  match_debug.py
   dedupe.py
   db.py
   config.py
-  utils.py
 scripts/
   ops/
     login.py

@@ -25,13 +25,14 @@ app/
   matcher_token_classification.py # query intent and token classifiers
   matcher_rules.py # deterministic matcher implementation
   matcher_rulebook.py # rule taxonomy and extraction trace types
-  result_scoring.py # planned final quality and recency ordering boundary
+  result_scoring.py # final quality and recency ordering boundary
   dedupe.py        # listing identity and duplicate filtering
   db.py            # SQLite schema and persistence
   config.py        # environment/config loading
   issues.py        # suspicious-result heuristics for issue collection
   ai_refiner.py    # optional OpenAI-backed result refinement boundary
 scripts/
+  *.py             # compatibility wrappers for older script paths
   ops/
     login.py       # manual WatchFacts login and browser state creation
   diagnostics/
