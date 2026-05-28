@@ -184,9 +184,19 @@ def explain_extraction(query: str, listing_text: str) -> ExtractionTrace:
     fallback: tuple[list[str], int, int] | None = None
     for reference_term in reference_terms:
         term_length = len(reference_term)
+        exact_reference_exists = _find_exact_reference_term_index(
+            reference_term,
+            normalized_tokens,
+        ) is not None
         for index in range(len(normalized_tokens) - term_length + 1):
             match_length = _reference_match_length_at(reference_term, normalized_tokens, index)
             if match_length is None:
+                continue
+            if exact_reference_exists and not _reference_term_exactly_matches_at(
+                reference_term,
+                normalized_tokens,
+                index,
+            ):
                 continue
 
             reference_index = index + match_length - 1
@@ -458,6 +468,25 @@ def _find_reference_term_index(
         if _reference_term_matches_at(reference_term, listing_tokens, index):
             return index
     return None
+
+
+def _find_exact_reference_term_index(
+    reference_term: list[str],
+    listing_tokens: list[str],
+) -> int | None:
+    term_length = len(reference_term)
+    for index in range(len(listing_tokens) - term_length + 1):
+        if _reference_term_exactly_matches_at(reference_term, listing_tokens, index):
+            return index
+    return None
+
+
+def _reference_term_exactly_matches_at(
+    reference_term: list[str],
+    listing_tokens: list[str],
+    index: int,
+) -> bool:
+    return listing_tokens[index : index + len(reference_term)] == reference_term
 
 
 def _reference_term_matches_at(

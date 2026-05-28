@@ -864,6 +864,20 @@ def test_extract_relevant_listing_text_keeps_listing_stock_code_after_reference(
     )
 
 
+def test_extract_relevant_listing_text_prefers_exact_reference_over_compact_split() -> None:
+    listing_text = (
+        "126595 rbow black 2025y 3.4m hkd "
+        "126595 white n9 1.45m hkd "
+        "126679 SABR 2025y 1.28m hkd "
+        "126595rbow rainbow 2026y 490000usdt "
+        "126598 pave 2024y 3.58m hkd"
+    )
+
+    assert extract_relevant_listing_text("126595rbow", listing_text) == (
+        "126595rbow rainbow 2026y 490000usdt"
+    )
+
+
 def test_extract_relevant_listing_text_stops_before_split_rm_header() -> None:
     listing_text = (
         "AP 77350sr 2020y fullset 259kHKD "
