@@ -3,6 +3,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+.codegraph/
 
 data/watchfacts_state.json
 data/bot.db
