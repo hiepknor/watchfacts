@@ -6,6 +6,10 @@ from types import SimpleNamespace
 
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
 from app.db import Database
+from app.openwa_handoff import (
+    OpenWAChatDraftResponse,
+    OpenWAHandoffConfig,
+)
 from app.scraper import BrowserSessionError, BrowserSessionStatus
 from app.telegram_bot import (
     EMPTY_QUERY_MESSAGE,
@@ -16,6 +20,8 @@ from app.telegram_bot import (
     ISSUE_DATABASE_KEY,
     PROCESSING_MIN_SECONDS_KEY,
     PROCESSING_MESSAGE,
+    OPENWA_HANDOFF_CONFIG_KEY,
+    OPENWA_CHAT_DRAFT_CLIENT_KEY,
     QUEUED_MESSAGE,
     SEARCH_SEMAPHORE_KEY,
     START_MESSAGE,
@@ -45,6 +51,7 @@ from app.telegram_bot import (
     format_posted_date,
     format_settings_message,
     handle_more_results,
+    handle_openwa_chat_draft,
     handle_feedback,
     handle_text_message,
     health_command,
@@ -83,6 +90,8 @@ class FakeSentMessage:
         self.replies = replies
         self.text = text
         self.reply_markup = reply_markup
+        self.chat_id = 12345
+        self.message_id = 9000 + len(replies)
         self.deleted = False
 
     async def delete(self) -> None:
@@ -100,11 +109,13 @@ class FakeMessage:
         chat_type: str = "private",
         reply_to_message=None,
         fail_photos: bool = False,
+        message_id: int = 777,
     ) -> None:
         self.text = text
         self.chat_id = 12345
+        self.message_id = message_id
         self.chat = SimpleNamespace(type=chat_type)
-        self.from_user = SimpleNamespace(id=user_id)
+        self.from_user = SimpleNamespace(id=user_id, username="dealer_user")
         self.reply_to_message = reply_to_message
         self.replies: list[str] = []
         self.photos: list[tuple[str, str]] = []
@@ -121,10 +132,17 @@ class FakeMessage:
         self.sent_messages.append(sent_message)
         return sent_message
 
-    async def reply_photo(self, photo: str, caption: str, **kwargs) -> None:
+    async def reply_photo(self, photo: str, caption: str, **kwargs) -> FakeSentMessage:
         if self.fail_photos:
             raise TimeoutError("photo timeout")
         self.photos.append((photo, caption))
+        sent_message = FakeSentMessage(
+            self.replies,
+            caption,
+            reply_markup=kwargs.get("reply_markup"),
+        )
+        self.sent_messages.append(sent_message)
+        return sent_message
 
 
 class FakeWorkflow:
@@ -178,7 +196,7 @@ class FakeCallbackQuery:
     def __init__(self, data: str, message: FakeMessage, *, user_id: int = 123) -> None:
         self.data = data
         self.message = message
-        self.from_user = SimpleNamespace(id=user_id)
+        self.from_user = SimpleNamespace(id=user_id, username="dealer_user")
         self.answers: list[str] = []
 
     async def answer(self, text: str) -> None:
@@ -193,6 +211,8 @@ def make_context(
     session_checker=None,
     result_limit: int | None = None,
     allowed_user_ids: tuple[int, ...] = (),
+    openwa_config: OpenWAHandoffConfig | None = None,
+    openwa_client=None,
 ):
     bot_data = {PROCESSING_MIN_SECONDS_KEY: 0}
     bot_data[ALLOWED_USER_IDS_KEY] = allowed_user_ids
@@ -207,8 +227,22 @@ def make_context(
         bot_data[WATCHFACTS_SESSION_CHECKER_KEY] = session_checker
     if db_path is not None:
         bot_data[ISSUE_DATABASE_KEY] = Database(db_path)
+    if openwa_config is not None:
+        bot_data[OPENWA_HANDOFF_CONFIG_KEY] = openwa_config
+    if openwa_client is not None:
+        bot_data[OPENWA_CHAT_DRAFT_CLIENT_KEY] = openwa_client
     bot = FakeBot()
     return SimpleNamespace(bot=bot, application=SimpleNamespace(bot=bot, bot_data=bot_data))
+
+
+def make_openwa_config(*, enabled: bool = True) -> OpenWAHandoffConfig:
+    return OpenWAHandoffConfig(
+        base_url="https://openwa.example",
+        api_key="openwa-secret",
+        dashboard_url="https://dashboard.example",
+        chat_draft_endpoint="/api/chats/drafts",
+        enabled=enabled,
+    )
 
 
 def test_build_result_refiner_shadow_records_suggestions_without_changing_output(
@@ -328,7 +362,8 @@ def test_settings_command_returns_safe_runtime_settings() -> None:
             "👤 ID chủ bot: 2\n"
             "📨 Kết quả mỗi lượt: 7\n"
             "🤖 AI mode: off\n"
-            "🧠 OpenAI model: disabled\n\n"
+            "🧠 OpenAI model: disabled\n"
+            "💬 OpenWA chat draft: disabled\n\n"
             "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
         )
     ]
@@ -635,7 +670,8 @@ def test_format_settings_message_shows_public_access() -> None:
         "👤 ID chủ bot: Không giới hạn\n"
         "📨 Kết quả mỗi lượt: 5\n"
         "🤖 AI mode: off\n"
-        "🧠 OpenAI model: disabled\n\n"
+        "🧠 OpenAI model: disabled\n"
+        "💬 OpenWA chat draft: disabled\n\n"
         "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
     )
 
@@ -1205,6 +1241,155 @@ def test_feedback_callback_rejects_unauthorized_user(tmp_path) -> None:
     asyncio.run(handle_feedback(SimpleNamespace(callback_query=callback), context))
 
     assert callback.answers == [UNAUTHORIZED_MESSAGE]
+
+
+def test_openwa_chat_draft_button_is_hidden_when_handoff_is_disabled() -> None:
+    message = FakeMessage("5712r")
+    workflow = FakeWorkflow([SearchResult("5712R 2016 HKD 830000")])
+    context = make_context(workflow)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+    result_token = message.sent_messages[-1].reply_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    asyncio.run(
+        handle_more_results(
+            SimpleNamespace(callback_query=FakeCallbackQuery(f"more_results:{result_token}", message)),
+            context,
+        )
+    )
+
+    result_markup = message.sent_messages[-2].reply_markup
+    button_texts = [
+        button.text
+        for row in result_markup.inline_keyboard
+        for button in row
+    ]
+    assert "💬 Gửi tin nhắn" not in button_texts
+
+
+def test_openwa_chat_draft_button_is_visible_when_handoff_is_configured() -> None:
+    message = FakeMessage("5712r")
+    workflow = FakeWorkflow([SearchResult("5712R 2016 HKD 830000")])
+    context = make_context(workflow, openwa_config=make_openwa_config())
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+    result_token = message.sent_messages[-1].reply_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    asyncio.run(
+        handle_more_results(
+            SimpleNamespace(callback_query=FakeCallbackQuery(f"more_results:{result_token}", message)),
+            context,
+        )
+    )
+
+    result_markup = message.sent_messages[-2].reply_markup
+    assert result_markup.inline_keyboard[1][0].text == "💬 Gửi tin nhắn"
+    assert result_markup.inline_keyboard[1][0].callback_data.startswith("openwa_chat:")
+
+
+def test_openwa_chat_draft_callback_creates_payload_and_returns_dashboard_link() -> None:
+    message = FakeMessage("5712r")
+    workflow = FakeWorkflow(
+        [
+            SearchResult(
+                "5712R 2016 HKD 830000",
+                seller="AM.Timepiece TONY",
+                posted_date="February 14, 2026",
+                image_url="https://images.example/5712r.jpg",
+                source_url="/flash-sales/9927122",
+                raw_listing_text="raw 5712R 2016 HKD 830000",
+            )
+        ]
+    )
+    calls = []
+
+    async def create_chat_draft(payload):
+        calls.append(payload)
+        return OpenWAChatDraftResponse(
+            draft_id="draft-123",
+            chat_id=None,
+            dashboard_url="https://dashboard.example/chats/drafts/draft-123",
+        )
+
+    context = make_context(
+        workflow,
+        allowed_user_ids=(123,),
+        openwa_config=make_openwa_config(),
+        openwa_client=create_chat_draft,
+    )
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+    result_token = message.sent_messages[-1].reply_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    asyncio.run(
+        handle_more_results(
+            SimpleNamespace(callback_query=FakeCallbackQuery(f"more_results:{result_token}", message)),
+            context,
+        )
+    )
+    openwa_data = message.sent_messages[-2].reply_markup.inline_keyboard[1][0].callback_data
+    callback = FakeCallbackQuery(openwa_data, message)
+
+    asyncio.run(handle_openwa_chat_draft(SimpleNamespace(callback_query=callback), context))
+
+    assert callback.answers == ["Đang tạo chat draft trong OpenWA..."]
+    assert len(calls) == 1
+    payload = calls[0]
+    assert payload["source"] == "watchfacts"
+    assert payload["sourceResultId"].startswith("watchfacts:")
+    assert payload["sourceUrl"] == "/flash-sales/9927122"
+    assert payload["queryText"] == "5712r"
+    assert payload["listingText"] == "5712R 2016 HKD 830000"
+    assert payload["rawListingText"] == "raw 5712R 2016 HKD 830000"
+    assert payload["seller"] == {
+        "name": "AM.Timepiece TONY",
+        "phone": None,
+        "watchfactsId": None,
+        "profileUrl": None,
+    }
+    assert payload["product"]["title"] == "5712R 2016 HKD 830000"
+    assert payload["product"]["imageUrl"] == "https://images.example/5712r.jpg"
+    assert payload["product"]["reference"] is None
+    assert payload["origin"] == {
+        "telegramUserId": 123,
+        "telegramUsername": "dealer_user",
+        "telegramChatId": 12345,
+        "telegramMessageId": 777,
+    }
+    assert message.replies[-1] == "✅ Đã tạo chat draft trong OpenWA."
+    button = message.sent_messages[-1].reply_markup.inline_keyboard[0][0]
+    assert button.text == "Mở OpenWA"
+    assert button.url == "https://dashboard.example/chats/drafts/draft-123"
+
+
+def test_openwa_chat_draft_callback_reports_failure_without_leaking_api_key(caplog) -> None:
+    message = FakeMessage("5712r")
+    workflow = FakeWorkflow([SearchResult("5712R 2016 HKD 830000")])
+    secret = "openwa-secret"
+
+    async def fail_create_chat_draft(payload):
+        raise RuntimeError(f"boom {secret}")
+
+    context = make_context(
+        workflow,
+        openwa_config=make_openwa_config(),
+        openwa_client=fail_create_chat_draft,
+    )
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+    result_token = message.sent_messages[-1].reply_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
+    asyncio.run(
+        handle_more_results(
+            SimpleNamespace(callback_query=FakeCallbackQuery(f"more_results:{result_token}", message)),
+            context,
+        )
+    )
+    openwa_data = message.sent_messages[-2].reply_markup.inline_keyboard[1][0].callback_data
+    callback = FakeCallbackQuery(openwa_data, message)
+
+    with caplog.at_level(logging.INFO):
+        asyncio.run(handle_openwa_chat_draft(SimpleNamespace(callback_query=callback), context))
+
+    assert message.replies[-1] == "⚠️ Chưa kết nối được OpenWA. Thử lại sau."
+    assert secret not in message.replies[-1]
+    assert secret not in caplog.text
 
 
 def test_text_messages_fallback_to_text_when_image_is_missing() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import inspect
 import logging
@@ -13,6 +14,13 @@ from typing import Protocol
 
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
 from app.db import AIRefinementSuggestionRecord, Database, IssueRecord
+from app.openwa_handoff import (
+    OpenWAChatDraftResponse,
+    OpenWAHandoffConfig,
+    OpenWAHandoffConfigError,
+    OpenWAHandoffResponseError,
+    create_openwa_chat_draft,
+)
 from app.scraper import BrowserSessionError, BrowserSessionStatus
 
 
@@ -109,11 +117,14 @@ RESULT_PAGES_KEY = "result_pages"
 RESULT_REFINER_KEY = "result_refiner"
 ISSUE_DATABASE_KEY = "issue_database"
 FEEDBACK_CONTEXTS_KEY = "feedback_contexts"
+OPENWA_HANDOFF_CONFIG_KEY = "openwa_handoff_config"
+OPENWA_CHAT_DRAFT_CLIENT_KEY = "openwa_chat_draft_client"
 WATCHFACTS_SESSION_CHECKER_KEY = "watchfacts_session_checker"
 WATCHFACTS_SESSION_ALERT_LAST_SENT_KEY = "watchfacts_session_alert_last_sent"
 SEARCH_SEMAPHORE_KEY = "search_semaphore"
 MORE_RESULTS_PREFIX = "more_results:"
 FEEDBACK_PREFIX = "feedback:"
+OPENWA_CHAT_PREFIX = "openwa_chat:"
 ALLOWED_USER_IDS_KEY = "allowed_user_ids"
 TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
 TELEGRAM_TEXT_MESSAGE_LIMIT = 4096
@@ -140,6 +151,7 @@ class SearchWorkflow(Protocol):
 
 RefineResults = Callable[..., Awaitable[list[SearchResult]]]
 SessionChecker = Callable[[], Awaitable[BrowserSessionStatus]]
+OpenWAChatDraftClient = Callable[[dict], Awaitable[OpenWAChatDraftResponse]]
 
 
 class PlaceholderSearchWorkflow:
@@ -552,6 +564,107 @@ async def handle_feedback(update, context) -> None:
     )
 
 
+async def handle_openwa_chat_draft(update, context) -> None:
+    callback_query = getattr(update, "callback_query", None)
+    if callback_query is None:
+        return
+    if not _is_authorized(update, context):
+        await _maybe_await(callback_query.answer(UNAUTHORIZED_MESSAGE))
+        return
+
+    data = getattr(callback_query, "data", "") or ""
+    token = data.removeprefix(OPENWA_CHAT_PREFIX)
+    draft_context = _get_feedback_context(context, token)
+    if not token or draft_context is None:
+        await _maybe_await(callback_query.answer("Chat draft đã hết hạn. Vui lòng tìm lại."))
+        return
+
+    config = _openwa_handoff_config(context)
+    if config is None or not config.is_ready:
+        await _maybe_await(callback_query.answer("OpenWA chat draft chưa được cấu hình."))
+        await _reply_openwa_chat_draft_error(
+            callback_query,
+            "OpenWA chat draft chưa được cấu hình.",
+        )
+        return
+
+    result = draft_context["result"]
+    payload = build_openwa_chat_draft_payload(
+        update,
+        query=str(draft_context["query"]),
+        rank=int(draft_context["rank"]),
+        result=result,
+    )
+    try:
+        await _maybe_await(callback_query.answer("Đang tạo chat draft trong OpenWA..."))
+        response = await _openwa_chat_draft_client(context)(payload)
+    except OpenWAHandoffConfigError:
+        await _reply_openwa_chat_draft_error(
+            callback_query,
+            "OpenWA chat draft chưa được cấu hình.",
+        )
+        return
+    except OpenWAHandoffResponseError as exc:
+        logger.info(
+            "event=telegram.openwa_chat_draft_failed error_type=%s",
+            exc.__class__.__name__,
+        )
+        await _reply_openwa_chat_draft_error(
+            callback_query,
+            "OpenWA chưa trả về chat draft hợp lệ.",
+        )
+        return
+    except Exception as exc:
+        logger.info(
+            "event=telegram.openwa_chat_draft_failed error_type=%s",
+            exc.__class__.__name__,
+        )
+        await _reply_openwa_chat_draft_error(callback_query, "Chưa kết nối được OpenWA. Thử lại sau.")
+        return
+
+    await _reply_openwa_chat_draft_success(callback_query, response.dashboard_url)
+
+
+def build_openwa_chat_draft_payload(
+    update,
+    *,
+    query: str,
+    rank: int,
+    result: SearchResult,
+) -> dict:
+    return {
+        "source": "watchfacts",
+        "sourceResultId": _source_result_id(query, rank, result),
+        "sourceUrl": result.source_url,
+        "queryText": query,
+        "listingText": result.listing_text,
+        "rawListingText": result.raw_listing_text,
+        "seller": {
+            "name": result.seller,
+            "phone": None,
+            "watchfactsId": None,
+            "profileUrl": None,
+        },
+        "product": {
+            "title": result.listing_text,
+            "reference": None,
+            "brand": None,
+            "year": None,
+            "condition": None,
+            "set": None,
+            "dial": None,
+            "priceText": None,
+            "imageUrl": result.image_url,
+        },
+        "origin": {
+            "telegramUserId": _telegram_user_id(update),
+            "telegramUsername": _telegram_username(update),
+            "telegramChatId": _telegram_chat_id(update),
+            "telegramMessageId": _telegram_message_id(update),
+        },
+    }
+
+
 def format_search_results(results: list[SearchResult]) -> str:
     if not results:
         return NO_RESULTS_MESSAGE
@@ -646,7 +759,8 @@ def format_settings_message(context) -> str:
         f"👤 ID chủ bot: {owner_count if owner_count else 'Không giới hạn'}\n"
         f"📨 Kết quả mỗi lượt: {_result_limit(context)}\n"
         f"🤖 AI mode: {_hybrid_ai_mode(context)}\n"
-        f"🧠 OpenAI model: {_openai_model(context)}\n\n"
+        f"🧠 OpenAI model: {_openai_model(context)}\n"
+        f"💬 OpenWA chat draft: {_openwa_handoff_status(context)}\n\n"
         "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
     )
 
@@ -887,6 +1001,12 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     )
     application.bot_data[HYBRID_AI_MODE_KEY] = settings.hybrid_ai_mode
     application.bot_data[OPENAI_MODEL_KEY] = settings.openai_model
+    openwa_config = OpenWAHandoffConfig.from_settings(settings)
+    application.bot_data[OPENWA_HANDOFF_CONFIG_KEY] = openwa_config
+    if openwa_config.is_ready:
+        application.bot_data[OPENWA_CHAT_DRAFT_CLIENT_KEY] = (
+            lambda payload: create_openwa_chat_draft(openwa_config, payload)
+        )
     application.bot_data[SEARCH_SEMAPHORE_KEY] = asyncio.Semaphore(
         settings.telegram_max_concurrent_searches
     )
@@ -909,6 +1029,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CallbackQueryHandler(handle_more_results, pattern=f"^{MORE_RESULTS_PREFIX}"))
     application.add_handler(CallbackQueryHandler(handle_feedback, pattern=f"^{FEEDBACK_PREFIX}"))
+    application.add_handler(CallbackQueryHandler(handle_openwa_chat_draft, pattern=f"^{OPENWA_CHAT_PREFIX}"))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
     )
@@ -995,6 +1116,35 @@ def _watchfacts_session_checker(context) -> SessionChecker | None:
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     value = bot_data.get(WATCHFACTS_SESSION_CHECKER_KEY)
     return value if callable(value) else None
+
+
+def _openwa_handoff_config(context) -> OpenWAHandoffConfig | None:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(OPENWA_HANDOFF_CONFIG_KEY)
+    return value if isinstance(value, OpenWAHandoffConfig) else None
+
+
+def _openwa_chat_draft_client(context) -> OpenWAChatDraftClient:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(OPENWA_CHAT_DRAFT_CLIENT_KEY)
+    if callable(value):
+        return value
+
+    config = _openwa_handoff_config(context)
+    if config is None:
+        raise OpenWAHandoffConfigError("OpenWA chat draft handoff is not configured")
+
+    async def create(payload: dict) -> OpenWAChatDraftResponse:
+        return await create_openwa_chat_draft(config, payload)
+
+    return create
+
+
+def _openwa_handoff_ready(context) -> bool:
+    config = _openwa_handoff_config(context)
+    return bool(config and config.is_ready)
 
 
 def _allowed_user_ids(context) -> tuple[int, ...]:
@@ -1160,6 +1310,36 @@ def _telegram_user_id(update) -> int | None:
         return int(user_id)
 
     return None
+
+
+def _telegram_username(update) -> str | None:
+    user = getattr(update, "effective_user", None)
+    if user is None:
+        callback_query = getattr(update, "callback_query", None)
+        user = getattr(callback_query, "from_user", None) if callback_query is not None else None
+    if user is None:
+        message = getattr(update, "message", None)
+        user = getattr(message, "from_user", None) if message is not None else None
+    username = getattr(user, "username", None) if user is not None else None
+    return str(username) if username else None
+
+
+def _telegram_chat_id(update) -> int | None:
+    message = getattr(update, "message", None)
+    if message is None:
+        callback_query = getattr(update, "callback_query", None)
+        message = getattr(callback_query, "message", None) if callback_query is not None else None
+    chat_id = getattr(message, "chat_id", None)
+    return int(chat_id) if chat_id is not None else None
+
+
+def _telegram_message_id(update) -> int | None:
+    message = getattr(update, "message", None)
+    if message is None:
+        callback_query = getattr(update, "callback_query", None)
+        message = getattr(callback_query, "message", None) if callback_query is not None else None
+    message_id = getattr(message, "message_id", None)
+    return int(message_id) if message_id is not None else None
 
 
 def _is_authorized(update, context) -> bool:
@@ -1329,19 +1509,29 @@ def _feedback_markup(context, *, query: str, result: SearchResult, rank: int):
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
     token = _store_feedback_context(context, query=query, result=result, rank=rank)
-    return InlineKeyboardMarkup(
+    rows = [
         [
+            InlineKeyboardButton(
+                "⚠️ Thiếu thông tin",
+                callback_data=f"{FEEDBACK_PREFIX}{token}:missing_info",
+            ),
+            InlineKeyboardButton(
+                "❌ Sai kết quả",
+                callback_data=f"{FEEDBACK_PREFIX}{token}:wrong_result",
+            ),
+        ]
+    ]
+    if _openwa_handoff_ready(context):
+        rows.append(
             [
                 InlineKeyboardButton(
-                    "⚠️ Thiếu thông tin",
-                    callback_data=f"{FEEDBACK_PREFIX}{token}:missing_info",
-                ),
-                InlineKeyboardButton(
-                    "❌ Sai kết quả",
-                    callback_data=f"{FEEDBACK_PREFIX}{token}:wrong_result",
-                ),
+                    "💬 Gửi tin nhắn",
+                    callback_data=f"{OPENWA_CHAT_PREFIX}{token}",
+                )
             ]
-        ]
+        )
+    return InlineKeyboardMarkup(
+        rows
     )
 
 
@@ -1665,6 +1855,52 @@ def _openai_model(context) -> str:
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     value = bot_data.get(OPENAI_MODEL_KEY, "disabled")
     return str(value or "disabled")
+
+
+def _openwa_handoff_status(context) -> str:
+    config = _openwa_handoff_config(context)
+    if config is None or not config.enabled:
+        return "disabled"
+    if not config.is_ready:
+        return "missing config"
+    return "enabled"
+
+
+def _source_result_id(query: str, rank: int, result: SearchResult) -> str:
+    payload = {
+        "query": query,
+        "rank": rank,
+        "listingText": result.listing_text,
+        "rawListingText": result.raw_listing_text,
+        "sourceUrl": result.source_url,
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return f"watchfacts:{digest[:24]}"
+
+
+async def _reply_openwa_chat_draft_success(callback_query, dashboard_url: str) -> None:
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    message = getattr(callback_query, "message", None)
+    if message is None:
+        return
+    await _maybe_await(
+        message.reply_text(
+            "✅ Đã tạo chat draft trong OpenWA.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Mở OpenWA", url=dashboard_url)]]
+            ),
+        )
+    )
+
+
+async def _reply_openwa_chat_draft_error(callback_query, text: str) -> None:
+    message = getattr(callback_query, "message", None)
+    if message is None:
+        return
+    await _maybe_await(message.reply_text(f"⚠️ {text}"))
 
 
 async def _delete_message(message) -> None:

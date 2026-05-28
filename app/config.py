@@ -15,6 +15,7 @@ DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 DEFAULT_OPENAI_TIMEOUT_SECONDS = 12
 DEFAULT_OPENAI_MAX_REFINES = 3
 DEFAULT_SEARCH_CACHE_TTL_SECONDS = 5 * 60
+DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT = "/api/chats/drafts"
 HybridAIMode = Literal["off", "shadow", "review", "guarded"]
 DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
 
@@ -43,6 +44,11 @@ class Settings:
     openai_timeout_seconds: int = DEFAULT_OPENAI_TIMEOUT_SECONDS
     openai_max_refines: int = DEFAULT_OPENAI_MAX_REFINES
     search_cache_ttl_seconds: int = DEFAULT_SEARCH_CACHE_TTL_SECONDS
+    openwa_base_url: str = ""
+    openwa_api_key: str = ""
+    openwa_dashboard_url: str = ""
+    openwa_chat_draft_endpoint: str = DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT
+    enable_openwa_chat_handoff: bool = False
 
 
 def parse_bool(value: str, *, name: str) -> bool:
@@ -155,6 +161,21 @@ def load_settings(
         source.get("SEARCH_CACHE_TTL_SECONDS", str(DEFAULT_SEARCH_CACHE_TTL_SECONDS)),
         name="SEARCH_CACHE_TTL_SECONDS",
     )
+    enable_openwa_chat_handoff = parse_bool(
+        source.get("ENABLE_OPENWA_CHAT_HANDOFF", "false"),
+        name="ENABLE_OPENWA_CHAT_HANDOFF",
+    )
+    openwa_base_url = source.get("OPENWA_BASE_URL", "").strip().rstrip("/")
+    openwa_api_key = source.get("OPENWA_API_KEY", "").strip()
+    openwa_dashboard_url = source.get("OPENWA_DASHBOARD_URL", "").strip().rstrip("/")
+    openwa_chat_draft_endpoint = source.get(
+        "OPENWA_CHAT_DRAFT_ENDPOINT",
+        DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT,
+    ).strip()
+    if not openwa_chat_draft_endpoint:
+        raise ConfigError("OPENWA_CHAT_DRAFT_ENDPOINT must not be empty")
+    if not openwa_chat_draft_endpoint.startswith("/"):
+        openwa_chat_draft_endpoint = f"/{openwa_chat_draft_endpoint}"
 
     data_dir = root / "data"
     logs_dir = root / "logs"
@@ -173,6 +194,11 @@ def load_settings(
         openai_timeout_seconds=openai_timeout_seconds,
         openai_max_refines=openai_max_refines,
         search_cache_ttl_seconds=search_cache_ttl_seconds,
+        openwa_base_url=openwa_base_url,
+        openwa_api_key=openwa_api_key,
+        openwa_dashboard_url=openwa_dashboard_url,
+        openwa_chat_draft_endpoint=openwa_chat_draft_endpoint,
+        enable_openwa_chat_handoff=enable_openwa_chat_handoff,
         project_root=root,
         data_dir=data_dir,
         logs_dir=logs_dir,

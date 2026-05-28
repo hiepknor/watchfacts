@@ -8,6 +8,7 @@ from app.config import (
     DEFAULT_OPENAI_MAX_REFINES,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_TIMEOUT_SECONDS,
+    DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT,
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
     DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
@@ -97,6 +98,11 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.openai_timeout_seconds == DEFAULT_OPENAI_TIMEOUT_SECONDS
     assert settings.openai_max_refines == DEFAULT_OPENAI_MAX_REFINES
     assert settings.search_cache_ttl_seconds == DEFAULT_SEARCH_CACHE_TTL_SECONDS
+    assert settings.enable_openwa_chat_handoff is False
+    assert settings.openwa_base_url == ""
+    assert settings.openwa_api_key == ""
+    assert settings.openwa_dashboard_url == ""
+    assert settings.openwa_chat_draft_endpoint == DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT
     assert settings.data_dir == tmp_path / "data"
     assert settings.logs_dir == tmp_path / "logs"
     assert settings.db_path == tmp_path / "data" / "bot.db"
@@ -180,3 +186,42 @@ def test_load_settings_reads_search_cache_ttl(tmp_path: Path) -> None:
     )
 
     assert settings.search_cache_ttl_seconds == 120
+
+
+def test_load_settings_reads_openwa_handoff_options(tmp_path: Path) -> None:
+    settings = load_settings(
+        env={
+            "TELEGRAM_BOT_TOKEN": "token",
+            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
+            "OPENWA_BASE_URL": "https://openwa.example/",
+            "OPENWA_API_KEY": "openwa-secret",
+            "OPENWA_DASHBOARD_URL": "https://dashboard.example/",
+            "OPENWA_CHAT_DRAFT_ENDPOINT": "api/custom-drafts",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.enable_openwa_chat_handoff is True
+    assert settings.openwa_base_url == "https://openwa.example"
+    assert settings.openwa_api_key == "openwa-secret"
+    assert settings.openwa_dashboard_url == "https://dashboard.example"
+    assert settings.openwa_chat_draft_endpoint == "/api/custom-drafts"
+
+
+def test_load_settings_does_not_enable_openwa_from_legacy_handoff_names(
+    tmp_path: Path,
+) -> None:
+    old_enable_name = "ENABLE_OPENWA_" + "DEAL_HANDOFF"
+    settings = load_settings(
+        env={
+            "TELEGRAM_BOT_TOKEN": "token",
+            old_enable_name: "true",
+            "OPENWA_BASE_URL": "https://openwa.example",
+            "OPENWA_API_KEY": "openwa-secret",
+            "OPENWA_DASHBOARD_URL": "https://dashboard.example",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.enable_openwa_chat_handoff is False
+    assert settings.openwa_chat_draft_endpoint == DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT
