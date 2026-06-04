@@ -48,6 +48,18 @@ Telegram behavior:
 - Photo captions are limited to Telegram's caption size; long text fallback messages are also truncated safely.
 - In group chats, normal messages are ignored unless the bot is mentioned at the beginning or the user replies to a bot message.
 
+Issue queues:
+
+- `/issues` is the operator queue for user feedback. Treat these as production
+  reports that need triage first.
+- `/suspicious` is the QA queue for auto-detected extraction risks. It defaults
+  to high-severity flags; use `/suspicious all` only when doing a broader audit.
+- `/suspicious_summary` shows the auto-QA backlog grouped by reason and
+  severity. Convert confirmed patterns into regression tests before changing
+  matcher rules.
+- Use `/issues_export` for user-reported regression fixtures and
+  `/suspicious_export` for auto-QA fixture work.
+
 ## Docker Build
 
 ```bash

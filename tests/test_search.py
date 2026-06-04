@@ -507,7 +507,7 @@ def test_search_workflow_records_suspicious_incomplete_results(tmp_path) -> None
     )
 
     results = asyncio.run(workflow.search("5712r"))
-    issues = database.list_open_issues()
+    issues = database.list_open_suspicious_issues()
 
     assert results[0].listing_text == "5712R 2016/ HKD"
     assert {issue.issue_type for issue in issues} == {"suspicious"}

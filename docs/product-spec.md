@@ -46,7 +46,9 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Accept plain-text Telegram messages as search queries.
 - Support `/start`, `/help`, `/settings`, and `/cancel`.
 - Support `/health` for checking whether the saved WatchFacts session is valid.
-- Support owner issue commands `/issues`, `/issue <id>`, and `/issues_export`.
+- Support owner issue commands for user feedback and auto-QA queues:
+  `/issues`, `/suspicious`, `/suspicious_summary`, `/issue <id>`,
+  `/issues_export`, and `/suspicious_export`.
 - Ignore normal group chat messages unless the bot is mentioned at the start or the user replies to a bot message.
 - Support optional Telegram user-id allowlist.
 - Normalize query text for case-insensitive matching.
@@ -124,11 +126,14 @@ Telegram commands:
 | `/help` | Show usage flow and pagination actions |
 | `/settings` | Show safe runtime settings |
 | `/health` | Check WatchFacts browser-session health |
-| `/issues` | List open feedback and suspicious result issues |
+| `/issues` | List open user feedback issues |
+| `/suspicious` | List high-severity auto-suspicious QA flags |
+| `/suspicious_summary` | Show auto-suspicious breakdown by reason, severity, and query count |
 | `/issue F<id>` or `/issue S<id>` | Show one feedback or suspicious issue in detail |
 | `/issue_done F<id>` or `/issue_done S<id>` | Mark an issue as fixed/reviewed |
 | `/issue_ignore F<id>` or `/issue_ignore S<id>` | Ignore a false positive issue |
-| `/issues_export` | Export open issues as JSON for regression tests |
+| `/issues_export` | Export open user feedback issues as JSON for regression tests |
+| `/suspicious_export` | Export auto-suspicious QA flags as JSON for regression tests |
 | `/cancel` | Clear pending result buttons |
 
 In group chats, normal text messages are ignored. A search must mention the bot

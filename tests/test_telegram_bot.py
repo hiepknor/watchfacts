@@ -50,6 +50,8 @@ from app.telegram_bot import (
     format_issues_message,
     format_posted_date,
     format_settings_message,
+    format_suspicious_issues_message,
+    format_suspicious_summary_message,
     handle_more_results,
     handle_openwa_chat_draft,
     handle_feedback,
@@ -60,6 +62,9 @@ from app.telegram_bot import (
     issue_ignore_command,
     issues_command,
     issues_export_command,
+    suspicious_command,
+    suspicious_export_command,
+    suspicious_summary_command,
     help_command,
     settings_command,
     start_command,
@@ -434,15 +439,99 @@ def test_issues_command_lists_open_issues(tmp_path) -> None:
         source_url="/flash-sales/9927122",
         telegram_user_id=123,
     )
+    database.record_suspicious_result(
+        query_text="5712r",
+        result_rank=27,
+        reason="ends_with_currency",
+        severity=3,
+        listing_text="5712R 2012 fullset HKD",
+    )
     message = FakeMessage()
     context = make_context(db_path=db_path, allowed_user_ids=(123,))
 
     asyncio.run(issues_command(SimpleNamespace(message=message), context))
 
+    assert "User feedback cần xử lý" in message.replies[0]
     assert f"#F{issue_id} ⚠️ Thiếu thông tin" in message.replies[0]
     assert "🔎 Query: 5712r" in message.replies[0]
     assert "🏷️ Bot gửi: 5712R 2016/ HKD" in message.replies[0]
+    assert "#S" not in message.replies[0]
     assert "cookie" not in message.replies[0].casefold()
+
+
+def test_suspicious_command_lists_high_severity_auto_flags(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    database.record_suspicious_result(
+        query_text="5712r",
+        result_rank=26,
+        reason="ends_with_currency",
+        severity=3,
+        listing_text="5712R 2016/ HKD",
+    )
+    database.record_suspicious_result(
+        query_text="6102r",
+        result_rank=12,
+        reason="missing_price_evidence",
+        severity=1,
+        listing_text="Patek 6102R good price",
+    )
+    suspicious_id = database.list_open_suspicious_issues(min_severity=3)[0].id
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+
+    asyncio.run(suspicious_command(SimpleNamespace(message=message), context))
+
+    assert "Auto suspicious cần review" in message.replies[0]
+    assert "Scope: severity ≥ 3" in message.replies[0]
+    assert f"#S{suspicious_id}" in message.replies[0]
+    assert "6102r" not in message.replies[0]
+
+
+def test_suspicious_command_can_list_all_severities(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    Database(db_path).record_suspicious_result(
+        query_text="6102r",
+        result_rank=12,
+        reason="missing_price_evidence",
+        severity=1,
+        listing_text="Patek 6102R good price",
+    )
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+    context.args = ["all"]
+
+    asyncio.run(suspicious_command(SimpleNamespace(message=message), context))
+
+    assert "Scope: all severity" in message.replies[0]
+    assert "6102r" in message.replies[0]
+
+
+def test_suspicious_summary_command_returns_breakdown(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    database.record_suspicious_result(
+        query_text="5712r",
+        result_rank=26,
+        reason="ends_with_currency",
+        severity=3,
+        listing_text="5712R 2016/ HKD",
+    )
+    database.record_suspicious_result(
+        query_text="6102r",
+        result_rank=12,
+        reason="missing_price_evidence",
+        severity=1,
+        listing_text="Patek 6102R good price",
+    )
+    message = FakeMessage()
+    context = make_context(db_path=db_path, allowed_user_ids=(123,))
+
+    asyncio.run(suspicious_summary_command(SimpleNamespace(message=message), context))
+
+    assert "Auto suspicious summary" in message.replies[0]
+    assert "Severity 3 · Có thể thiếu giá sau currency" in message.replies[0]
+    assert "Severity 1 · Có thể thiếu giá" in message.replies[0]
 
 
 def test_issue_command_shows_issue_detail(tmp_path) -> None:
@@ -492,6 +581,30 @@ def test_issues_export_command_returns_json(tmp_path) -> None:
     assert "📤 Export issue regression" in message.replies[0]
     assert '"query": "5712r"' in message.replies[0]
     assert '"raw_text": "5712R 2016/ HKD 830000"' in message.replies[0]
+
+
+def test_suspicious_export_command_returns_auto_flag_json(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    Database(db_path).record_suspicious_result(
+        query_text="5712r",
+        result_rank=26,
+        reason="ends_with_currency",
+        severity=3,
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+    )
+    message = FakeMessage()
+
+    asyncio.run(
+        suspicious_export_command(
+            SimpleNamespace(message=message),
+            make_context(db_path=db_path, allowed_user_ids=(123,)),
+        )
+    )
+
+    assert "📤 Export suspicious regression" in message.replies[0]
+    assert '"type": "suspicious"' in message.replies[0]
+    assert '"severity": 3' in message.replies[0]
 
 
 def test_ai_suggestions_command_lists_open_suggestions(tmp_path) -> None:
@@ -635,7 +748,7 @@ def test_issue_ignore_command_marks_suspicious_issue_ignored(tmp_path) -> None:
         listing_text="5712R 2016/ HKD",
         raw_listing_text="5712R 2016/ HKD 830000",
     )
-    issue_id = database.list_open_issues()[0].id
+    issue_id = database.list_open_suspicious_issues()[0].id
     message = FakeMessage()
     context = make_context(db_path=db_path, allowed_user_ids=(123,))
     context.args = [f"S{issue_id}"]
@@ -646,7 +759,7 @@ def test_issue_ignore_command_marks_suspicious_issue_ignored(tmp_path) -> None:
     issue = Database(db_path).get_issue(issue_id, issue_type="suspicious")
     assert issue is not None
     assert issue.issue_status == "ignored"
-    assert Database(db_path).export_open_issues() == []
+    assert Database(db_path).export_open_suspicious_issues() == []
 
 
 def test_issue_done_command_handles_missing_issue_id(tmp_path) -> None:

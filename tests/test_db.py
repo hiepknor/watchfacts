@@ -434,8 +434,8 @@ def test_suspicious_result_records_and_exports_open_issues(tmp_path) -> None:
         source_url="/flash-sales/9927122",
     )
 
-    issues = database.list_open_issues()
-    exported = database.export_open_issues()
+    issues = database.list_open_suspicious_issues()
+    exported = database.export_open_suspicious_issues()
 
     assert len(issues) == 1
     assert issues[0].issue_type == "suspicious"
@@ -443,6 +443,36 @@ def test_suspicious_result_records_and_exports_open_issues(tmp_path) -> None:
     assert issues[0].severity == 3
     assert exported[0]["shown_text"] == "5712R 2016/ HKD"
     assert exported[0]["raw_text"] == "5712R 2016/ HKD 830000"
+    assert database.list_open_issues() == []
+    assert database.export_open_issues() == []
+
+
+def test_suspicious_queue_filters_and_summarizes_open_issues(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    database.record_suspicious_result(
+        query_text="5712r",
+        result_rank=26,
+        reason="ends_with_currency",
+        severity=3,
+        listing_text="5712R 2016/ HKD",
+    )
+    database.record_suspicious_result(
+        query_text="6102r",
+        result_rank=12,
+        reason="missing_price_evidence",
+        severity=1,
+        listing_text="Patek 6102R good price",
+    )
+
+    severity_three = database.list_open_suspicious_issues(min_severity=3)
+    summary = database.summarize_open_suspicious_issues()
+
+    assert [issue.query_text for issue in severity_three] == ["5712r"]
+    assert [(item.reason, item.severity, item.issue_count) for item in summary] == [
+        ("ends_with_currency", 3, 1),
+        ("missing_price_evidence", 1, 1),
+    ]
 
 
 def test_mark_issue_status_closes_feedback_and_suspicious_issues(tmp_path) -> None:
@@ -464,11 +494,7 @@ def test_mark_issue_status_closes_feedback_and_suspicious_issues(tmp_path) -> No
         listing_text="5712R 2012 fullset HKD",
         raw_listing_text="5712R 2012 fullset HKD 777000",
     )
-    suspicious_id = next(
-        issue.id
-        for issue in database.list_open_issues()
-        if issue.issue_type == "suspicious"
-    )
+    suspicious_id = database.list_open_suspicious_issues()[0].id
 
     feedback = database.mark_issue_status(
         feedback_id,
@@ -488,6 +514,8 @@ def test_mark_issue_status_closes_feedback_and_suspicious_issues(tmp_path) -> No
     assert suspicious.issue_status == "ignored"
     assert database.list_open_issues() == []
     assert database.export_open_issues() == []
+    assert database.list_open_suspicious_issues() == []
+    assert database.export_open_suspicious_issues() == []
 
 
 def test_repeated_feedback_reopens_fixed_issue(tmp_path) -> None:
@@ -527,7 +555,7 @@ def test_repeated_suspicious_result_reopens_fixed_but_not_ignored_issue(tmp_path
         severity=3,
         listing_text="5712R 2016/ HKD",
     )
-    issue_id = database.list_open_issues()[0].id
+    issue_id = database.list_open_suspicious_issues()[0].id
     database.mark_issue_status(issue_id, issue_type="suspicious", status="fixed")
 
     database.record_suspicious_result(

@@ -134,13 +134,15 @@ Add owner-only Telegram commands.
 
 | Command | Purpose |
 | --- | --- |
-| `/issues` | Show open feedback and suspicious cases |
-| `/issues missing` | Filter missing-info reports |
-| `/issues wrong` | Filter wrong-result reports |
-| `/issue <id>` | Show one issue in detail |
-| `/issue_done <id>` | Mark issue as reviewed/fixed after maintainer action |
-| `/issue_ignore <id>` | Ignore a false positive |
-| `/issues_export` | Export open issue cases as JSON or text |
+| `/issues` | Show open user feedback cases |
+| `/suspicious` | Show high-severity auto-suspicious QA flags |
+| `/suspicious all` | Show auto-suspicious QA flags across all severities |
+| `/suspicious_summary` | Show auto-suspicious breakdown by reason, severity, and query count |
+| `/issue F<id>` or `/issue S<id>` | Show one feedback or suspicious issue in detail |
+| `/issue_done F<id>` or `/issue_done S<id>` | Mark issue as reviewed/fixed after maintainer action |
+| `/issue_ignore F<id>` or `/issue_ignore S<id>` | Ignore a false positive |
+| `/issues_export` | Export open user feedback cases as JSON |
+| `/suspicious_export` | Export auto-suspicious QA flags as JSON |
 | `/ai_suggestions` | Show OpenAI suggestions waiting for owner review |
 | `/ai_suggestion <id>` | Show one OpenAI suggestion and gate reasons |
 | `/ai_accept <id>` | Accept a reviewed OpenAI suggestion for regression export |
@@ -150,10 +152,13 @@ Add owner-only Telegram commands.
 Implemented command set:
 
 - `/issues`
-- `/issue <id>`
-- `/issue_done <id>`
-- `/issue_ignore <id>`
+- `/suspicious`
+- `/suspicious_summary`
+- `/issue F<id>` or `/issue S<id>`
+- `/issue_done F<id>` or `/issue_done S<id>`
+- `/issue_ignore F<id>` or `/issue_ignore S<id>`
 - `/issues_export`
+- `/suspicious_export`
 - `/ai_suggestions`
 - `/ai_suggestion <id>`
 - `/ai_accept <id>`
@@ -211,7 +216,7 @@ Rules should run after parser/matcher scoping and before Telegram pagination sto
 Suspicious flags should:
 
 - Store local issue records.
-- Appear in `/issues`.
+- Appear in `/suspicious`, not the user feedback `/issues` queue.
 - Optionally add a subtle owner-only hint in result summaries, not in every user-facing result.
 - Avoid blocking result delivery.
 
@@ -219,7 +224,7 @@ Example summary addition for owner chats:
 
 ```text
 🧪 Bot đã tự đánh dấu 4 kết quả cần review.
-Gõ /issues để xem.
+Gõ /suspicious để xem.
 ```
 
 ### 5. Regression And Benchmark Loop
@@ -230,7 +235,8 @@ Recommended workflow:
 
 1. Operator reports or bot auto-flags a case.
 2. Owner reviews with `/issue <id>`.
-3. Owner exports with `/issues_export`.
+3. Owner exports user feedback with `/issues_export` or auto-QA flags with
+   `/suspicious_export`.
 4. Maintainer converts the case into:
    - a unit test in `tests/test_matcher.py`, or
    - a parser fixture, or

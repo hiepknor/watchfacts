@@ -13,7 +13,12 @@ from datetime import datetime
 from typing import Protocol
 
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
-from app.db import AIRefinementSuggestionRecord, Database, IssueRecord
+from app.db import (
+    AIRefinementSuggestionRecord,
+    Database,
+    IssueRecord,
+    SuspiciousIssueSummary,
+)
 from app.openwa_handoff import (
     OpenWAChatDraftResponse,
     OpenWAHandoffConfig,
@@ -55,7 +60,8 @@ HELP_MESSAGE = (
     "🧹 /cancel để xóa các nút kết quả đang chờ.\n"
     "⚙️ /settings để xem cấu hình bot hiện tại.\n"
     "🩺 /health để kiểm tra session WatchFacts.\n"
-    "🧾 /issues để xem feedback và kết quả đáng nghi.\n"
+    "🧾 /issues để xem user feedback đang mở.\n"
+    "🧪 /suspicious để xem auto QA flags severity cao.\n"
     "🤖 /ai_suggestions để review gợi ý OpenAI."
 )
 EMPTY_QUERY_MESSAGE = (
@@ -215,8 +221,36 @@ async def issues_command(update, context) -> None:
         return
 
     database = _issue_database(context)
-    issues = database.list_open_issues(limit=10)
+    issues = database.list_open_feedback_issues(limit=10)
     await _maybe_await(message.reply_text(format_issues_message(issues)))
+
+
+async def suspicious_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    min_severity = _suspicious_min_severity_arg(context)
+    issues = _issue_database(context).list_open_suspicious_issues(
+        limit=10,
+        min_severity=min_severity,
+    )
+    await _maybe_await(
+        message.reply_text(format_suspicious_issues_message(issues, min_severity))
+    )
+
+
+async def suspicious_summary_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    summary = _issue_database(context).summarize_open_suspicious_issues(limit=20)
+    await _maybe_await(message.reply_text(format_suspicious_summary_message(summary)))
 
 
 async def issue_command(update, context) -> None:
@@ -254,6 +288,30 @@ async def issues_export_command(update, context) -> None:
         message.reply_text(
             _limit_telegram_text(
                 "📤 Export issue regression\n\n"
+                f"```json\n{text}\n```",
+                TELEGRAM_TEXT_MESSAGE_LIMIT,
+            )
+        )
+    )
+
+
+async def suspicious_export_command(update, context) -> None:
+    message = getattr(update, "message", None)
+    if await _reject_unauthorized(update, context, message):
+        return
+    if message is None:
+        return
+
+    min_severity = _suspicious_min_severity_arg(context)
+    payload = _issue_database(context).export_open_suspicious_issues(
+        limit=ISSUES_EXPORT_LIMIT,
+        min_severity=min_severity,
+    )
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    await _maybe_await(
+        message.reply_text(
+            _limit_telegram_text(
+                "📤 Export suspicious regression\n\n"
                 f"```json\n{text}\n```",
                 TELEGRAM_TEXT_MESSAGE_LIMIT,
             )
@@ -768,12 +826,11 @@ def format_settings_message(context) -> str:
 def format_issues_message(issues: list[IssueRecord]) -> str:
     if not issues:
         return (
-            "🧾 Issue cần review\n\n"
-            "✅ Chưa có issue mở.\n"
-            "Bot sẽ lưu feedback và các kết quả đáng nghi ở đây."
+            "🧾 User feedback cần xử lý\n\n"
+            "✅ Chưa có user feedback mở."
         )
 
-    lines = ["🧾 Issue cần review", ""]
+    lines = ["🧾 User feedback cần xử lý", ""]
     for issue in issues:
         icon = _issue_icon(issue.reason, issue.issue_type)
         lines.extend(
@@ -792,7 +849,61 @@ def format_issues_message(issues: list[IssueRecord]) -> str:
         else:
             lines.append(f"📊 Report: {issue.report_count} lượt")
         lines.append("")
-    lines.append("Dùng `/issue F1` hoặc `/issue S1` để xem chi tiết; `/issues_export` để export.")
+    lines.append("Dùng `/issue F1` để xem chi tiết; `/issues_export` để export.")
+    lines.append("Auto QA flags nằm ở `/suspicious`.")
+    return "\n".join(lines).strip()
+
+
+def format_suspicious_issues_message(
+    issues: list[IssueRecord],
+    min_severity: int | None,
+) -> str:
+    scope = "all severity" if min_severity is None else f"severity ≥ {min_severity}"
+    if not issues:
+        return (
+            "🧪 Auto suspicious cần review\n\n"
+            f"✅ Không có auto QA flag mở cho {scope}."
+        )
+
+    lines = ["🧪 Auto suspicious cần review", f"Scope: {scope}", ""]
+    for issue in issues:
+        lines.extend(
+            [
+                f"#{_issue_key(issue)} {_issue_icon(issue.reason, issue.issue_type)} "
+                f"{_issue_reason_label(issue.reason)}",
+                f"🔎 Query: {issue.query_text}",
+                f"📍 Rank: {issue.result_rank}",
+                f"🧪 Severity: {issue.severity}",
+                f"🏷️ Bot gửi: {_limit_inline(issue.listing_text, 120)}",
+            ]
+        )
+        if issue.source_url:
+            lines.append(f"🔗 Source: {issue.source_url}")
+        lines.append("")
+    lines.append("Dùng `/issue S1` để xem chi tiết; `/suspicious_summary` để xem breakdown.")
+    lines.append("Mặc định `/suspicious` chỉ hiện severity cao; dùng `/suspicious all` để xem toàn bộ.")
+    return "\n".join(lines).strip()
+
+
+def format_suspicious_summary_message(summary: list[SuspiciousIssueSummary]) -> str:
+    if not summary:
+        return (
+            "🧪 Auto suspicious summary\n\n"
+            "✅ Không có auto QA flag mở."
+        )
+
+    lines = ["🧪 Auto suspicious summary", ""]
+    for item in summary:
+        lines.extend(
+            [
+                f"Severity {item.severity} · {_issue_reason_label(item.reason)}",
+                f"📊 {item.issue_count} flags · {item.query_count} queries",
+                f"🔎 Sample: {item.sample_query}",
+                f"🧾 Latest: /issue S{item.latest_issue_id}",
+                "",
+            ]
+        )
+    lines.append("Review trước severity 3; dùng `/suspicious 3` hoặc `/suspicious_export 3`.")
     return "\n".join(lines).strip()
 
 
@@ -1015,8 +1126,11 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.add_handler(CommandHandler("settings", settings_command))
     application.add_handler(CommandHandler("health", health_command))
     application.add_handler(CommandHandler("issues", issues_command))
+    application.add_handler(CommandHandler("suspicious", suspicious_command))
+    application.add_handler(CommandHandler("suspicious_summary", suspicious_summary_command))
     application.add_handler(CommandHandler("issue", issue_command))
     application.add_handler(CommandHandler("issues_export", issues_export_command))
+    application.add_handler(CommandHandler("suspicious_export", suspicious_export_command))
     application.add_handler(CommandHandler("ai_suggestions", ai_suggestions_command))
     application.add_handler(CommandHandler("ai_suggestion", ai_suggestion_command))
     application.add_handler(CommandHandler("ai_accept", ai_accept_command))
@@ -1172,6 +1286,24 @@ def _first_issue_arg(context) -> tuple[str | None, int] | None:
         return issue_type, int(raw)
     except ValueError:
         return None
+
+
+def _suspicious_min_severity_arg(context) -> int | None:
+    args = getattr(context, "args", None) or []
+    if not args:
+        return 3
+    raw = str(args[0]).strip().casefold()
+    if raw in {"all", "*"}:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return 3
+    if value < 1:
+        return 1
+    if value > 3:
+        return 3
+    return value
 
 
 def _first_int_arg(context) -> int | None:

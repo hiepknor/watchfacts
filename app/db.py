@@ -163,6 +163,16 @@ class IssueRecord:
 
 
 @dataclass(frozen=True)
+class SuspiciousIssueSummary:
+    reason: str
+    severity: int
+    issue_count: int
+    query_count: int
+    latest_issue_id: int
+    sample_query: str
+
+
+@dataclass(frozen=True)
 class AIRefinementSuggestionRecord:
     id: int
     query_text: str
@@ -812,6 +822,9 @@ class Database:
             )
 
     def list_open_issues(self, *, limit: int = 10) -> list[IssueRecord]:
+        return self.list_open_feedback_issues(limit=limit)
+
+    def list_open_feedback_issues(self, *, limit: int = 10) -> list[IssueRecord]:
         with self.connect() as connection:
             _ensure_schema(connection)
             rows = connection.execute(
@@ -832,7 +845,31 @@ class Database:
                     issue_status
                 FROM result_feedback
                 WHERE issue_status = 'open'
-                UNION ALL
+                ORDER BY report_count DESC, updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [_issue_record_from_row(row) for row in rows]
+
+    def list_open_suspicious_issues(
+        self,
+        *,
+        limit: int = 10,
+        min_severity: int | None = None,
+    ) -> list[IssueRecord]:
+        where = "WHERE issue_status = 'open'"
+        params: tuple[object, ...]
+        if min_severity is not None:
+            where += " AND severity >= ?"
+            params = (min_severity, limit)
+        else:
+            params = (limit,)
+
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            rows = connection.execute(
+                f"""
                 SELECT
                     id,
                     'suspicious' AS issue_type,
@@ -848,13 +885,57 @@ class Database:
                     severity,
                     issue_status
                 FROM suspicious_results
+                {where}
+                ORDER BY severity DESC, id DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [_issue_record_from_row(row) for row in rows]
+
+    def summarize_open_suspicious_issues(
+        self,
+        *,
+        limit: int = 20,
+    ) -> list[SuspiciousIssueSummary]:
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            rows = connection.execute(
+                """
+                SELECT
+                    reason,
+                    severity,
+                    COUNT(*) AS issue_count,
+                    COUNT(DISTINCT normalized_query) AS query_count,
+                    MAX(id) AS latest_issue_id,
+                    (
+                        SELECT s2.query_text
+                        FROM suspicious_results AS s2
+                        WHERE s2.issue_status = 'open'
+                          AND s2.reason = suspicious_results.reason
+                          AND s2.severity = suspicious_results.severity
+                        ORDER BY s2.id DESC
+                        LIMIT 1
+                    ) AS sample_query
+                FROM suspicious_results
                 WHERE issue_status = 'open'
-                ORDER BY id DESC
+                GROUP BY reason, severity
+                ORDER BY severity DESC, issue_count DESC, reason
                 LIMIT ?
                 """,
                 (limit,),
             ).fetchall()
-        return [_issue_record_from_row(row) for row in rows]
+        return [
+            SuspiciousIssueSummary(
+                reason=str(row[0]),
+                severity=int(row[1]),
+                issue_count=int(row[2]),
+                query_count=int(row[3]),
+                latest_issue_id=int(row[4]),
+                sample_query=str(row[5]),
+            )
+            for row in rows
+        ]
 
     def get_issue(self, issue_id: int, *, issue_type: str | None = None) -> IssueRecord | None:
         with self.connect() as connection:
@@ -957,6 +1038,22 @@ class Database:
         return self.get_issue(issue_id, issue_type=updated_type) if updated_type else None
 
     def export_open_issues(self, *, limit: int = 50) -> list[dict[str, object]]:
+        return self._export_issues(self.list_open_feedback_issues(limit=limit))
+
+    def export_open_suspicious_issues(
+        self,
+        *,
+        limit: int = 50,
+        min_severity: int | None = None,
+    ) -> list[dict[str, object]]:
+        return self._export_issues(
+            self.list_open_suspicious_issues(
+                limit=limit,
+                min_severity=min_severity,
+            )
+        )
+
+    def _export_issues(self, issues: list[IssueRecord]) -> list[dict[str, object]]:
         return [
             {
                 "id": issue.id,
@@ -972,7 +1069,7 @@ class Database:
                 "severity": issue.severity,
                 "status": issue.issue_status,
             }
-            for issue in self.list_open_issues(limit=limit)
+            for issue in issues
         ]
 
 

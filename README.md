@@ -260,11 +260,14 @@ Bot commands:
 | `/help` | Show search flow, examples, and pagination actions |
 | `/settings` | Show safe runtime settings without secrets |
 | `/health` | Check WatchFacts session health without exposing cookies or browser state |
-| `/issues` | List open feedback and suspicious result issues |
+| `/issues` | List open user feedback issues |
+| `/suspicious` | List high-severity auto-suspicious QA flags |
+| `/suspicious_summary` | Show auto-suspicious breakdown by reason, severity, and query count |
 | `/issue F<id>` or `/issue S<id>` | Show one feedback or suspicious issue in detail |
 | `/issue_done F<id>` or `/issue_done S<id>` | Mark an issue as fixed/reviewed |
 | `/issue_ignore F<id>` or `/issue_ignore S<id>` | Ignore a false positive issue |
-| `/issues_export` | Export open issues as JSON for regression tests |
+| `/issues_export` | Export open user feedback issues as JSON for regression tests |
+| `/suspicious_export` | Export auto-suspicious QA flags as JSON for regression tests |
 | `/ai_suggestions` | List OpenAI suggestions waiting for owner review |
 | `/ai_suggestion <id>` | Show one OpenAI suggestion with gate details |
 | `/ai_accept <id>` | Accept a reviewed OpenAI suggestion for regression export |

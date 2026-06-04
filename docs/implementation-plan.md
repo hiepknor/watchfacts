@@ -369,9 +369,9 @@ Description: Add owner-only commands for reviewing and exporting issue cases.
 
 Acceptance:
 
-- [x] `/issues` lists open feedback and suspicious cases with concise Vietnamese formatting.
+- [x] `/issues` lists open user feedback; `/suspicious` lists auto-QA flags with concise Vietnamese formatting.
 - [x] `/issue F<id>` and `/issue S<id>` show one issue with query, shown text, raw text when available, seller, date, source URL, and report count.
-- [x] `/issues_export` returns deterministic JSON or text suitable for regression fixtures.
+- [x] `/issues_export` and `/suspicious_export` return deterministic JSON suitable for regression fixtures.
 - [x] Future status commands can mark issues `fixed` or `ignored`.
 - [x] Owner commands require `TELEGRAM_ALLOWED_USER_IDS`.
 - [x] Outputs never include cookies, Telegram tokens, browser state, or full page HTML.
@@ -401,7 +401,7 @@ Acceptance:
 - [x] Detect cases where raw text is much longer than shown text near the matched query/reference.
 - [x] Store flags in `suspicious_results` with reason code and severity.
 - [x] Do not block result delivery if suspicious detection fails.
-- [x] Owner can review auto-flagged cases through `/issues`.
+- [x] Owner can review auto-flagged cases through `/suspicious` and `/issue S<id>`.
 
 Verify:
 
