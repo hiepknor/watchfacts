@@ -9,11 +9,13 @@ from app.config import (
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_TIMEOUT_SECONDS,
     DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT,
+    DEFAULT_RUNTIME_MODE,
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
     DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
     DEFAULT_WATCHFACTS_URL,
     load_settings,
+    load_search_settings,
     parse_bool,
     parse_hybrid_ai_mode,
     parse_positive_int,
@@ -24,6 +26,14 @@ from app.config import (
 def test_load_settings_requires_telegram_token() -> None:
     with pytest.raises(ConfigError, match="TELEGRAM_BOT_TOKEN is required"):
         load_settings(env={})
+
+
+def test_load_search_settings_does_not_require_telegram_token(tmp_path: Path) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+
+    assert settings.runtime_mode == "search"
+    assert settings.telegram_bot_token == ""
+    assert settings.watchfacts_url == DEFAULT_WATCHFACTS_URL
 
 
 @pytest.mark.parametrize(
@@ -86,6 +96,7 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     )
 
     assert settings.telegram_bot_token == "token"
+    assert settings.runtime_mode == DEFAULT_RUNTIME_MODE
     assert settings.telegram_allowed_user_ids == ()
     assert settings.telegram_result_limit == DEFAULT_TELEGRAM_RESULT_LIMIT
     assert settings.telegram_max_concurrent_searches == DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES

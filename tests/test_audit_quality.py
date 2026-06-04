@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from argparse import Namespace
+import asyncio
 import json
 
-from app.telegram_bot import SearchResult
+from app.config import load_search_settings
+from app.search_result import SearchResult
+from scripts.diagnostics import audit_quality
 from scripts.diagnostics.audit_quality import (
     DEFAULT_AUDIT_QUERIES,
     build_query_report,
@@ -26,6 +29,34 @@ def test_load_queries_dedupes_and_normalizes_cli_queries() -> None:
     )
 
     assert load_queries(args) == ["5712r", "5205r green"]
+
+
+def test_run_audit_uses_search_settings_without_telegram_token(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    seen_settings = []
+
+    class FakeWorkflow:
+        def __init__(self, settings, *, database, refine_results=None) -> None:
+            seen_settings.append(settings)
+
+        async def search(self, query: str) -> list[SearchResult]:
+            return [SearchResult(f"{query} HKD 100000")]
+
+    monkeypatch.setattr(
+        audit_quality,
+        "load_search_settings",
+        lambda: load_search_settings(env={}, project_root=tmp_path),
+    )
+    monkeypatch.setattr(audit_quality, "WatchFactsSearchWorkflow", FakeWorkflow)
+
+    reports = asyncio.run(audit_quality.run_audit(["5712g"], limit=1))
+
+    assert seen_settings[0].runtime_mode == "search"
+    assert seen_settings[0].telegram_bot_token == ""
+    assert reports[0].query == "5712g"
+    assert reports[0].result_count == 1
 
 
 def test_format_text_report_includes_bounded_score_summary() -> None:

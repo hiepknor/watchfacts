@@ -6,7 +6,7 @@ import re
 
 from app.issues import detect_suspicious_result
 from app.matcher import explain_extraction
-from app.telegram_bot import SearchResult
+from app.search_result import SearchResult
 
 
 PRICE_EVIDENCE_RE = re.compile(

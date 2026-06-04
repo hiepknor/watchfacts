@@ -66,7 +66,7 @@ def render_pytest_module(
         "import pytest\n\n"
         "from app.issues import detect_suspicious_result\n"
         "from app.result_scoring import score_result\n"
-        "from app.telegram_bot import SearchResult\n\n\n"
+        "from app.search_result import SearchResult\n\n\n"
         f"CASES = {_pretty_repr(cases)}\n\n\n"
         "@pytest.mark.parametrize(\"case\", CASES, ids=lambda case: case[\"name\"])\n"
         "def test_audit_quality_regression(case):\n"

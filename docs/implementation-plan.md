@@ -1021,3 +1021,39 @@ Likely files:
 
 - `docs/operations.md`
 - `docs/production-quality-audit.md`
+
+### Task 11.5: Prepare Non-Telegram Tool Runtime
+
+Status: complete.
+
+Description: Add the first prerequisite for a Hermes/MCP wrapper by separating
+the search runtime from Telegram-only configuration and exposing stable JSON
+payload serialization for search results.
+
+Acceptance:
+
+- [x] Core search modules can use `SearchResult` without importing
+  `app.telegram_bot`.
+- [x] `load_search_settings()` can construct runtime settings without requiring
+  `TELEGRAM_BOT_TOKEN`.
+- [x] Telegram runtime still requires `TELEGRAM_BOT_TOKEN` by default.
+- [x] `watchfacts_search_payload(query, limit, include_similar, include_raw)`
+  returns stable JSON-compatible dictionaries.
+- [x] Existing Telegram imports of `SearchResult` remain compatible during the
+  transition.
+
+Verify:
+
+```bash
+python -m pytest tests/test_config.py tests/test_tool_runtime.py tests/test_search.py
+python -m compileall app scripts
+```
+
+Likely files:
+
+- `app/config.py`
+- `app/search_result.py`
+- `app/tool_runtime.py`
+- `app/search.py`
+- `tests/test_config.py`
+- `tests/test_tool_runtime.py`

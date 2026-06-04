@@ -7,7 +7,6 @@ import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import asdict
 
 from app.config import Settings
 from app.db import Database
@@ -23,8 +22,8 @@ from app.matcher import (
 from app.parser import ListingCandidate, parse_listings
 from app.result_scoring import rank_results_by_quality
 from app.scraper import ScrapeResult, fetch_watchfacts_html
+from app.search_result import SearchResult, search_results_to_dicts
 from app.similarity import group_similar_results
-from app.telegram_bot import SearchResult
 
 
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
@@ -446,7 +445,10 @@ def _search_cache_key(query: str, settings: Settings) -> str:
 
 
 def _serialize_results(results: list[SearchResult]) -> str:
-    return json.dumps([asdict(result) for result in results], separators=(",", ":"))
+    return json.dumps(
+        search_results_to_dicts(results),
+        separators=(",", ":"),
+    )
 
 
 def _deserialize_results(payload: str) -> list[SearchResult]:

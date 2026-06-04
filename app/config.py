@@ -18,6 +18,8 @@ DEFAULT_SEARCH_CACHE_TTL_SECONDS = 5 * 60
 DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT = "/api/chats/drafts"
 HybridAIMode = Literal["off", "shadow", "review", "guarded"]
 DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
+RuntimeMode = Literal["telegram", "search"]
+DEFAULT_RUNTIME_MODE: RuntimeMode = "telegram"
 
 
 class ConfigError(ValueError):
@@ -49,6 +51,7 @@ class Settings:
     openwa_dashboard_url: str = ""
     openwa_chat_draft_endpoint: str = DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT
     enable_openwa_chat_handoff: bool = False
+    runtime_mode: RuntimeMode = DEFAULT_RUNTIME_MODE
 
 
 def parse_bool(value: str, *, name: str) -> bool:
@@ -103,6 +106,7 @@ def load_settings(
     *,
     env_file: str | Path | None = ".env",
     project_root: Path | None = None,
+    runtime_mode: RuntimeMode = DEFAULT_RUNTIME_MODE,
 ) -> Settings:
     if env is None and env_file is not None:
         load_dotenv(env_file)
@@ -110,8 +114,11 @@ def load_settings(
     source = env if env is not None else os.environ
     root = (project_root or Path(__file__).resolve().parents[1]).resolve()
 
+    if runtime_mode not in {"telegram", "search"}:
+        raise ConfigError("runtime_mode must be one of: telegram, search")
+
     token = source.get("TELEGRAM_BOT_TOKEN", "").strip()
-    if not token:
+    if runtime_mode == "telegram" and not token:
         raise ConfigError("TELEGRAM_BOT_TOKEN is required")
 
     telegram_allowed_user_ids = parse_user_ids(
@@ -204,4 +211,19 @@ def load_settings(
         logs_dir=logs_dir,
         db_path=data_dir / "bot.db",
         browser_state_path=data_dir / "watchfacts_state.json",
+        runtime_mode=runtime_mode,
+    )
+
+
+def load_search_settings(
+    env: Mapping[str, str] | None = None,
+    *,
+    env_file: str | Path | None = ".env",
+    project_root: Path | None = None,
+) -> Settings:
+    return load_settings(
+        env=env,
+        env_file=env_file,
+        project_root=project_root,
+        runtime_mode="search",
     )

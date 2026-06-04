@@ -14,7 +14,7 @@ from app.config import Settings
 from app.db import Database
 from app.issues import detect_suspicious_result
 from app.matcher import listing_matches, tokenize_query
-from app.telegram_bot import SearchResult
+from app.search_result import SearchResult
 
 
 Complete = Callable[[str], Awaitable[str]]

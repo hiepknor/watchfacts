@@ -8,7 +8,7 @@ from difflib import SequenceMatcher
 from app.ai_refiner import deterministic_refine_listing_text
 from app.matcher import normalize_text
 from app.result_scoring import score_result
-from app.telegram_bot import SearchResult
+from app.search_result import SearchResult
 
 
 SIMILARITY_THRESHOLD = 0.78

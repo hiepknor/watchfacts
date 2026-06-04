@@ -9,7 +9,6 @@ import secrets
 import time
 import urllib.parse
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
@@ -28,6 +27,7 @@ from app.openwa_handoff import (
     create_openwa_chat_draft,
 )
 from app.scraper import BrowserSessionError, BrowserSessionStatus
+from app.search_result import SearchResult
 
 
 logger = logging.getLogger(__name__)
@@ -143,18 +143,6 @@ OPENWA_MAX_SOURCE_URL_LENGTH = 2048
 OPENWA_MAX_QUERY_TEXT_LENGTH = 500
 OPENWA_MAX_SELLER_NAME_LENGTH = 255
 OPENWA_MAX_PRODUCT_TITLE_LENGTH = 255
-
-
-@dataclass(frozen=True)
-class SearchResult:
-    listing_text: str
-    seller: str | None = None
-    posted_date: str | None = None
-    image_url: str | None = None
-    source_url: str | None = None
-    similar_results: tuple["SearchResult", ...] = ()
-    raw_listing_text: str | None = None
-    seller_phone: str | None = None
 
 
 class SearchWorkflow(Protocol):

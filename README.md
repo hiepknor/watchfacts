@@ -18,6 +18,7 @@ The bot receives a short watch query, searches WatchFacts through the logged-in 
 - WatchFacts session health check and owner alert when login state expires
 - One-tap result feedback and owner issue review commands
 - SQLite local cache
+- Non-Telegram search payload runtime for Hermes/MCP-style wrappers
 - Optional OpenAI controlled refinement for hard cases
 - Docker deployment
 - Fully async architecture
@@ -134,7 +135,10 @@ watchfacts-bot/
 ├── app/
 │   ├── main.py
 │   ├── telegram_bot.py
+│   ├── tool_runtime.py
 │   ├── scraper.py
+│   ├── search.py
+│   ├── search_result.py
 │   ├── parser.py
 │   ├── matcher.py          # stable public matcher API
 │   ├── matcher_normalization.py # normalization and tokenization helpers
@@ -201,6 +205,26 @@ data/watchfacts_state.json
 ```
 
 The bot reuses this session automatically when crawling WatchFacts.
+
+## Non-Telegram Tool Runtime
+
+External wrappers can reuse the same search pipeline without requiring a
+Telegram token:
+
+```python
+from app.tool_runtime import watchfacts_search_payload
+
+payload = await watchfacts_search_payload(
+    "5712g",
+    limit=5,
+    include_similar=True,
+    include_raw=False,
+)
+```
+
+This path uses `load_search_settings()` internally. It still needs the
+WatchFacts browser state in `data/watchfacts_state.json`, and it shares the same
+SQLite cache and deterministic parser/matcher/scoring logic as the Telegram bot.
 
 ## OpenAI Controlled Intelligence
 

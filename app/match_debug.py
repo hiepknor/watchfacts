@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.matcher import explain_extraction
 from app.result_scoring import score_result
-from app.telegram_bot import SearchResult
+from app.search_result import SearchResult
 
 
 MAX_DEBUG_TEXT_LENGTH = 2000

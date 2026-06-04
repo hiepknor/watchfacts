@@ -13,12 +13,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.ai_refiner import refine_search_results
-from app.config import load_settings
+from app.config import load_search_settings
 from app.db import Database
 from app.issues import detect_suspicious_result
 from app.result_scoring import score_result
 from app.search import WatchFactsSearchWorkflow
-from app.telegram_bot import SearchResult
+from app.search_result import SearchResult
 
 
 DEFAULT_AUDIT_QUERIES = (
@@ -145,7 +145,7 @@ def load_queries(args: argparse.Namespace) -> list[str]:
 
 
 async def run_audit(queries: list[str], *, limit: int) -> list[AuditQueryReport]:
-    settings = load_settings()
+    settings = load_search_settings()
     database = Database(settings.db_path)
     workflow = WatchFactsSearchWorkflow(
         settings,
