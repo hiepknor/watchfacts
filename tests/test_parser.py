@@ -76,5 +76,39 @@ def test_parse_listings_extracts_live_watchfacts_product_cards() -> None:
     ]
 
 
+def test_parse_listings_extracts_watchfacts_json_whatsapp_number() -> None:
+    html = """
+    {
+      "listings": [
+        {
+          "title": "5712G Used 2015 - 76k usdt",
+          "companyName": "Issac",
+          "companyWhatsapp": "17826241887",
+          "whatsappNumber": "17826241887",
+          "number": 3074930,
+          "createdOn": "2026-06-02 03:18:08",
+          "listings": [
+            {
+              "title": "5712G Used 2015 - 76k usdt",
+              "frontImage": "https://watchfacts.example/5712g.jpg"
+            }
+          ]
+        }
+      ]
+    }
+    """
+
+    assert parse_listings(html) == [
+        ListingCandidate(
+            listing_text="5712G Used 2015 - 76k usdt",
+            seller="Issac",
+            seller_phone="17826241887",
+            posted_date="June 2, 2026",
+            image_url="https://watchfacts.example/5712g.jpg",
+            source_url="/flash-sales/3074930",
+        )
+    ]
+
+
 def test_parse_listings_returns_empty_list_when_no_listing_container_exists() -> None:
     assert parse_listings("<html><body><p>No listings here</p></body></html>") == []

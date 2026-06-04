@@ -154,6 +154,7 @@ class SearchResult:
     source_url: str | None = None
     similar_results: tuple["SearchResult", ...] = ()
     raw_listing_text: str | None = None
+    seller_phone: str | None = None
 
 
 class SearchWorkflow(Protocol):
@@ -708,7 +709,7 @@ def build_openwa_chat_draft_payload(
         "rawListingText": result.raw_listing_text,
         "seller": {
             "name": _openwa_text(result.seller, max_length=OPENWA_MAX_SELLER_NAME_LENGTH),
-            "phone": None,
+            "phone": _openwa_phone(result.seller_phone),
             "watchfactsId": None,
             "profileUrl": None,
         },
@@ -756,6 +757,15 @@ def _openwa_url(value: str | None, watchfacts_url: str | None) -> str | None:
     if parsed_candidate.scheme not in {"http", "https"} or not parsed_candidate.netloc:
         return None
     return candidate[:OPENWA_MAX_SOURCE_URL_LENGTH]
+
+
+def _openwa_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    digits = "".join(character for character in value if character.isdigit())
+    if len(digits) < 8 or len(digits) > 15 or digits.startswith("0"):
+        return None
+    return digits
 
 
 def format_search_results(results: list[SearchResult]) -> str:

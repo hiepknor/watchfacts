@@ -30,7 +30,7 @@ from app.telegram_bot import SearchResult
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v4"
+SEARCH_CACHE_VERSION = "search-v5"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -295,6 +295,7 @@ def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:
     return SearchResult(
         listing_text=listing_text,
         seller=listing.seller,
+        seller_phone=listing.seller_phone,
         posted_date=listing.posted_date,
         image_url=_product_image_url(listing),
         source_url=listing.source_url,
@@ -469,6 +470,7 @@ def _search_result_from_dict(item: object) -> SearchResult:
         source_url=_optional_str(item.get("source_url")),
         similar_results=tuple(_search_result_from_dict(value) for value in similar),
         raw_listing_text=_optional_str(item.get("raw_listing_text")),
+        seller_phone=_optional_str(item.get("seller_phone")),
     )
 
 

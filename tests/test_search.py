@@ -68,6 +68,44 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
     assert result_count == 1
 
 
+def test_search_workflow_preserves_seller_phone_from_watchfacts_json(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "5712G Used 2015 - 76k usdt",
+          "companyName": "Issac",
+          "companyWhatsapp": "17826241887",
+          "number": 3074930,
+          "createdOn": "2026-06-02 03:18:08",
+          "listings": [
+            {
+              "title": "5712G Used 2015 - 76k usdt",
+              "frontImage": "https://watchfacts.example/5712g.jpg"
+            }
+          ]
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    results = asyncio.run(workflow.search("5712g"))
+
+    assert len(results) == 1
+    assert results[0].seller == "Issac"
+    assert results[0].seller_phone == "17826241887"
+
+
 def test_search_workflow_serves_repeated_query_from_cache(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = FIXTURE.read_text()

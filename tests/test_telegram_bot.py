@@ -1413,6 +1413,7 @@ def test_openwa_chat_draft_callback_creates_payload_and_returns_dashboard_link()
                 image_url="https://images.example/5712r.jpg",
                 source_url="/flash-sales/9927122",
                 raw_listing_text="raw 5712R 2016 HKD 830000",
+                seller_phone="17826241887",
             )
         ]
     )
@@ -1457,7 +1458,7 @@ def test_openwa_chat_draft_callback_creates_payload_and_returns_dashboard_link()
     assert payload["rawListingText"] == "raw 5712R 2016 HKD 830000"
     assert payload["seller"] == {
         "name": "AM.Timepiece TONY",
-        "phone": None,
+        "phone": "17826241887",
         "watchfactsId": None,
         "profileUrl": None,
     }
@@ -1490,6 +1491,7 @@ def test_openwa_chat_draft_payload_matches_openwa_contract() -> None:
             seller="S" * 300,
             image_url="/media/watch.jpg",
             source_url="/flash-sales/9927122",
+            seller_phone="+1 (782) 624-1887",
         ),
         watchfacts_url="https://watchfacts.example/simon-match-making",
     )
@@ -1498,8 +1500,28 @@ def test_openwa_chat_draft_payload_matches_openwa_contract() -> None:
     assert payload["product"]["imageUrl"] == "https://watchfacts.example/media/watch.jpg"
     assert len(payload["queryText"]) == 500
     assert len(payload["seller"]["name"]) == 255
+    assert payload["seller"]["phone"] == "17826241887"
     assert len(payload["product"]["title"]) == 255
     assert payload["listingText"] == long_text
+
+
+def test_openwa_chat_draft_payload_drops_invalid_phone() -> None:
+    message = FakeMessage("5712r")
+    update = SimpleNamespace(callback_query=FakeCallbackQuery("openwa_chat:token", message))
+
+    payload = build_openwa_chat_draft_payload(
+        update,
+        query="5712r",
+        rank=1,
+        result=SearchResult(
+            "5712R 2016 HKD 830000",
+            seller="Dealer",
+            seller_phone="123",
+        ),
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+    )
+
+    assert payload["seller"]["phone"] is None
 
 
 def test_openwa_chat_draft_callback_reports_failure_without_leaking_api_key(caplog) -> None:

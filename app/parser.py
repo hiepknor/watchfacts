@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup, Tag
 class ListingCandidate:
     listing_text: str
     seller: str | None = None
+    seller_phone: str | None = None
     posted_date: str | None = None
     image_url: str | None = None
     source_url: str | None = None
@@ -86,6 +87,7 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
             ListingCandidate(
                 listing_text=parent_text,
                 seller=seller or None,
+                seller_phone=_json_seller_phone(item),
                 posted_date=posted_date,
                 image_url=parent_image,
                 source_url=source_url,
@@ -107,6 +109,7 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
                 ListingCandidate(
                     listing_text=nested_text,
                     seller=seller or None,
+                    seller_phone=_json_seller_phone(item),
                     posted_date=posted_date,
                     image_url=_json_image_url(nested_item) or parent_image,
                     source_url=source_url,
@@ -141,6 +144,7 @@ def _parse_listing_node(node: Tag) -> ListingCandidate | None:
             "seller",
             ".product-rate-removed .blur-premium, .seller, .seller-name",
         ),
+        seller_phone=_html_seller_phone(node),
         posted_date=_field_text(
             node,
             "posted-date",
@@ -204,6 +208,45 @@ def _json_image_url(item: dict[str, Any]) -> str | None:
                 if nested_url:
                     return nested_url
     return None
+
+
+def _json_seller_phone(item: dict[str, Any]) -> str | None:
+    return (
+        _clean_phone(item.get("companyWhatsapp"))
+        or _clean_phone(item.get("whatsappNumber"))
+        or _clean_phone(item.get("phoneNumber"))
+    )
+
+
+def _html_seller_phone(node: Tag) -> str | None:
+    field = node.select_one('[data-field="seller-phone"], [data-field="phone"]')
+    if field is not None:
+        value = field.get("content") or field.get_text(" ", strip=True)
+        phone = _clean_phone(value)
+        if phone:
+            return phone
+
+    link = node.select_one(
+        'a[href^="https://wa.me/"], a[href^="http://wa.me/"], '
+        'a[href*="api.whatsapp.com/send"], a[href^="whatsapp:"]'
+    )
+    if link is None:
+        return None
+    href = link.get("href")
+    if not isinstance(href, str):
+        return None
+    return _clean_phone(href)
+
+
+def _clean_phone(value: object) -> str | None:
+    if value is None:
+        return None
+    digits = "".join(character for character in str(value) if character.isdigit())
+    if len(digits) < 8 or len(digits) > 15:
+        return None
+    if digits.startswith("0"):
+        return None
+    return digits
 
 
 def _json_source_url(item: dict[str, Any]) -> str | None:
