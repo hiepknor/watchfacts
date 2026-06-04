@@ -647,6 +647,43 @@ def test_extract_relevant_listing_text_does_not_pull_previous_stock_item() -> No
     )
 
 
+def test_extract_relevant_listing_text_keeps_month_year_after_price() -> None:
+    listing_text = (
+        "7118/1R-010 Champ HK$898,000 Feb-2026 "
+        "💎7130R-014 Green HK$305,000 Jun-2024 "
+        "💎7300/1200A-011 Green HK$169,000 Feb-2026"
+    )
+
+    assert extract_relevant_listing_text("7130r-014", listing_text) == (
+        "7130R-014 Green HK$305,000 Jun-2024"
+    )
+
+
+def test_extract_relevant_listing_text_keeps_brand_family_prefix() -> None:
+    listing_text = (
+        "320560 Audemars Piguet Royal Oak Chronograph Rose Gold "
+        "Ref: 26331OR.OO.D315CR.01 Full Set $56,000"
+    )
+
+    assert extract_relevant_listing_text("26331OR.OO.D315CR.01", listing_text) == (
+        "Audemars Piguet Royal Oak Chronograph Rose Gold "
+        "Ref: 26331OR.OO.D315CR.01 Full Set $56,000"
+    )
+
+
+def test_extract_relevant_listing_text_stops_at_reference_after_complete_price() -> None:
+    listing_text = (
+        "126200 Mint Green Oys N4 -> 85k hkd "
+        "126231 GREEN ROMA JUB N5 -> 159k hkd "
+        "126231 vi grey jub n5 -> 155k hkd "
+        "126233 ng white jub n5 -> 162k hkd"
+    )
+
+    assert extract_relevant_listing_text("126231 green roma", listing_text) == (
+        "126231 GREEN ROMA JUB N5 -> 159k hkd"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_unicode_currency_prefix() -> None:
     listing_text = "26240BA ALYX 2022💲128.5 + label"
 

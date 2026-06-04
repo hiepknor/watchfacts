@@ -71,6 +71,7 @@ PRODUCT_HEADER_TOKENS = {
 }
 ITEM_SEPARATOR_CHARS = "🍃🍓🍑🍯🍒🍄🍇🍧🥝🦋📍⏰🚗🧳🧰🪨💥♦‼🥥💠🚀"
 LOCAL_PREFIX_WINDOW = 4
+REF_PREFIX_WINDOW = 8
 LOCAL_PREFIX_TOKENS = {
     "ap",
     "audemars",
@@ -87,6 +88,19 @@ LOCAL_PREFIX_TOKENS = {
     "ref",
     "rolex",
     "used",
+}
+REF_PREFIX_TOKENS = {
+    "audemars",
+    "chronograph",
+    "gold",
+    "oak",
+    "nautilus",
+    "patek",
+    "philippe",
+    "piguet",
+    "ref",
+    "rose",
+    "royal",
 }
 
 
@@ -555,6 +569,14 @@ def _matching_segment_start(
     keycap_price_start = _keycap_price_prefix_start(normalized_tokens, reference_start_index)
     if keycap_price_start is not None:
         return token_matches[keycap_price_start].start()
+    ref_prefix_start = _ref_prefixed_segment_start(
+        listing_text,
+        token_matches,
+        normalized_tokens,
+        reference_start_index,
+    )
+    if ref_prefix_start is not None:
+        return ref_prefix_start
 
     start_index = reference_start_index
     for index in range(reference_start_index - 1, -1, -1):
@@ -573,6 +595,34 @@ def _matching_segment_start(
         next_token = normalized_tokens[index + 1] if index + 1 < len(normalized_tokens) else ""
         previous_token = normalized_tokens[index - 1] if index > 0 else ""
         if _looks_like_previous_product_boundary(token, next_token, previous_token):
+            break
+        start_index = index
+    return token_matches[start_index].start()
+
+
+def _ref_prefixed_segment_start(
+    listing_text: str,
+    token_matches: list[re.Match[str]],
+    normalized_tokens: list[str],
+    reference_start_index: int,
+) -> int | None:
+    ref_index = reference_start_index - 1
+    if ref_index < 0 or normalized_tokens[ref_index] != "ref":
+        return None
+
+    start_index = ref_index
+    for index in range(ref_index - 1, -1, -1):
+        if ref_index - index > REF_PREFIX_WINDOW:
+            break
+        if _has_item_separator_between(
+            listing_text,
+            token_matches[index].end(),
+            token_matches[index + 1].start(),
+        ):
+            break
+
+        token = normalized_tokens[index]
+        if token not in REF_PREFIX_TOKENS:
             break
         start_index = index
     return token_matches[start_index].start()
@@ -619,6 +669,11 @@ def _matching_segment_end(
             if reference_index + offset - 1 >= 0
             else ""
         )
+        previous_previous_token = (
+            normalize_text(token_matches[reference_index + offset - 2].group(0))
+            if reference_index + offset - 2 >= 0
+            else ""
+        )
         previous_match = token_matches[reference_index + offset - 1]
         if _has_item_separator_between(
             listing_text,
@@ -650,6 +705,14 @@ def _matching_segment_end(
         if _looks_like_next_item_after_price(normalized_token, next_token, previous_token):
             end = _trim_trailing_section_marker(listing_text, end)
             break
+        if _looks_like_reference_after_complete_price(
+            normalized_token,
+            next_token,
+            previous_token,
+            previous_previous_token,
+        ):
+            end = _trim_trailing_section_marker(listing_text, end)
+            break
         if _looks_like_product_reference_boundary(
             listing_text,
             match.start(),
@@ -658,6 +721,7 @@ def _matching_segment_end(
             next_token,
             previous_token,
         ):
+            end = _trim_trailing_item_suffix(listing_text, end)
             break
         end = _include_trailing_non_token_suffix(
             listing_text,
@@ -804,6 +868,36 @@ def _looks_like_next_item_after_price(
     return bool(re.fullmatch(r"\d{1,3}", token) and next_token in {"new", "used"})
 
 
+def _looks_like_reference_after_complete_price(
+    token: str,
+    next_token: str,
+    previous_token: str,
+    previous_previous_token: str,
+) -> bool:
+    if not _looks_like_price_context_token(previous_token):
+        return False
+    if not _looks_like_price_context_token(previous_previous_token):
+        return False
+    if _looks_like_year_token(token) or _looks_like_date_or_condition_token(token):
+        return False
+    if _looks_like_price_token(token):
+        return False
+    return _looks_like_model_or_price_token(token) and bool(next_token)
+
+
+def _looks_like_named_month_date_token(token: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[-/]\d{2,4}",
+            token,
+        )
+        or re.fullmatch(
+            r"\d{2,4}[-/](?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)",
+            token,
+        )
+    )
+
+
 def _looks_like_price_context_token(token: str) -> bool:
     return (
         token in {"hkd", "usd", "usdt", "eur", "aed", "chf"}
@@ -820,6 +914,10 @@ def _looks_like_previous_product_boundary(
     if token in LOCAL_PREFIX_TOKENS:
         return False
     if _looks_like_year_token(token) or _looks_like_date_or_condition_token(token):
+        if _looks_like_named_month_date_token(token) and _looks_like_model_or_price_token(
+            next_token
+        ):
+            return True
         return False
     if _looks_like_size_token(token):
         return False
@@ -852,6 +950,16 @@ def _include_trailing_non_token_suffix(listing_text: str, end: int) -> int:
 
 def _trim_trailing_section_marker(listing_text: str, end: int) -> int:
     while end > 0 and not listing_text[end - 1].isalnum():
+        end -= 1
+    return end
+
+
+def _trim_trailing_item_suffix(listing_text: str, end: int) -> int:
+    while (
+        end > 0
+        and not listing_text[end - 1].isalnum()
+        and listing_text[end - 1] not in CURRENCY_PREFIX_CHARS
+    ):
         end -= 1
     return end
 

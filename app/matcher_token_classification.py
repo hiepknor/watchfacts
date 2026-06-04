@@ -7,6 +7,7 @@ from app.matcher_normalization import TOKEN_RE, normalize_text
 
 CURRENCY_PREFIX_CHARS = {"$", "€", "£", "¥", "💲"}
 QUERY_TERM_RE = TOKEN_RE
+MONTH_NAME_RE = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)"
 
 
 def parse_query_terms(query: str) -> tuple[list[list[str]], list[str]]:
@@ -92,6 +93,8 @@ def looks_like_date_or_condition_token(token: str) -> bool:
         or re.fullmatch(r"\d{1,2}-\d{4}new", token)
         or re.fullmatch(r"\d{4}-\d{4}(?:-\d{4})?", token)
         or re.fullmatch(r"\d{1,2}\.\d{4}", token)
+        or re.fullmatch(rf"{MONTH_NAME_RE}[-/]\d{{2,4}}", token)
+        or re.fullmatch(rf"\d{{2,4}}[-/]{MONTH_NAME_RE}", token)
         or re.fullmatch(r"\d{4}(?:y|year|full|fullset|like|used|new)", token)
         or re.fullmatch(r"\d{4}n\d{1,2}", token)
         or re.fullmatch(r"(?:new|n)\d{1,2}[/-]\d{1,4}", token)
