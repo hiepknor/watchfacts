@@ -30,6 +30,7 @@ from app.telegram_bot import (
     TELEGRAM_TEXT_MESSAGE_LIMIT,
     UNAUTHORIZED_MESSAGE,
     WATCHFACTS_OWNER_ALERT_MESSAGE,
+    WATCHFACTS_URL_KEY,
     WATCHFACTS_SESSION_CHECKER_KEY,
     WATCHFACTS_SESSION_ERROR_MESSAGE,
     WORKFLOW_KEY,
@@ -41,6 +42,7 @@ from app.telegram_bot import (
     ai_suggestion_command,
     ai_suggestions_command,
     ai_suggestions_export_command,
+    build_openwa_chat_draft_payload,
     cancel_command,
     error_handler,
     format_result_summary,
@@ -218,9 +220,11 @@ def make_context(
     allowed_user_ids: tuple[int, ...] = (),
     openwa_config: OpenWAHandoffConfig | None = None,
     openwa_client=None,
+    watchfacts_url: str = "https://watchfacts.example/simon-match-making",
 ):
     bot_data = {PROCESSING_MIN_SECONDS_KEY: 0}
     bot_data[ALLOWED_USER_IDS_KEY] = allowed_user_ids
+    bot_data[WATCHFACTS_URL_KEY] = watchfacts_url
     if result_limit is not None:
         bot_data[TELEGRAM_RESULT_LIMIT_KEY] = result_limit
     if workflow is not None:
@@ -1447,7 +1451,7 @@ def test_openwa_chat_draft_callback_creates_payload_and_returns_dashboard_link()
     payload = calls[0]
     assert payload["source"] == "watchfacts"
     assert payload["sourceResultId"].startswith("watchfacts:")
-    assert payload["sourceUrl"] == "/flash-sales/9927122"
+    assert payload["sourceUrl"] == "https://watchfacts.example/flash-sales/9927122"
     assert payload["queryText"] == "5712r"
     assert payload["listingText"] == "5712R 2016 HKD 830000"
     assert payload["rawListingText"] == "raw 5712R 2016 HKD 830000"
@@ -1470,6 +1474,32 @@ def test_openwa_chat_draft_callback_creates_payload_and_returns_dashboard_link()
     button = message.sent_messages[-1].reply_markup.inline_keyboard[0][0]
     assert button.text == "Mở OpenWA"
     assert button.url == "https://dashboard.example/chats/drafts/draft-123"
+
+
+def test_openwa_chat_draft_payload_matches_openwa_contract() -> None:
+    message = FakeMessage("5712r")
+    update = SimpleNamespace(callback_query=FakeCallbackQuery("openwa_chat:token", message))
+    long_text = "A" * 300
+
+    payload = build_openwa_chat_draft_payload(
+        update,
+        query="Q" * 600,
+        rank=1,
+        result=SearchResult(
+            long_text,
+            seller="S" * 300,
+            image_url="/media/watch.jpg",
+            source_url="/flash-sales/9927122",
+        ),
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+    )
+
+    assert payload["sourceUrl"] == "https://watchfacts.example/flash-sales/9927122"
+    assert payload["product"]["imageUrl"] == "https://watchfacts.example/media/watch.jpg"
+    assert len(payload["queryText"]) == 500
+    assert len(payload["seller"]["name"]) == 255
+    assert len(payload["product"]["title"]) == 255
+    assert payload["listingText"] == long_text
 
 
 def test_openwa_chat_draft_callback_reports_failure_without_leaking_api_key(caplog) -> None:

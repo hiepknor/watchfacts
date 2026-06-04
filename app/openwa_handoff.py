@@ -113,7 +113,9 @@ def _post_openwa_chat_draft(
             status = int(getattr(response, "status", 200))
             response_body = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        raise OpenWAHandoffResponseError(f"OpenWA returned HTTP {exc.code}") from exc
+        error_body = exc.read().decode("utf-8", errors="replace").strip()
+        detail = f": {error_body[:500]}" if error_body else ""
+        raise OpenWAHandoffResponseError(f"OpenWA returned HTTP {exc.code}{detail}") from exc
     except urllib.error.URLError as exc:
         raise OpenWAHandoffError("OpenWA is not reachable") from exc
     except TimeoutError as exc:

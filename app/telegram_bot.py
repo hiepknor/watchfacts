@@ -7,12 +7,13 @@ import inspect
 import logging
 import secrets
 import time
+import urllib.parse
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
+from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, DEFAULT_WATCHFACTS_URL, Settings
 from app.db import (
     AIRefinementSuggestionRecord,
     Database,
@@ -119,6 +120,7 @@ TELEGRAM_RESULT_LIMIT_KEY = "telegram_result_limit"
 TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY = "telegram_max_concurrent_searches"
 HYBRID_AI_MODE_KEY = "hybrid_ai_mode"
 OPENAI_MODEL_KEY = "openai_model"
+WATCHFACTS_URL_KEY = "watchfacts_url"
 RESULT_PAGES_KEY = "result_pages"
 RESULT_REFINER_KEY = "result_refiner"
 ISSUE_DATABASE_KEY = "issue_database"
@@ -137,6 +139,10 @@ TELEGRAM_TEXT_MESSAGE_LIMIT = 4096
 WATCHFACTS_SESSION_ALERT_COOLDOWN_SECONDS = 30 * 60
 MAX_FEEDBACK_CONTEXTS = 500
 ISSUES_EXPORT_LIMIT = 30
+OPENWA_MAX_SOURCE_URL_LENGTH = 2048
+OPENWA_MAX_QUERY_TEXT_LENGTH = 500
+OPENWA_MAX_SELLER_NAME_LENGTH = 255
+OPENWA_MAX_PRODUCT_TITLE_LENGTH = 255
 
 
 @dataclass(frozen=True)
@@ -652,6 +658,7 @@ async def handle_openwa_chat_draft(update, context) -> None:
         query=str(draft_context["query"]),
         rank=int(draft_context["rank"]),
         result=result,
+        watchfacts_url=_watchfacts_url(context),
     )
     try:
         await _maybe_await(callback_query.answer("Đang tạo chat draft trong OpenWA..."))
@@ -664,8 +671,9 @@ async def handle_openwa_chat_draft(update, context) -> None:
         return
     except OpenWAHandoffResponseError as exc:
         logger.info(
-            "event=telegram.openwa_chat_draft_failed error_type=%s",
+            "event=telegram.openwa_chat_draft_failed error_type=%s error=%s",
             exc.__class__.__name__,
+            str(exc)[:500],
         )
         await _reply_openwa_chat_draft_error(
             callback_query,
@@ -689,22 +697,23 @@ def build_openwa_chat_draft_payload(
     query: str,
     rank: int,
     result: SearchResult,
+    watchfacts_url: str | None = None,
 ) -> dict:
     return {
         "source": "watchfacts",
         "sourceResultId": _source_result_id(query, rank, result),
-        "sourceUrl": result.source_url,
-        "queryText": query,
+        "sourceUrl": _openwa_url(result.source_url, watchfacts_url),
+        "queryText": _openwa_text(query, max_length=OPENWA_MAX_QUERY_TEXT_LENGTH),
         "listingText": result.listing_text,
         "rawListingText": result.raw_listing_text,
         "seller": {
-            "name": result.seller,
+            "name": _openwa_text(result.seller, max_length=OPENWA_MAX_SELLER_NAME_LENGTH),
             "phone": None,
             "watchfactsId": None,
             "profileUrl": None,
         },
         "product": {
-            "title": result.listing_text,
+            "title": _openwa_text(result.listing_text, max_length=OPENWA_MAX_PRODUCT_TITLE_LENGTH),
             "reference": None,
             "brand": None,
             "year": None,
@@ -712,7 +721,7 @@ def build_openwa_chat_draft_payload(
             "set": None,
             "dial": None,
             "priceText": None,
-            "imageUrl": result.image_url,
+            "imageUrl": _openwa_url(result.image_url, watchfacts_url),
         },
         "origin": {
             "telegramUserId": _telegram_user_id(update),
@@ -721,6 +730,32 @@ def build_openwa_chat_draft_payload(
             "telegramMessageId": _telegram_message_id(update),
         },
     }
+
+
+def _openwa_text(value: str | None, *, max_length: int) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized[:max_length]
+
+
+def _openwa_url(value: str | None, watchfacts_url: str | None) -> str | None:
+    raw_value = _openwa_text(value, max_length=OPENWA_MAX_SOURCE_URL_LENGTH)
+    if raw_value is None:
+        return None
+
+    candidate = raw_value
+    parsed = urllib.parse.urlparse(candidate)
+    if not (parsed.scheme in {"http", "https"} and parsed.netloc):
+        base_url = (watchfacts_url or DEFAULT_WATCHFACTS_URL).strip()
+        candidate = urllib.parse.urljoin(base_url, candidate)
+
+    parsed_candidate = urllib.parse.urlparse(candidate)
+    if parsed_candidate.scheme not in {"http", "https"} or not parsed_candidate.netloc:
+        return None
+    return candidate[:OPENWA_MAX_SOURCE_URL_LENGTH]
 
 
 def format_search_results(results: list[SearchResult]) -> str:
@@ -1112,6 +1147,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     )
     application.bot_data[HYBRID_AI_MODE_KEY] = settings.hybrid_ai_mode
     application.bot_data[OPENAI_MODEL_KEY] = settings.openai_model
+    application.bot_data[WATCHFACTS_URL_KEY] = settings.watchfacts_url
     openwa_config = OpenWAHandoffConfig.from_settings(settings)
     application.bot_data[OPENWA_HANDOFF_CONFIG_KEY] = openwa_config
     if openwa_config.is_ready:
@@ -1254,6 +1290,13 @@ def _openwa_chat_draft_client(context) -> OpenWAChatDraftClient:
         return await create_openwa_chat_draft(config, payload)
 
     return create
+
+
+def _watchfacts_url(context) -> str:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(WATCHFACTS_URL_KEY)
+    return str(value).strip() if value else DEFAULT_WATCHFACTS_URL
 
 
 def _openwa_handoff_ready(context) -> bool:
