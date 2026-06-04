@@ -92,6 +92,27 @@ def test_create_openwa_chat_draft_uses_openwa_dashboard_url(monkeypatch) -> None
     assert response.dashboard_url == "https://openwa.example/chats/drafts/custom"
 
 
+def test_create_openwa_chat_draft_resolves_relative_dashboard_url(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return FakeHTTPResponse(
+            {
+                "draftId": "draft-123",
+                "dashboardUrl": "/chats/drafts/draft-123",
+            }
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    response = asyncio.run(
+        create_openwa_chat_draft(
+            make_config(),
+            {"source": "watchfacts"},
+        )
+    )
+
+    assert response.dashboard_url == "https://dashboard.example/chats/drafts/draft-123"
+
+
 def test_create_openwa_chat_draft_accepts_chat_draft_id(monkeypatch) -> None:
     def fake_urlopen(request, timeout):
         return FakeHTTPResponse({"chatDraftId": "draft-456"})

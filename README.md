@@ -92,6 +92,13 @@ make init
 make deploy
 ```
 
+When enabling OpenWA chat draft handoff in Docker, run with the OpenWA compose
+override so the bot can reach the OpenWA API on the shared internal network:
+
+```bash
+make deploy OPENWA_COMPOSE=1
+```
+
 ## Commands
 
 | Command | Description |
@@ -101,6 +108,7 @@ make deploy
 | `make predeploy-check` | Run pytest plus lightweight repository checks |
 | `make deploy` | Pull latest code, build, recreate the bot, and show startup logs |
 | `make deploy SKIP_PULL=1` | Deploy local unpushed changes |
+| `make deploy OPENWA_COMPOSE=1` | Deploy with the OpenWA network override |
 | `make pull` | Pull latest git changes unless `SKIP_PULL=1` |
 | `make build` | Build the Docker image |
 | `make up` | Start the bot with Docker Compose |

@@ -1,0 +1,10 @@
+services:
+  bot:
+    networks:
+      - default
+      - openwa
+
+networks:
+  openwa:
+    external: true
+    name: ${OPENWA_DOCKER_NETWORK:-openwa-network}

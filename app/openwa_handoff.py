@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
@@ -58,7 +59,14 @@ class OpenWAHandoffConfig:
         return f"{self.base_url}{self.chat_draft_endpoint}"
 
     def dashboard_chat_draft_url(self, draft_id: str) -> str:
-        return f"{self.dashboard_url}/chats/drafts/{draft_id}"
+        return self.resolve_dashboard_url(f"/chats/drafts/{draft_id}")
+
+    def resolve_dashboard_url(self, dashboard_url: str) -> str:
+        normalized = dashboard_url.strip()
+        parsed_url = urllib.parse.urlparse(normalized)
+        if parsed_url.scheme in {"http", "https"} and parsed_url.netloc:
+            return normalized
+        return f"{self.dashboard_url.rstrip('/')}/{normalized.lstrip('/')}"
 
 
 @dataclass(frozen=True)
@@ -131,6 +139,8 @@ def _post_openwa_chat_draft(
         raise OpenWAHandoffResponseError("OpenWA response is missing draftId")
     if not dashboard_url:
         dashboard_url = config.dashboard_chat_draft_url(draft_id)
+    else:
+        dashboard_url = config.resolve_dashboard_url(dashboard_url)
     return OpenWAChatDraftResponse(
         draft_id=draft_id,
         chat_id=chat_id,

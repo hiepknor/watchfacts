@@ -4,6 +4,11 @@ COMPOSE ?= docker compose
 SERVICE ?= bot
 LOG_LINES ?= 80
 SKIP_PULL ?= 0
+OPENWA_COMPOSE ?= 0
+
+ifeq ($(OPENWA_COMPOSE),1)
+COMPOSE := $(COMPOSE) -f docker-compose.yml -f docker-compose.openwa.yml
+endif
 
 .DEFAULT_GOAL := help
 
@@ -18,6 +23,7 @@ help:
 	@printf "%s\n" "  make build    Build Docker image"
 	@printf "%s\n" "  make predeploy-check Run tests and lightweight checks before deploy"
 	@printf "%s\n" "  make deploy   Pull, build, recreate bot, show status and startup logs"
+	@printf "%s\n" "  make deploy OPENWA_COMPOSE=1 Deploy with the OpenWA network override"
 	@printf "%s\n" "  make update   Alias for deploy"
 	@printf "%s\n" "  make up       Start bot with Docker Compose"
 	@printf "%s\n" "  make down     Stop Docker Compose services"

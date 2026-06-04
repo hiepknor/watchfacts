@@ -60,6 +60,20 @@ Issue queues:
 - Use `/issues_export` for user-reported regression fixtures and
   `/suspicious_export` for auto-QA fixture work.
 
+OpenWA chat handoff:
+
+- When OpenWA runs as a sibling Docker Compose project, deploy WatchFacts with
+  the OpenWA override so the bot joins the OpenWA internal Docker network:
+  `make deploy OPENWA_COMPOSE=1`.
+- Use `OPENWA_BASE_URL=http://openwa-api:2785` for server-to-server API calls
+  and the public dashboard URL, for example `https://openwa.onio.cc`, for
+  `OPENWA_DASHBOARD_URL`.
+- Set `ENABLE_OPENWA_CHAT_HANDOFF=true`, `OPENWA_API_KEY` to an OpenWA operator
+  key, `OPENWA_CHAT_DRAFT_ENDPOINT=/api/chats/drafts`, and
+  `OPENWA_DOCKER_NETWORK=openwa-network`.
+- Before restarting production, verify the merged Compose files with
+  `docker compose -f docker-compose.yml -f docker-compose.openwa.yml config --quiet`.
+
 ## Docker Build
 
 ```bash
