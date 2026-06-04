@@ -18,8 +18,11 @@ app = FastMCP(
 )
 
 
-@app.tool()
-async def watchfacts_search(
+@app.tool(
+    name="search",
+    description="Search WatchFacts products and list matching SKUs.",
+)
+async def search(
     query: str,
     limit: int = 5,
     include_similar: bool = True,
