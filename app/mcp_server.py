@@ -10,7 +10,12 @@ from app.tool_runtime import watchfacts_search_payload
 logger = logging.getLogger(__name__)
 
 
-app = FastMCP("watchfacts")
+app = FastMCP(
+    "watchfacts",
+    host="0.0.0.0",
+    port=8765,
+    streamable_http_path="/mcp",
+)
 
 
 @app.tool()
@@ -34,12 +39,7 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     logger.info("starting watchfacts mcp server on http://0.0.0.0:8765/mcp")
-    app.run(
-        transport="streamable-http",
-        host="0.0.0.0",
-        port=8765,
-        path="/mcp",
-    )
+    app.run(transport="streamable-http")
 
 
 if __name__ == "__main__":
