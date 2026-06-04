@@ -1,0 +1,10 @@
+services:
+  watchfacts-mcp:
+    networks:
+      - default
+      - hermes
+
+networks:
+  hermes:
+    external: true
+    name: ${HERMES_DOCKER_NETWORK:-hermes-network}

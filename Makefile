@@ -5,6 +5,8 @@ SERVICE ?= bot
 LOG_LINES ?= 80
 SKIP_PULL ?= 0
 OPENWA_COMPOSE ?= 0
+MCP_COMPOSE_SUFFIX ?= -f docker-compose.watchfacts-mcp.yml
+MCP_SERVICE ?= watchfacts-mcp
 
 ifeq ($(OPENWA_COMPOSE),1)
 COMPOSE := $(COMPOSE) -f docker-compose.yml -f docker-compose.openwa.yml
@@ -12,7 +14,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy update up down restart logs ps shell run login check clean
+.PHONY: help init verify-env pull build predeploy-check deploy update up down restart logs ps shell run login check clean mcp-build mcp-up mcp-down mcp-restart mcp-logs mcp-ps
 
 help:
 	@printf "%s\n" "watchfacts-bot commands"
@@ -33,6 +35,12 @@ help:
 	@printf "%s\n" "  make shell    Open a shell in the bot container"
 	@printf "%s\n" "  make run      Run bot locally on the host"
 	@printf "%s\n" "  make login    Run WatchFacts browser login locally on the host"
+	@printf "%s\n" "  make mcp-build      Build watchfacts-mcp image/service"
+	@printf "%s\n" "  make mcp-up         Start watchfacts-mcp (with Hermes network override file)"
+	@printf "%s\n" "  make mcp-down       Stop watchfacts-mcp"
+	@printf "%s\n" "  make mcp-restart    Restart watchfacts-mcp"
+	@printf "%s\n" "  make mcp-logs       Follow watchfacts-mcp logs"
+	@printf "%s\n" "  make mcp-ps         Show watchfacts-mcp status"
 	@printf "%s\n" "  make check    Run lightweight repository checks"
 	@printf "%s\n" "  make clean    Remove local Python caches"
 
@@ -89,6 +97,26 @@ run:
 
 login:
 	python scripts/ops/login.py
+
+MCP_COMPOSE_CMD = docker compose -f docker-compose.yml $(MCP_COMPOSE_SUFFIX)
+
+mcp-build:
+	$(MCP_COMPOSE_CMD) build $(MCP_SERVICE)
+
+mcp-up:
+	$(MCP_COMPOSE_CMD) up -d --build $(MCP_SERVICE)
+
+mcp-down:
+	$(MCP_COMPOSE_CMD) down $(MCP_SERVICE)
+
+mcp-restart:
+	$(MCP_COMPOSE_CMD) restart $(MCP_SERVICE)
+
+mcp-logs:
+	$(MCP_COMPOSE_CMD) logs -f $(MCP_SERVICE)
+
+mcp-ps:
+	$(MCP_COMPOSE_CMD) ps $(MCP_SERVICE)
 
 check:
 	git diff --check

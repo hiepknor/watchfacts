@@ -30,3 +30,19 @@ services:
         max-size: "10m"
         max-file: "5"
     command: ["python", "-m", "app.main"]
+
+  watchfacts-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: watchfacts-bot:local
+    container_name: watchfacts-mcp
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    shm_size: "1gb"
+    init: true
+    command: ["python", "-m", "app.mcp_server"]
