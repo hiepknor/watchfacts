@@ -79,6 +79,9 @@ Expected environment:
 | `WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS` | No | `10` | HTTPX connect timeout for WatchFacts requests |
 | `WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS` | No | `10` | HTTPX connection-pool acquisition timeout |
 | `WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS` | No | `60` | HTTPX keepalive expiry for pooled WatchFacts connections |
+| `WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS` | No | `30` | HTTPX read timeout cap before falling back to Playwright |
+| `WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS` | No | `60` | Time to skip HTTPX after a failed HTTPX attempt |
+| `WATCHFACTS_HTTP_WARMUP_ON_HEALTH` | No | `true` | Allow MCP health to prefetch and cache the WatchFacts search form |
 | `HYBRID_AI_MODE` | No | `off` | Controlled AI mode: `off`, `shadow`, `review`, or `guarded`; only `guarded` can alter search output |
 | `OPENAI_API_KEY` | Required when AI mode is not `off` | None | OpenAI API key; never logged or shown in Telegram |
 | `OPENAI_MODEL` | No | Cost-conscious current model | Model used for structured refinement suggestions |
@@ -105,7 +108,9 @@ Configuration rules:
 - Use `WATCHFACTS_HTTP_CLIENT_ENABLED=false` to force the older Playwright search path during rollback.
 - Use `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to reduce repeated WatchFacts form GETs while still refreshing on CSRF/auth failures.
 - Reuse the process-level HTTPX client for connection pooling; reload cookies and clear form cache when `data/watchfacts_state.json` changes.
-- Expose only safe HTTPX status metadata in `health`: enabled flag, form-cache freshness, last error type, and timestamps.
+- Cap HTTPX read time separately from Playwright fallback so slow HTTPX attempts fail fast.
+- Expose only safe HTTPX status metadata in `health`: enabled flag, form-cache freshness, error type, coarse timings, HTTP version, cooldown state, and timestamps.
+- Do not expose cookies, CSRF tokens, query text, response bodies, or raw WatchFacts payloads in HTTPX health or diagnostics output.
 - Remove local model runtime support from the production path.
 - Keep `HYBRID_AI_MODE=off` by default; use `shadow` or `review` to collect safe suggestions before considering `guarded`.
 - Require `OPENAI_API_KEY` only when OpenAI-assisted modes are enabled.

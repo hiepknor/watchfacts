@@ -105,9 +105,13 @@ token; the default is 900 seconds.
 The HTTPX client is reused within the process for connection pooling and reloads
 cookies when `data/watchfacts_state.json` changes. Tune
 `WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS`,
-`WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS`, and
-`WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS` only when production logs show
-connection or pool pressure.
+`WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS`,
+`WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS`,
+`WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS`, and
+`WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS` only when production logs show
+connection, pool, or timeout pressure. `WATCHFACTS_HTTP_WARMUP_ON_HEALTH=true`
+lets MCP health prefetch the search form so the next HTTPX search can POST
+without a cold form GET.
 
 Create an authenticated WatchFacts browser session:
 
@@ -398,6 +402,9 @@ WATCHFACTS_FORM_CACHE_TTL_SECONDS=900
 WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS=10
 WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS=10
 WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS=60
+WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS=30
+WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS=60
+WATCHFACTS_HTTP_WARMUP_ON_HEALTH=true
 ```
 
 Bot commands:
@@ -566,6 +573,13 @@ pytest
 `ENABLE_CRAWL4AI` remains in config as a compatibility flag. Current production
 search uses WatchFacts JSON responses and HTML parsing, with HTTPX preferred
 for search POSTs and Playwright retained for login, session health, and fallback.
+
+Benchmark authorized HTTPX search latency without printing cookies, CSRF tokens,
+query output, or response bodies:
+
+```bash
+python scripts/diagnostics/benchmark_watchfacts_http.py --query "5712g" --warmup --repeat 3
+```
 
 ## Ignored Files
 

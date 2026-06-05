@@ -17,7 +17,11 @@ from app.openwa_handoff import (
 from app.scraper import BrowserSessionStatus, check_watchfacts_session
 from app.search import WatchFactsSearchWorkflow
 from app.search_result import SearchResult, search_result_to_dict
-from app.watchfacts_http import WatchFactsHttpClientStatus, watchfacts_http_client_status
+from app.watchfacts_http import (
+    WatchFactsHttpClientStatus,
+    warm_watchfacts_http_client,
+    watchfacts_http_client_status,
+)
 
 
 OPENWA_MAX_SOURCE_URL_LENGTH = 2048
@@ -132,6 +136,16 @@ async def watchfacts_health_payload(
 
     openwa_config = OpenWAHandoffConfig.from_settings(active_settings)
     http_status_provider = http_client_status_provider or watchfacts_http_client_status
+    if (
+        http_client_status_provider is None
+        and active_settings.watchfacts_http_client_enabled
+        and active_settings.watchfacts_http_warmup_on_health
+        and bool(session_status["ok"])
+    ):
+        try:
+            await warm_watchfacts_http_client(active_settings)
+        except Exception:
+            pass
     http_client_status = http_status_provider(active_settings)
     return {
         "watchfacts_session": session_status,

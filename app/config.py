@@ -21,6 +21,9 @@ DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS = 15 * 60
 DEFAULT_WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS = 10
 DEFAULT_WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS = 10
 DEFAULT_WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS = 60
+DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS = 30
+DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS = 60
+DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH = True
 DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT = "/api/chats/drafts"
 HybridAIMode = Literal["off", "shadow", "review", "guarded"]
 DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
@@ -68,6 +71,13 @@ class Settings:
     watchfacts_http_keepalive_expiry_seconds: int = (
         DEFAULT_WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS
     )
+    watchfacts_http_read_timeout_seconds: int = (
+        DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS
+    )
+    watchfacts_http_failure_cooldown_seconds: int = (
+        DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS
+    )
+    watchfacts_http_warmup_on_health: bool = DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH
 
 
 def parse_bool(value: str, *, name: str) -> bool:
@@ -226,6 +236,27 @@ def load_settings(
         ),
         name="WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS",
     )
+    watchfacts_http_read_timeout_seconds = parse_positive_int(
+        source.get(
+            "WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS",
+            str(DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS),
+        ),
+        name="WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS",
+    )
+    watchfacts_http_failure_cooldown_seconds = parse_positive_int(
+        source.get(
+            "WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS",
+            str(DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS),
+        ),
+        name="WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS",
+    )
+    watchfacts_http_warmup_on_health = parse_bool(
+        source.get(
+            "WATCHFACTS_HTTP_WARMUP_ON_HEALTH",
+            str(DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH).lower(),
+        ),
+        name="WATCHFACTS_HTTP_WARMUP_ON_HEALTH",
+    )
     enable_openwa_chat_handoff = parse_bool(
         source.get("ENABLE_OPENWA_CHAT_HANDOFF", "false"),
         name="ENABLE_OPENWA_CHAT_HANDOFF",
@@ -265,6 +296,9 @@ def load_settings(
         watchfacts_http_connect_timeout_seconds=watchfacts_http_connect_timeout_seconds,
         watchfacts_http_pool_timeout_seconds=watchfacts_http_pool_timeout_seconds,
         watchfacts_http_keepalive_expiry_seconds=watchfacts_http_keepalive_expiry_seconds,
+        watchfacts_http_read_timeout_seconds=watchfacts_http_read_timeout_seconds,
+        watchfacts_http_failure_cooldown_seconds=watchfacts_http_failure_cooldown_seconds,
+        watchfacts_http_warmup_on_health=watchfacts_http_warmup_on_health,
         openwa_base_url=openwa_base_url,
         openwa_api_key=openwa_api_key,
         openwa_dashboard_url=openwa_dashboard_url,

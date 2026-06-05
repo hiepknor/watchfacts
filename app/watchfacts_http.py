@@ -30,7 +30,7 @@ WATCHFACTS_HTTP_MAX_KEEPALIVE_CONNECTIONS = 2
 CSRF_RETRY_STATUSES = {401, 403, 419}
 HttpxClientFactory = Callable[[httpx.Cookies, httpx.Timeout, httpx.Limits], httpx.AsyncClient]
 HttpClientBaseKey = tuple[str, str]
-HttpClientKey = tuple[str, str, bool, int, int, int, int]
+HttpClientKey = tuple[str, str, bool, int, int, int, int, int, int]
 
 
 @dataclass(frozen=True)
@@ -48,12 +48,26 @@ class BrowserStateFingerprint:
 
 
 @dataclass(frozen=True)
+class FallbackStatus:
+    error_type: str
+    at: float
+    consecutive_failures: int
+    cooldown_until: float | None
+
+
+@dataclass(frozen=True)
 class WatchFactsHttpClientStatus:
     enabled: bool
     form_cache_fresh: bool
     last_error_type: str | None = None
     last_success_at: float | None = None
     last_fallback_at: float | None = None
+    last_elapsed_ms: int | None = None
+    last_form_refresh_elapsed_ms: int | None = None
+    last_post_elapsed_ms: int | None = None
+    last_http_version: str | None = None
+    consecutive_failures: int = 0
+    cooldown_until: float | None = None
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -62,6 +76,12 @@ class WatchFactsHttpClientStatus:
             "last_error_type": self.last_error_type,
             "last_success_at": self.last_success_at,
             "last_fallback_at": self.last_fallback_at,
+            "last_elapsed_ms": self.last_elapsed_ms,
+            "last_form_refresh_elapsed_ms": self.last_form_refresh_elapsed_ms,
+            "last_post_elapsed_ms": self.last_post_elapsed_ms,
+            "last_http_version": self.last_http_version,
+            "consecutive_failures": self.consecutive_failures,
+            "cooldown_until": self.cooldown_until,
         }
 
 
@@ -88,6 +108,12 @@ class WatchFactsHttpClient:
         self._last_error_type: str | None = None
         self._last_success_at: float | None = None
         self._last_fallback_at: float | None = None
+        self._last_elapsed_ms: int | None = None
+        self._last_form_refresh_elapsed_ms: int | None = None
+        self._last_post_elapsed_ms: int | None = None
+        self._last_http_version: str | None = None
+        self._consecutive_failures = 0
+        self._cooldown_until: float | None = None
 
     @classmethod
     def from_settings(
@@ -117,6 +143,11 @@ class WatchFactsHttpClient:
         if not normalized_query:
             raise ValueError("query must not be empty")
 
+        if self._cooldown_is_active():
+            self._record_error("cooldown")
+            raise _scraper_error("WatchFacts HTTP search is cooling down", "cooldown")
+
+        started_at = self._now()
         try:
             form = await self._get_search_form(timeout_ms=timeout_ms, use_cache=True)
             for attempt in range(2):
@@ -160,25 +191,29 @@ class WatchFactsHttpClient:
                         "Run `python scripts/ops/login.py` again."
                     )
 
-                self._last_success_at = self._wall_clock()
+                self._record_success(started_at)
                 return ScrapeResult(
                     html=text,
                     final_url=final_url,
                     server_filtered=True,
                 )
-        except (BrowserSessionError, ScraperError):
+        except BrowserSessionError:
+            self._record_failure("auth_expired", started_at)
+            raise
+        except ScraperError as exc:
+            self._record_failure(watchfacts_http_error_type(exc), started_at)
             raise
         except httpx.TimeoutException as exc:
-            self._record_error("timeout")
+            self._record_failure("timeout", started_at)
             raise _scraper_error("WatchFacts HTTP search timed out", "timeout") from exc
         except httpx.NetworkError as exc:
-            self._record_error("network")
+            self._record_failure("network", started_at)
             raise _scraper_error(
                 f"WatchFacts HTTP search failed: {exc.__class__.__name__}",
                 "network",
             ) from exc
         except httpx.HTTPError as exc:
-            self._record_error("httpx_error")
+            self._record_failure("httpx_error", started_at)
             raise _scraper_error(
                 f"WatchFacts HTTP search failed: {exc.__class__.__name__}",
                 "httpx_error",
@@ -186,7 +221,40 @@ class WatchFactsHttpClient:
 
         raise _scraper_error("WatchFacts HTTP search failed", "unknown")
 
+    async def warmup(self, *, timeout_ms: int) -> None:
+        if self._cooldown_is_active():
+            self._record_error("cooldown")
+            raise _scraper_error("WatchFacts HTTP search is cooling down", "cooldown")
+
+        started_at = self._now()
+        try:
+            await self._get_search_form(timeout_ms=timeout_ms, use_cache=True)
+            self._record_success(started_at)
+        except BrowserSessionError:
+            self._record_failure("auth_expired", started_at)
+            raise
+        except ScraperError as exc:
+            self._record_failure(watchfacts_http_error_type(exc), started_at)
+            raise
+        except httpx.TimeoutException as exc:
+            self._record_failure("timeout", started_at)
+            raise _scraper_error("WatchFacts HTTP warmup timed out", "timeout") from exc
+        except httpx.NetworkError as exc:
+            self._record_failure("network", started_at)
+            raise _scraper_error(
+                f"WatchFacts HTTP warmup failed: {exc.__class__.__name__}",
+                "network",
+            ) from exc
+        except httpx.HTTPError as exc:
+            self._record_failure("httpx_error", started_at)
+            raise _scraper_error(
+                f"WatchFacts HTTP warmup failed: {exc.__class__.__name__}",
+                "httpx_error",
+            ) from exc
+
     def record_fallback(self, *, error_type: str) -> None:
+        if error_type != "cooldown" and self._last_error_type != error_type:
+            self._record_failure(error_type, self._now())
         self._last_error_type = error_type
         self._last_fallback_at = self._wall_clock()
 
@@ -197,6 +265,12 @@ class WatchFactsHttpClient:
             last_error_type=self._last_error_type,
             last_success_at=self._last_success_at,
             last_fallback_at=self._last_fallback_at,
+            last_elapsed_ms=self._last_elapsed_ms,
+            last_form_refresh_elapsed_ms=self._last_form_refresh_elapsed_ms,
+            last_post_elapsed_ms=self._last_post_elapsed_ms,
+            last_http_version=self._last_http_version,
+            consecutive_failures=self._consecutive_failures,
+            cooldown_until=self._cooldown_until,
         )
 
     async def _get_search_form(
@@ -215,10 +289,19 @@ class WatchFactsHttpClient:
                 return self._form_cache
 
             client = await self._get_client()
-            response = await client.get(
-                self.settings.watchfacts_url,
-                timeout=self._request_timeout(timeout_ms),
-            )
+            started_at = self._now()
+            response: httpx.Response | None = None
+            try:
+                response = await client.get(
+                    self.settings.watchfacts_url,
+                    timeout=self._request_timeout(timeout_ms),
+                )
+            finally:
+                self._last_form_refresh_elapsed_ms = _elapsed_ms(
+                    self._now(),
+                    started_at,
+                )
+            self._record_http_version(response)
             if response.status_code >= 400:
                 raise _scraper_error(
                     f"WatchFacts navigation failed with HTTP {response.status_code}",
@@ -261,12 +344,19 @@ class WatchFactsHttpClient:
         timeout_ms: int,
     ) -> httpx.Response:
         client = await self._get_client()
-        return await client.post(
-            form.action_url,
-            data=search_form_data(form.token, query),
-            headers={"Accept": "application/json, text/plain, */*"},
-            timeout=self._request_timeout(timeout_ms),
-        )
+        started_at = self._now()
+        response: httpx.Response | None = None
+        try:
+            response = await client.post(
+                form.action_url,
+                data=search_form_data(form.token, query),
+                headers={"Accept": "application/json, text/plain, */*"},
+                timeout=self._request_timeout(timeout_ms),
+            )
+            return response
+        finally:
+            self._last_post_elapsed_ms = _elapsed_ms(self._now(), started_at)
+            self._record_http_version(response)
 
     async def _get_client(self) -> httpx.AsyncClient:
         fingerprint = self._state_fingerprint()
@@ -302,7 +392,15 @@ class WatchFactsHttpClient:
         )
 
     def _request_timeout(self, timeout_ms: int) -> httpx.Timeout:
-        read_timeout = max(timeout_ms / 1000, SEARCH_TIMEOUT_SECONDS)
+        request_timeout_seconds = (
+            timeout_ms / 1000
+            if timeout_ms > 0
+            else self.settings.watchfacts_http_read_timeout_seconds
+        )
+        read_timeout = min(
+            request_timeout_seconds,
+            self.settings.watchfacts_http_read_timeout_seconds,
+        )
         return httpx.Timeout(
             read_timeout,
             connect=self.settings.watchfacts_http_connect_timeout_seconds,
@@ -313,9 +411,9 @@ class WatchFactsHttpClient:
 
     def _default_timeout(self) -> httpx.Timeout:
         return httpx.Timeout(
-            SEARCH_TIMEOUT_SECONDS,
+            self.settings.watchfacts_http_read_timeout_seconds,
             connect=self.settings.watchfacts_http_connect_timeout_seconds,
-            read=SEARCH_TIMEOUT_SECONDS,
+            read=self.settings.watchfacts_http_read_timeout_seconds,
             write=WATCHFACTS_HTTP_WRITE_TIMEOUT_SECONDS,
             pool=self.settings.watchfacts_http_pool_timeout_seconds,
         )
@@ -397,6 +495,34 @@ class WatchFactsHttpClient:
     def _record_error(self, error_type: str) -> None:
         self._last_error_type = error_type
 
+    def _record_failure(self, error_type: str, started_at: float) -> None:
+        self._last_error_type = error_type
+        self._last_elapsed_ms = _elapsed_ms(self._now(), started_at)
+        if error_type == "cooldown":
+            return
+        self._consecutive_failures += 1
+        self._cooldown_until = (
+            self._wall_clock()
+            + self.settings.watchfacts_http_failure_cooldown_seconds
+        )
+
+    def _record_success(self, started_at: float) -> None:
+        self._last_error_type = None
+        self._last_success_at = self._wall_clock()
+        self._last_elapsed_ms = _elapsed_ms(self._now(), started_at)
+        self._consecutive_failures = 0
+        self._cooldown_until = None
+
+    def _cooldown_is_active(self) -> bool:
+        return (
+            self._cooldown_until is not None
+            and self._wall_clock() < self._cooldown_until
+        )
+
+    def _record_http_version(self, response: httpx.Response | None) -> None:
+        if response is not None:
+            self._last_http_version = response.http_version
+
 
 class WatchFactsHttpClientManager:
     def __init__(
@@ -410,7 +536,7 @@ class WatchFactsHttpClientManager:
         self._now = now
         self._wall_clock = wall_clock
         self._clients: dict[HttpClientKey, WatchFactsHttpClient] = {}
-        self._fallback_status: dict[HttpClientBaseKey, tuple[str, float]] = {}
+        self._fallback_status: dict[HttpClientBaseKey, FallbackStatus] = {}
         self._lock = asyncio.Lock()
 
     async def fetch_search(
@@ -423,15 +549,34 @@ class WatchFactsHttpClientManager:
         client = await self._client_for(settings)
         return await client.fetch_search(query, timeout_ms=timeout_ms)
 
+    async def warmup(self, settings: Settings, *, timeout_ms: int) -> None:
+        client = await self._client_for(settings)
+        await client.warmup(timeout_ms=timeout_ms)
+
     def record_fallback(self, settings: Settings, *, error_type: str) -> None:
         key = self._key(settings)
         client = self._clients.get(key)
         if client is not None:
             client.record_fallback(error_type=error_type)
             return
-        self._fallback_status[self._base_key(settings)] = (
+        base_key = self._base_key(settings)
+        existing = self._fallback_status.get(base_key)
+        if error_type == "cooldown" and existing is not None:
+            consecutive_failures = existing.consecutive_failures
+            cooldown_until = existing.cooldown_until
+        else:
+            consecutive_failures = (
+                existing.consecutive_failures if existing is not None else 0
+            ) + 1
+            cooldown_until = (
+                self._wall_clock()
+                + settings.watchfacts_http_failure_cooldown_seconds
+            )
+        self._fallback_status[base_key] = FallbackStatus(
             error_type,
             self._wall_clock(),
+            consecutive_failures,
+            cooldown_until,
         )
 
     def status(self, settings: Settings) -> WatchFactsHttpClientStatus:
@@ -443,8 +588,12 @@ class WatchFactsHttpClientManager:
         return WatchFactsHttpClientStatus(
             enabled=settings.watchfacts_http_client_enabled,
             form_cache_fresh=False,
-            last_error_type=fallback[0] if fallback is not None else None,
-            last_fallback_at=fallback[1] if fallback is not None else None,
+            last_error_type=fallback.error_type if fallback is not None else None,
+            last_fallback_at=fallback.at if fallback is not None else None,
+            consecutive_failures=(
+                fallback.consecutive_failures if fallback is not None else 0
+            ),
+            cooldown_until=fallback.cooldown_until if fallback is not None else None,
         )
 
     async def close_all(self) -> None:
@@ -513,6 +662,8 @@ class WatchFactsHttpClientManager:
             settings.watchfacts_http_connect_timeout_seconds,
             settings.watchfacts_http_pool_timeout_seconds,
             settings.watchfacts_http_keepalive_expiry_seconds,
+            settings.watchfacts_http_read_timeout_seconds,
+            settings.watchfacts_http_failure_cooldown_seconds,
         )
 
     def _base_key_from_key(self, key: HttpClientKey) -> HttpClientBaseKey:
@@ -529,6 +680,14 @@ async def fetch_watchfacts_http_search(
     timeout_ms: int,
 ) -> ScrapeResult:
     return await _DEFAULT_MANAGER.fetch_search(settings, query, timeout_ms=timeout_ms)
+
+
+async def warm_watchfacts_http_client(
+    settings: Settings,
+    *,
+    timeout_ms: int = 30_000,
+) -> None:
+    await _DEFAULT_MANAGER.warmup(settings, timeout_ms=timeout_ms)
 
 
 def record_watchfacts_http_fallback(settings: Settings, *, error_type: str) -> None:
@@ -567,3 +726,7 @@ def _scraper_error(message: str, error_type: str) -> ScraperError:
     exc = ScraperError(message)
     setattr(exc, "watchfacts_http_error_type", error_type)
     return exc
+
+
+def _elapsed_ms(now: float, started_at: float) -> int:
+    return max(0, int((now - started_at) * 1000))

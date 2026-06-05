@@ -437,6 +437,12 @@ def test_watchfacts_health_payload_includes_http_client_status_without_secrets(
             last_error_type="timeout",
             last_success_at=1000.0,
             last_fallback_at=1005.0,
+            last_elapsed_ms=321,
+            last_form_refresh_elapsed_ms=123,
+            last_post_elapsed_ms=198,
+            last_http_version="HTTP/1.1",
+            consecutive_failures=1,
+            cooldown_until=1065.0,
         )
 
     payload = asyncio.run(
@@ -453,7 +459,47 @@ def test_watchfacts_health_payload_includes_http_client_status_without_secrets(
         "last_error_type": "timeout",
         "last_success_at": 1000.0,
         "last_fallback_at": 1005.0,
+        "last_elapsed_ms": 321,
+        "last_form_refresh_elapsed_ms": 123,
+        "last_post_elapsed_ms": 198,
+        "last_http_version": "HTTP/1.1",
+        "consecutive_failures": 1,
+        "cooldown_until": 1065.0,
     }
     serialized = json.dumps(payload).casefold()
     assert "cookie" not in serialized
     assert "csrf" not in serialized
+
+
+def test_watchfacts_health_payload_warms_http_client_when_enabled(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    settings = load_search_settings(
+        env={"WATCHFACTS_HTTP_WARMUP_ON_HEALTH": "true"},
+        project_root=tmp_path,
+    )
+    warmed = []
+
+    async def fake_checker(active_settings):
+        assert active_settings == settings
+        return BrowserSessionStatus(
+            ok=True,
+            status="valid",
+            detail="Saved browser session is valid.",
+        )
+
+    async def fake_warmup(active_settings):
+        warmed.append(active_settings)
+
+    monkeypatch.setattr(
+        "app.tool_runtime.warm_watchfacts_http_client",
+        fake_warmup,
+    )
+
+    payload = asyncio.run(
+        watchfacts_health_payload(settings=settings, session_checker=fake_checker)
+    )
+
+    assert warmed == [settings]
+    assert payload["watchfacts_session"]["ok"] is True

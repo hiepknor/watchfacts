@@ -18,8 +18,11 @@ from app.config import (
     DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS,
     DEFAULT_WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS,
     DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED,
+    DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS,
     DEFAULT_WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS,
     DEFAULT_WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS,
+    DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS,
+    DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH,
     load_settings,
     load_search_settings,
     parse_bool,
@@ -130,6 +133,18 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
         settings.watchfacts_http_keepalive_expiry_seconds
         == DEFAULT_WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS
     )
+    assert (
+        settings.watchfacts_http_read_timeout_seconds
+        == DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS
+    )
+    assert (
+        settings.watchfacts_http_failure_cooldown_seconds
+        == DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS
+    )
+    assert (
+        settings.watchfacts_http_warmup_on_health
+        is DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH
+    )
     assert settings.enable_openwa_chat_handoff is False
     assert settings.openwa_base_url == ""
     assert settings.openwa_api_key == ""
@@ -239,6 +254,9 @@ def test_load_settings_reads_watchfacts_http_client_options(tmp_path: Path) -> N
             "WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS": "7",
             "WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS": "3",
             "WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS": "11",
+            "WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS": "13",
+            "WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS": "17",
+            "WATCHFACTS_HTTP_WARMUP_ON_HEALTH": "false",
         },
         project_root=tmp_path,
     )
@@ -248,6 +266,9 @@ def test_load_settings_reads_watchfacts_http_client_options(tmp_path: Path) -> N
     assert settings.watchfacts_http_connect_timeout_seconds == 7
     assert settings.watchfacts_http_pool_timeout_seconds == 3
     assert settings.watchfacts_http_keepalive_expiry_seconds == 11
+    assert settings.watchfacts_http_read_timeout_seconds == 13
+    assert settings.watchfacts_http_failure_cooldown_seconds == 17
+    assert settings.watchfacts_http_warmup_on_health is False
 
 
 def test_load_settings_reads_openwa_handoff_options(tmp_path: Path) -> None:

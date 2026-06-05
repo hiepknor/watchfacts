@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Callable
 
 import httpx
+import pytest
 
 from app.config import Settings
-from app.scraper import ScrapeResult
+from app.scraper import ScrapeResult, ScraperError
 from app.watchfacts_http import (
     WatchFactsHttpClientManager,
     WatchFactsHttpClientStatus,
@@ -248,6 +249,12 @@ def test_watchfacts_http_manager_reports_status_without_secrets(tmp_path: Path) 
         "last_error_type": "timeout",
         "last_success_at": 1_700_000_000.0,
         "last_fallback_at": 1_700_000_005.0,
+        "last_elapsed_ms": 0,
+        "last_form_refresh_elapsed_ms": 0,
+        "last_post_elapsed_ms": 0,
+        "last_http_version": "HTTP/1.1",
+        "consecutive_failures": 1,
+        "cooldown_until": 1_700_000_065.0,
     }
     serialized = json.dumps(payload).casefold()
     assert "cookie" not in serialized
@@ -263,6 +270,7 @@ def test_watchfacts_http_manager_uses_configured_timeout_and_limits(tmp_path: Pa
             "watchfacts_http_connect_timeout_seconds": 7,
             "watchfacts_http_pool_timeout_seconds": 3,
             "watchfacts_http_keepalive_expiry_seconds": 11,
+            "watchfacts_http_read_timeout_seconds": 13,
         }
     )
     write_storage_state(settings, cookie_value="first", mtime_ns=100)
@@ -302,10 +310,211 @@ def test_watchfacts_http_manager_uses_configured_timeout_and_limits(tmp_path: Pa
     assert timeout.connect == 7
     assert timeout.pool == 3
     assert timeout.write == 30
-    assert timeout.read == 90
+    assert timeout.read == 13
     assert limits.max_connections == 4
     assert limits.max_keepalive_connections == 2
     assert limits.keepalive_expiry == 11
+
+
+def test_watchfacts_http_manager_caps_read_timeout_to_configured_limit(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    settings = Settings(
+        **{
+            **settings.__dict__,
+            "watchfacts_http_read_timeout_seconds": 13,
+        }
+    )
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+    captured_timeouts: list[httpx.Timeout] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return form_response(request)
+        return search_response(request)
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+
+    async def run() -> None:
+        manager = WatchFactsHttpClientManager(client_factory=client_factory)
+        try:
+            client = await manager._client_for(settings)
+            original_request_timeout = client._request_timeout
+
+            def capture_timeout(timeout_ms: int) -> httpx.Timeout:
+                timeout = original_request_timeout(timeout_ms)
+                captured_timeouts.append(timeout)
+                return timeout
+
+            client._request_timeout = capture_timeout
+            await manager.fetch_search(settings, "5712g", timeout_ms=60_000)
+        finally:
+            await manager.close_all()
+
+    asyncio.run(run())
+
+    assert captured_timeouts
+    assert {timeout.read for timeout in captured_timeouts} == {13}
+
+
+def test_watchfacts_http_manager_uses_lower_caller_timeout_when_provided(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    settings = Settings(
+        **{
+            **settings.__dict__,
+            "watchfacts_http_read_timeout_seconds": 13,
+        }
+    )
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+    captured_timeouts: list[httpx.Timeout] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return form_response(request)
+        return search_response(request)
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+
+    async def run() -> None:
+        manager = WatchFactsHttpClientManager(client_factory=client_factory)
+        try:
+            client = await manager._client_for(settings)
+            original_request_timeout = client._request_timeout
+
+            def capture_timeout(timeout_ms: int) -> httpx.Timeout:
+                timeout = original_request_timeout(timeout_ms)
+                captured_timeouts.append(timeout)
+                return timeout
+
+            client._request_timeout = capture_timeout
+            await manager.fetch_search(settings, "5712g", timeout_ms=1234)
+        finally:
+            await manager.close_all()
+
+    asyncio.run(run())
+
+    assert captured_timeouts
+    assert {timeout.read for timeout in captured_timeouts} == {1.234}
+
+
+def test_watchfacts_http_manager_warmup_caches_form_before_first_search(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+    request_methods: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        request_methods.append(request.method)
+        if request.method == "GET":
+            return form_response(request, token="warm-token")
+        return search_response(request)
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+
+    async def run() -> WatchFactsHttpClientStatus:
+        manager = WatchFactsHttpClientManager(client_factory=client_factory)
+        try:
+            await manager.warmup(settings, timeout_ms=1234)
+            await manager.fetch_search(settings, "5712g", timeout_ms=1234)
+            return manager.status(settings)
+        finally:
+            await manager.close_all()
+
+    status = asyncio.run(run())
+
+    assert request_methods == ["GET", "POST"]
+    assert status.form_cache_fresh is True
+    assert status.last_form_refresh_elapsed_ms == 0
+
+
+def test_watchfacts_http_manager_skips_network_during_failure_cooldown(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    settings = Settings(
+        **{
+            **settings.__dict__,
+            "watchfacts_http_failure_cooldown_seconds": 60,
+        }
+    )
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+    wall_now = 1_700_000_000.0
+    request_methods: list[str] = []
+    post_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal post_count
+        request_methods.append(request.method)
+        if request.method == "GET":
+            return form_response(request)
+        post_count += 1
+        if post_count == 1:
+            raise httpx.ReadTimeout("simulated timeout", request=request)
+        return search_response(request)
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+
+    async def run() -> tuple[WatchFactsHttpClientStatus, WatchFactsHttpClientStatus]:
+        nonlocal wall_now
+        manager = WatchFactsHttpClientManager(
+            client_factory=client_factory,
+            wall_clock=lambda: wall_now,
+        )
+        try:
+            with pytest.raises(ScraperError, match="timed out"):
+                await manager.fetch_search(settings, "5712g", timeout_ms=1234)
+            failed_status = manager.status(settings)
+
+            with pytest.raises(ScraperError, match="cooling down"):
+                await manager.fetch_search(settings, "5712r", timeout_ms=1234)
+            assert request_methods == ["GET", "POST"]
+
+            wall_now += 61
+            await manager.fetch_search(settings, "5712r", timeout_ms=1234)
+            return failed_status, manager.status(settings)
+        finally:
+            await manager.close_all()
+
+    failed_status, recovered_status = asyncio.run(run())
+
+    assert failed_status.last_error_type == "timeout"
+    assert failed_status.consecutive_failures == 1
+    assert failed_status.cooldown_until == 1_700_000_060.0
+    assert recovered_status.last_error_type is None
+    assert recovered_status.consecutive_failures == 0
+    assert recovered_status.cooldown_until is None
 
 
 def test_watchfacts_http_manager_recreates_client_when_config_changes(
