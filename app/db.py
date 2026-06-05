@@ -682,6 +682,7 @@ class Database:
         posted_date: str | None = None,
         source_url: str | None = None,
         telegram_user_id: int | None = None,
+        notes: str | None = None,
     ) -> int:
         now = _utc_now()
         normalized_query = normalize_text(query_text)
@@ -704,9 +705,10 @@ class Database:
                     seller,
                     posted_date,
                     source_url,
-                    issue_status
+                    issue_status,
+                    review_notes
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 'open')
+                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 'open', ?)
                 ON CONFLICT(
                     normalized_query,
                     result_rank,
@@ -721,7 +723,7 @@ class Database:
                     posted_date = COALESCE(excluded.posted_date, result_feedback.posted_date),
                     source_url = COALESCE(excluded.source_url, result_feedback.source_url),
                     issue_status = 'open',
-                    review_notes = NULL
+                    review_notes = COALESCE(excluded.review_notes, result_feedback.review_notes)
                 """,
                 (
                     now,
@@ -736,6 +738,7 @@ class Database:
                     seller,
                     posted_date,
                     source_url,
+                    notes,
                 ),
             )
             row = connection.execute(

@@ -226,6 +226,19 @@ This path uses `load_search_settings()` internally. It still needs the
 WatchFacts browser state in `data/watchfacts_state.json`, and it shares the same
 SQLite cache and deterministic parser/matcher/scoring logic as the Telegram bot.
 
+The MCP bridge exposes the runtime as structured tools for Hermes:
+
+| Tool | Purpose |
+| --- | --- |
+| `search` | Search WatchFacts and return ranked results with `result_id` handles |
+| `health` | Check WatchFacts session, database, OpenWA, and search readiness |
+| `create_chat_draft` | Create an OpenWA chat draft from a prior `search` result |
+| `report_issue` | Record result feedback for owner review |
+| `list_issues` | List open feedback and suspicious QA issues |
+| `get_issue` | Read one feedback or suspicious issue by `F<id>` or `S<id>` |
+| `update_issue` | Mark an issue `open`, `fixed`, or `ignored` |
+| `suspicious_summary` | Summarize open suspicious QA backlog |
+
 ## OpenAI Controlled Intelligence
 
 The bot remains deterministic by default. The AI path is OpenAI-only:
@@ -443,6 +456,7 @@ beautifulsoup4
 lxml
 python-dotenv
 pytest
+mcp>=1.0,<2
 ```
 
 `ENABLE_CRAWL4AI` remains in config as a compatibility flag. Current production search uses WatchFacts JSON responses and HTML parsing.
