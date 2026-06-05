@@ -616,7 +616,10 @@ def test_fetch_watchfacts_html_uses_http_client_for_query(tmp_path) -> None:
 
 def test_fetch_watchfacts_html_falls_back_to_playwright_when_http_client_fails(tmp_path) -> None:
     settings = make_settings(tmp_path, http_client_enabled=True)
-    page = FakeSearchPage("<html><body>Should not need page navigation</body></html>", settings.watchfacts_url)
+    page = FakeSearchPage(
+        "<html><body>Should not need page navigation</body></html>",
+        settings.watchfacts_url,
+    )
     get_response = FakeSearchResponse(
         url=settings.watchfacts_url,
         body=(
@@ -657,7 +660,7 @@ def test_fetch_watchfacts_html_falls_back_to_playwright_when_http_client_fails(t
     assert request.posts
 
 
-def test_fetch_watchfacts_html_records_default_http_fallback_status(
+def test_fetch_watchfacts_html_skips_playwright_fallback_for_http_timeout_by_default(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -696,17 +699,79 @@ def test_fetch_watchfacts_html_records_default_http_fallback_status(
     async def run():
         await close_watchfacts_http_client()
         try:
-            result = await fetch_watchfacts_html(
+            with pytest.raises(ScraperError, match="HTTPX search timed out"):
+                await fetch_watchfacts_html(
+                    settings,
+                    query="116500 black",
+                    playwright_factory=factory,
+                    timeout_ms=1234,
+                )
+            return watchfacts_http_client_status(settings)
+        finally:
+            await close_watchfacts_http_client()
+
+    status = asyncio.run(run())
+
+    assert request.posts == []
+    assert status.last_error_type == "timeout"
+    assert status.last_fallback_at is not None
+
+
+def test_fetch_watchfacts_html_can_fallback_for_http_timeout_when_enabled(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    base_settings = make_settings(tmp_path, http_client_enabled=True)
+    settings = Settings(
+        **{
+            **base_settings.__dict__,
+            "watchfacts_http_timeout_fallback_enabled": True,
+        }
+    )
+    page = FakeSearchPage("<html><body>Should not need page navigation</body></html>", settings.watchfacts_url)
+    get_response = FakeSearchResponse(
+        url=settings.watchfacts_url,
+        body=(
+            '<html><body><form id="mode3Form" action="/simon-search-matches">'
+            '<input name="_token" value="csrf-token"></form></body></html>'
+        ),
+    )
+    post_response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
+    factory, request = make_request_bootstrap_playwright_factory(
+        page,
+        get_response=get_response,
+        post_response=post_response,
+    )
+
+    import app.watchfacts_http as watchfacts_http
+
+    async def failing_http_search(active_settings, query: str, *, timeout_ms: int):
+        assert active_settings == settings
+        assert query == "116500 black"
+        assert timeout_ms == 1234
+        exc = ScraperError("HTTPX search timed out")
+        setattr(exc, "watchfacts_http_error_type", "timeout")
+        raise exc
+
+    monkeypatch.setattr(
+        watchfacts_http,
+        "fetch_watchfacts_http_search",
+        failing_http_search,
+    )
+
+    async def run():
+        await close_watchfacts_http_client()
+        try:
+            return await fetch_watchfacts_html(
                 settings,
                 query="116500 black",
                 playwright_factory=factory,
                 timeout_ms=1234,
             )
-            return result, watchfacts_http_client_status(settings)
         finally:
             await close_watchfacts_http_client()
 
-    result, status = asyncio.run(run())
+    result = asyncio.run(run())
 
     assert result == ScrapeResult(
         html='{"listings":[{"title":"116500 black"}]}',
@@ -714,8 +779,6 @@ def test_fetch_watchfacts_html_records_default_http_fallback_status(
         server_filtered=True,
     )
     assert request.posts
-    assert status.last_error_type == "timeout"
-    assert status.last_fallback_at is not None
 
 
 def test_missing_browser_state_raises_clear_error(tmp_path) -> None:

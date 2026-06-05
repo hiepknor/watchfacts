@@ -23,6 +23,7 @@ from app.config import (
     DEFAULT_WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS,
     DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS,
     DEFAULT_WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS,
+    DEFAULT_WATCHFACTS_HTTP_TIMEOUT_FALLBACK_ENABLED,
     DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH,
     load_settings,
     load_search_settings,
@@ -150,6 +151,10 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
         settings.watchfacts_http_warmup_on_health
         is DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH
     )
+    assert (
+        settings.watchfacts_http_timeout_fallback_enabled
+        is DEFAULT_WATCHFACTS_HTTP_TIMEOUT_FALLBACK_ENABLED
+    )
     assert settings.enable_openwa_chat_handoff is False
     assert settings.openwa_base_url == ""
     assert settings.openwa_api_key == ""
@@ -263,6 +268,7 @@ def test_load_settings_reads_watchfacts_http_client_options(tmp_path: Path) -> N
             "WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS": "97",
             "WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS": "17",
             "WATCHFACTS_HTTP_WARMUP_ON_HEALTH": "false",
+            "WATCHFACTS_HTTP_TIMEOUT_FALLBACK_ENABLED": "true",
         },
         project_root=tmp_path,
     )
@@ -276,6 +282,7 @@ def test_load_settings_reads_watchfacts_http_client_options(tmp_path: Path) -> N
     assert settings.watchfacts_http_search_read_timeout_seconds == 97
     assert settings.watchfacts_http_failure_cooldown_seconds == 17
     assert settings.watchfacts_http_warmup_on_health is False
+    assert settings.watchfacts_http_timeout_fallback_enabled is True
 
 
 def test_load_settings_reads_openwa_handoff_options(tmp_path: Path) -> None:

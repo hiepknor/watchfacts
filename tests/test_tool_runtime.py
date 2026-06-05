@@ -441,6 +441,10 @@ def test_watchfacts_health_payload_includes_http_client_status_without_secrets(
             last_form_refresh_elapsed_ms=123,
             last_post_elapsed_ms=198,
             last_http_version="HTTP/1.1",
+            last_status_code=200,
+            last_response_bytes=12345,
+            last_server_query_changed=True,
+            last_server_query_token_count=1,
             consecutive_failures=1,
             cooldown_until=1065.0,
         )
@@ -463,6 +467,10 @@ def test_watchfacts_health_payload_includes_http_client_status_without_secrets(
         "last_form_refresh_elapsed_ms": 123,
         "last_post_elapsed_ms": 198,
         "last_http_version": "HTTP/1.1",
+        "last_status_code": 200,
+        "last_response_bytes": 12345,
+        "last_server_query_changed": True,
+        "last_server_query_token_count": 1,
         "consecutive_failures": 1,
         "cooldown_until": 1065.0,
     }

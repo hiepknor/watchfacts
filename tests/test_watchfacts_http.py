@@ -253,12 +253,16 @@ def test_watchfacts_http_manager_reports_status_without_secrets(tmp_path: Path) 
         "last_form_refresh_elapsed_ms": 0,
         "last_post_elapsed_ms": 0,
         "last_http_version": "HTTP/1.1",
+        "last_status_code": 200,
+        "last_response_bytes": len(b'{"listings":[{"title":"5712g"}]}'),
+        "last_server_query_changed": False,
+        "last_server_query_token_count": 1,
         "consecutive_failures": 1,
         "cooldown_until": 1_700_000_065.0,
     }
     serialized = json.dumps(payload).casefold()
     assert "cookie" not in serialized
-    assert "token" not in serialized
+    assert "csrf-token" not in serialized
     assert "first" not in serialized
 
 

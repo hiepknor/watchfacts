@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ CSRF_RETRY_STATUSES = {401, 403, 419}
 HttpxClientFactory = Callable[[httpx.Cookies, httpx.Timeout, httpx.Limits], httpx.AsyncClient]
 HttpClientBaseKey = tuple[str, str]
 HttpClientKey = tuple[str, str, bool, int, int, int, int, int, int, int]
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,10 @@ class WatchFactsHttpClientStatus:
     last_form_refresh_elapsed_ms: int | None = None
     last_post_elapsed_ms: int | None = None
     last_http_version: str | None = None
+    last_status_code: int | None = None
+    last_response_bytes: int | None = None
+    last_server_query_changed: bool | None = None
+    last_server_query_token_count: int | None = None
     consecutive_failures: int = 0
     cooldown_until: float | None = None
 
@@ -81,6 +87,10 @@ class WatchFactsHttpClientStatus:
             "last_form_refresh_elapsed_ms": self.last_form_refresh_elapsed_ms,
             "last_post_elapsed_ms": self.last_post_elapsed_ms,
             "last_http_version": self.last_http_version,
+            "last_status_code": self.last_status_code,
+            "last_response_bytes": self.last_response_bytes,
+            "last_server_query_changed": self.last_server_query_changed,
+            "last_server_query_token_count": self.last_server_query_token_count,
             "consecutive_failures": self.consecutive_failures,
             "cooldown_until": self.cooldown_until,
         }
@@ -113,6 +123,10 @@ class WatchFactsHttpClient:
         self._last_form_refresh_elapsed_ms: int | None = None
         self._last_post_elapsed_ms: int | None = None
         self._last_http_version: str | None = None
+        self._last_status_code: int | None = None
+        self._last_response_bytes: int | None = None
+        self._last_server_query_changed: bool | None = None
+        self._last_server_query_token_count: int | None = None
         self._consecutive_failures = 0
         self._cooldown_until: float | None = None
 
@@ -270,6 +284,10 @@ class WatchFactsHttpClient:
             last_form_refresh_elapsed_ms=self._last_form_refresh_elapsed_ms,
             last_post_elapsed_ms=self._last_post_elapsed_ms,
             last_http_version=self._last_http_version,
+            last_status_code=self._last_status_code,
+            last_response_bytes=self._last_response_bytes,
+            last_server_query_changed=self._last_server_query_changed,
+            last_server_query_token_count=self._last_server_query_token_count,
             consecutive_failures=self._consecutive_failures,
             cooldown_until=self._cooldown_until,
         )
@@ -347,10 +365,19 @@ class WatchFactsHttpClient:
         client = await self._get_client()
         started_at = self._now()
         response: httpx.Response | None = None
+        server_query = _server_search_query(query)
+        server_query_token_count = len(server_query.split())
+        server_query_changed = _normalized_query(server_query) != _normalized_query(
+            query
+        )
+        self._last_status_code = None
+        self._last_response_bytes = None
+        self._last_server_query_changed = server_query_changed
+        self._last_server_query_token_count = server_query_token_count
         try:
             response = await client.post(
                 form.action_url,
-                data=search_form_data(form.token, _server_search_query(query)),
+                data=search_form_data(form.token, server_query),
                 headers={"Accept": "application/json, text/plain, */*"},
                 timeout=self._search_request_timeout(timeout_ms),
             )
@@ -358,6 +385,21 @@ class WatchFactsHttpClient:
         finally:
             self._last_post_elapsed_ms = _elapsed_ms(self._now(), started_at)
             self._record_http_version(response)
+            if response is not None:
+                self._last_status_code = response.status_code
+                self._last_response_bytes = len(response.content)
+                logger.info(
+                    "event=watchfacts_http_client.search_post "
+                    "elapsed_ms=%s status_code=%s response_bytes=%s "
+                    "http_version=%s server_query_changed=%s "
+                    "server_query_token_count=%s",
+                    self._last_post_elapsed_ms,
+                    self._last_status_code,
+                    self._last_response_bytes,
+                    self._last_http_version,
+                    self._last_server_query_changed,
+                    self._last_server_query_token_count,
+                )
 
     async def _get_client(self) -> httpx.AsyncClient:
         fingerprint = self._state_fingerprint()
@@ -744,6 +786,10 @@ def _server_search_query(query: str) -> str:
     if not reference_terms:
         return query.strip()
     return " ".join(" ".join(parts) for parts in reference_terms)
+
+
+def _normalized_query(query: str) -> str:
+    return " ".join(query.casefold().split())
 
 
 def _scraper_error(message: str, error_type: str) -> ScraperError:
