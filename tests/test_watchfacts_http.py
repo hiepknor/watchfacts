@@ -207,7 +207,8 @@ def test_watchfacts_http_manager_serializes_form_refresh_for_concurrent_searches
 def test_watchfacts_http_manager_reports_status_without_secrets(tmp_path: Path) -> None:
     settings = make_settings(tmp_path)
     write_storage_state(settings, cookie_value="first", mtime_ns=100)
-    now = 1000.0
+    monotonic_now = 100.0
+    wall_now = 1_700_000_000.0
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "GET":
@@ -224,14 +225,15 @@ def test_watchfacts_http_manager_reports_status_without_secrets(tmp_path: Path) 
         )
 
     async def run() -> WatchFactsHttpClientStatus:
-        nonlocal now
+        nonlocal wall_now
         manager = WatchFactsHttpClientManager(
             client_factory=client_factory,
-            now=lambda: now,
+            now=lambda: monotonic_now,
+            wall_clock=lambda: wall_now,
         )
         try:
             await manager.fetch_search(settings, "5712g", timeout_ms=1234)
-            now += 5
+            wall_now += 5
             manager.record_fallback(settings, error_type="timeout")
             return manager.status(settings)
         finally:
@@ -244,8 +246,8 @@ def test_watchfacts_http_manager_reports_status_without_secrets(tmp_path: Path) 
         "enabled": True,
         "form_cache_fresh": True,
         "last_error_type": "timeout",
-        "last_success_at": 1000.0,
-        "last_fallback_at": 1005.0,
+        "last_success_at": 1_700_000_000.0,
+        "last_fallback_at": 1_700_000_005.0,
     }
     serialized = json.dumps(payload).casefold()
     assert "cookie" not in serialized
@@ -304,3 +306,51 @@ def test_watchfacts_http_manager_uses_configured_timeout_and_limits(tmp_path: Pa
     assert limits.max_connections == 4
     assert limits.max_keepalive_connections == 2
     assert limits.keepalive_expiry == 11
+
+
+def test_watchfacts_http_manager_recreates_client_when_config_changes(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+    created_clients: list[httpx.AsyncClient] = []
+    captured_connect_timeouts: list[float | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return form_response(request)
+        return search_response(request)
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        captured_connect_timeouts.append(timeout.connect)
+        client = httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+        created_clients.append(client)
+        return client
+
+    updated_settings = Settings(
+        **{
+            **settings.__dict__,
+            "watchfacts_http_connect_timeout_seconds": 13,
+        }
+    )
+
+    async def run() -> None:
+        manager = WatchFactsHttpClientManager(client_factory=client_factory)
+        try:
+            await manager.fetch_search(settings, "5712g", timeout_ms=1234)
+            old_client = created_clients[0]
+            await manager.fetch_search(updated_settings, "5712r", timeout_ms=1234)
+            assert old_client.is_closed is True
+        finally:
+            await manager.close_all()
+
+    asyncio.run(run())
+
+    assert len(created_clients) == 2
+    assert captured_connect_timeouts == [10, 13]

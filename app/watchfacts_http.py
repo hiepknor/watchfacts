@@ -5,7 +5,6 @@ import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
 import httpx
 
@@ -30,6 +29,8 @@ WATCHFACTS_HTTP_MAX_CONNECTIONS = 4
 WATCHFACTS_HTTP_MAX_KEEPALIVE_CONNECTIONS = 2
 CSRF_RETRY_STATUSES = {401, 403, 419}
 HttpxClientFactory = Callable[[httpx.Cookies, httpx.Timeout, httpx.Limits], httpx.AsyncClient]
+HttpClientBaseKey = tuple[str, str]
+HttpClientKey = tuple[str, str, bool, int, int, int, int]
 
 
 @dataclass(frozen=True)
@@ -72,12 +73,14 @@ class WatchFactsHttpClient:
         client: httpx.AsyncClient | None = None,
         client_factory: HttpxClientFactory | None = None,
         now: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self.settings = settings
         self._client = client
         self._client_factory = client_factory
         self._owns_client = client is None
         self._now = now
+        self._wall_clock = wall_clock
         self._fingerprint: BrowserStateFingerprint | None = None
         self._form_cache: SearchFormCacheEntry | None = None
         self._client_lock = asyncio.Lock()
@@ -93,8 +96,9 @@ class WatchFactsHttpClient:
         *,
         client: httpx.AsyncClient | None = None,
         now: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
     ) -> "WatchFactsHttpClient":
-        return cls(settings, client=client, now=now)
+        return cls(settings, client=client, now=now, wall_clock=wall_clock)
 
     async def __aenter__(self) -> "WatchFactsHttpClient":
         await self._get_client()
@@ -156,7 +160,7 @@ class WatchFactsHttpClient:
                         "Run `python scripts/ops/login.py` again."
                     )
 
-                self._last_success_at = self._now()
+                self._last_success_at = self._wall_clock()
                 return ScrapeResult(
                     html=text,
                     final_url=final_url,
@@ -184,7 +188,7 @@ class WatchFactsHttpClient:
 
     def record_fallback(self, *, error_type: str) -> None:
         self._last_error_type = error_type
-        self._last_fallback_at = self._now()
+        self._last_fallback_at = self._wall_clock()
 
     def status(self) -> WatchFactsHttpClientStatus:
         return WatchFactsHttpClientStatus(
@@ -400,11 +404,13 @@ class WatchFactsHttpClientManager:
         *,
         client_factory: HttpxClientFactory | None = None,
         now: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self._client_factory = client_factory
         self._now = now
-        self._clients: dict[tuple[str, str], WatchFactsHttpClient] = {}
-        self._fallback_status: dict[tuple[str, str], tuple[str, float]] = {}
+        self._wall_clock = wall_clock
+        self._clients: dict[HttpClientKey, WatchFactsHttpClient] = {}
+        self._fallback_status: dict[HttpClientBaseKey, tuple[str, float]] = {}
         self._lock = asyncio.Lock()
 
     async def fetch_search(
@@ -423,14 +429,17 @@ class WatchFactsHttpClientManager:
         if client is not None:
             client.record_fallback(error_type=error_type)
             return
-        self._fallback_status[key] = (error_type, self._now())
+        self._fallback_status[self._base_key(settings)] = (
+            error_type,
+            self._wall_clock(),
+        )
 
     def status(self, settings: Settings) -> WatchFactsHttpClientStatus:
         key = self._key(settings)
         client = self._clients.get(key)
         if client is not None:
             return client.status()
-        fallback = self._fallback_status.get(key)
+        fallback = self._fallback_status.get(self._base_key(settings))
         return WatchFactsHttpClientStatus(
             enabled=settings.watchfacts_http_client_enabled,
             form_cache_fresh=False,
@@ -441,12 +450,19 @@ class WatchFactsHttpClientManager:
     async def close_all(self) -> None:
         clients = list(self._clients.values())
         self._clients.clear()
+        self._fallback_status.clear()
         for client in clients:
             await client.close()
 
     async def close(self, settings: Settings) -> None:
-        client = self._clients.pop(self._key(settings), None)
-        if client is not None:
+        base_key = self._base_key(settings)
+        self._fallback_status.pop(base_key, None)
+        clients = [
+            self._clients.pop(key)
+            for key in list(self._clients)
+            if self._base_key_from_key(key) == base_key
+        ]
+        for client in clients:
             await client.close()
 
     async def _client_for(self, settings: Settings) -> WatchFactsHttpClient:
@@ -457,19 +473,50 @@ class WatchFactsHttpClientManager:
         async with self._lock:
             client = self._clients.get(key)
             if client is None:
+                await self._close_stale_clients_for_settings(settings, keep_key=key)
                 client = WatchFactsHttpClient(
                     settings,
                     client_factory=self._client_factory,
                     now=self._now,
+                    wall_clock=self._wall_clock,
                 )
                 self._clients[key] = client
             return client
 
-    def _key(self, settings: Settings) -> tuple[str, str]:
+    async def _close_stale_clients_for_settings(
+        self,
+        settings: Settings,
+        *,
+        keep_key: HttpClientKey,
+    ) -> None:
+        base_key = self._base_key(settings)
+        stale_keys = [
+            key
+            for key in self._clients
+            if key != keep_key and self._base_key_from_key(key) == base_key
+        ]
+        for stale_key in stale_keys:
+            await self._clients.pop(stale_key).close()
+
+    def _base_key(self, settings: Settings) -> HttpClientBaseKey:
         return (
             settings.watchfacts_url,
             str(settings.browser_state_path.resolve()),
         )
+
+    def _key(self, settings: Settings) -> HttpClientKey:
+        return (
+            settings.watchfacts_url,
+            str(settings.browser_state_path.resolve()),
+            settings.watchfacts_http_client_enabled,
+            settings.watchfacts_form_cache_ttl_seconds,
+            settings.watchfacts_http_connect_timeout_seconds,
+            settings.watchfacts_http_pool_timeout_seconds,
+            settings.watchfacts_http_keepalive_expiry_seconds,
+        )
+
+    def _base_key_from_key(self, key: HttpClientKey) -> HttpClientBaseKey:
+        return (key[0], key[1])
 
 
 _DEFAULT_MANAGER = WatchFactsHttpClientManager()

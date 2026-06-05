@@ -14,7 +14,11 @@ from app.scraper import (
     ScraperError,
     fetch_watchfacts_html,
 )
-from app.watchfacts_http import WatchFactsHttpClient
+from app.watchfacts_http import (
+    WatchFactsHttpClient,
+    close_watchfacts_http_client,
+    watchfacts_http_client_status,
+)
 
 
 class FakeResponse:
@@ -651,6 +655,67 @@ def test_fetch_watchfacts_html_falls_back_to_playwright_when_http_client_fails(t
     )
     assert request.gets == [(settings.watchfacts_url, 90_000)]
     assert request.posts
+
+
+def test_fetch_watchfacts_html_records_default_http_fallback_status(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=True)
+    page = FakeSearchPage("<html><body>Should not need page navigation</body></html>", settings.watchfacts_url)
+    get_response = FakeSearchResponse(
+        url=settings.watchfacts_url,
+        body=(
+            '<html><body><form id="mode3Form" action="/simon-search-matches">'
+            '<input name="_token" value="csrf-token"></form></body></html>'
+        ),
+    )
+    post_response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
+    factory, request = make_request_bootstrap_playwright_factory(
+        page,
+        get_response=get_response,
+        post_response=post_response,
+    )
+
+    import app.watchfacts_http as watchfacts_http
+
+    async def failing_http_search(active_settings, query: str, *, timeout_ms: int):
+        assert active_settings == settings
+        assert query == "116500 black"
+        assert timeout_ms == 1234
+        exc = ScraperError("HTTPX search timed out")
+        setattr(exc, "watchfacts_http_error_type", "timeout")
+        raise exc
+
+    monkeypatch.setattr(
+        watchfacts_http,
+        "fetch_watchfacts_http_search",
+        failing_http_search,
+    )
+
+    async def run():
+        await close_watchfacts_http_client()
+        try:
+            result = await fetch_watchfacts_html(
+                settings,
+                query="116500 black",
+                playwright_factory=factory,
+                timeout_ms=1234,
+            )
+            return result, watchfacts_http_client_status(settings)
+        finally:
+            await close_watchfacts_http_client()
+
+    result, status = asyncio.run(run())
+
+    assert result == ScrapeResult(
+        html='{"listings":[{"title":"116500 black"}]}',
+        final_url="https://watchfacts.example/simon-search-matches",
+        server_filtered=True,
+    )
+    assert request.posts
+    assert status.last_error_type == "timeout"
+    assert status.last_fallback_at is not None
 
 
 def test_missing_browser_state_raises_clear_error(tmp_path) -> None:
