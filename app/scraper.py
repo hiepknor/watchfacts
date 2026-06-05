@@ -704,10 +704,18 @@ def _same_origin(left_url: str, right_url: str) -> bool:
     right = urlparse(right_url)
     return (
         left.scheme == right.scheme
-        and left.hostname == right.hostname
+        and _without_leading_www(left.hostname or "")
+        == _without_leading_www(right.hostname or "")
         and (left.port or _default_port(left.scheme))
         == (right.port or _default_port(right.scheme))
     )
+
+
+def _without_leading_www(host: str) -> str:
+    normalized = host.casefold()
+    if normalized.startswith("www."):
+        return normalized[4:]
+    return normalized
 
 
 def _default_port(scheme: str) -> int | None:
