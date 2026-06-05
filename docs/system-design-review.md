@@ -115,17 +115,18 @@ Cloudflare, or anti-bot systems.
    dashboard_url. The full OpenWA payload remains internal to the OpenWA client
    call.
 
-5. Important: add a Docker healthcheck for `watchfacts-mcp`.
+5. Resolved: add a Docker healthcheck for `watchfacts-mcp`.
 
    The MCP service exposes a `health` tool and deployment runs tests before
    recreation, but `docker-compose.yml` does not define a healthcheck for
    `watchfacts-mcp`. Operators can inspect logs, but Compose cannot mark the MCP
    container unhealthy when the runtime is not ready.
 
-   Recommended fix: add a lightweight healthcheck command for the MCP container
-   that validates process/runtime readiness without leaking secrets. Keep the
-   stronger WatchFacts browser-session check available through the MCP `health`
-   tool for operator diagnostics.
+   Implemented fix: `watchfacts-mcp` now has a lightweight Docker healthcheck
+   that uses Python stdlib socket connection to verify the local MCP port is
+   listening. It does not call WatchFacts, load browser state, or expose secrets.
+   The stronger WatchFacts browser-session check remains available through the
+   MCP `health` tool for operator diagnostics.
 
 ## Interface Notes
 
@@ -156,10 +157,12 @@ python -m pytest -q
 Result:
 
 ```text
-373 passed, 1 skipped
+374 passed, 1 skipped
 ```
 
 The stale rank follow-up issue described above is fixed by
 `tests/test_tool_runtime.py::test_watchfacts_create_chat_draft_rank_uses_latest_cached_result`.
 Search runtime backpressure is covered by
 `tests/test_search.py::test_search_workflow_limits_search_runtime_concurrent_distinct_queries`.
+The MCP Docker healthcheck is covered by
+`tests/test_docker_compose.py::test_watchfacts_mcp_service_has_lightweight_healthcheck`.
