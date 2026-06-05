@@ -36,6 +36,7 @@ PRODUCT_REFERENCE_RE = re.compile(
 )
 MULTI_LIST_REFERENCE_THRESHOLD = 1
 _IN_FLIGHT_SEARCHES: dict[str, asyncio.Task[list[SearchResult]]] = {}
+_SEARCH_SEMAPHORES: dict[str, asyncio.Semaphore] = {}
 
 
 class WatchFactsSearchWorkflow:
@@ -89,6 +90,17 @@ class WatchFactsSearchWorkflow:
             raise
 
     async def _search_uncached(self, query: str, cache_key: str) -> list[SearchResult]:
+        semaphore = _search_concurrency_semaphore(self.settings)
+        if semaphore is None:
+            return await self._search_uncached_inner(query, cache_key)
+        async with semaphore:
+            return await self._search_uncached_inner(query, cache_key)
+
+    async def _search_uncached_inner(
+        self,
+        query: str,
+        cache_key: str,
+    ) -> list[SearchResult]:
         scrape_result = await self.fetch_html(self.settings, query=query)
         parsed = parse_listings(scrape_result.html)
         matched = (
@@ -442,6 +454,18 @@ def _search_cache_key(query: str, settings: Settings) -> str:
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _search_concurrency_semaphore(settings: Settings) -> asyncio.Semaphore | None:
+    if settings.runtime_mode != "search":
+        return None
+    limit = max(1, settings.search_max_concurrent_searches)
+    key = f"{settings.db_path.resolve()}:{limit}"
+    semaphore = _SEARCH_SEMAPHORES.get(key)
+    if semaphore is None:
+        semaphore = asyncio.Semaphore(limit)
+        _SEARCH_SEMAPHORES[key] = semaphore
+    return semaphore
 
 
 def _serialize_results(results: list[SearchResult]) -> str:

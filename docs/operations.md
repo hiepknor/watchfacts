@@ -90,6 +90,8 @@ Access control:
   a queue notice for extra concurrent queries.
 - `SEARCH_CACHE_TTL_SECONDS=300` serves repeated identical normalized searches
   from SQLite before calling WatchFacts again.
+- `SEARCH_MAX_CONCURRENT_SEARCHES=1` serializes non-Telegram WatchFacts searches,
+  including Hermes/MCP requests, while identical queries still coalesce.
 
 Telegram behavior:
 

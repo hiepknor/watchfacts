@@ -94,6 +94,8 @@ Set `TELEGRAM_MAX_CONCURRENT_SEARCHES` to control how many WatchFacts searches
 may run at the same time; extra queries show a queue message and wait.
 Set `SEARCH_CACHE_TTL_SECONDS` to reuse fresh identical search results before
 calling WatchFacts again; the default is 300 seconds.
+Set `SEARCH_MAX_CONCURRENT_SEARCHES` to limit concurrent non-Telegram
+WatchFacts searches, including Hermes/MCP requests; the default is 1.
 
 Create an authenticated WatchFacts browser session:
 
@@ -368,6 +370,12 @@ Control fresh search cache TTL:
 
 ```bash
 SEARCH_CACHE_TTL_SECONDS=300
+```
+
+Control Hermes/MCP WatchFacts search concurrency:
+
+```bash
+SEARCH_MAX_CONCURRENT_SEARCHES=1
 ```
 
 Bot commands:

@@ -15,6 +15,7 @@ DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 DEFAULT_OPENAI_TIMEOUT_SECONDS = 12
 DEFAULT_OPENAI_MAX_REFINES = 3
 DEFAULT_SEARCH_CACHE_TTL_SECONDS = 5 * 60
+DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES = 1
 DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT = "/api/chats/drafts"
 HybridAIMode = Literal["off", "shadow", "review", "guarded"]
 DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
@@ -46,6 +47,7 @@ class Settings:
     openai_timeout_seconds: int = DEFAULT_OPENAI_TIMEOUT_SECONDS
     openai_max_refines: int = DEFAULT_OPENAI_MAX_REFINES
     search_cache_ttl_seconds: int = DEFAULT_SEARCH_CACHE_TTL_SECONDS
+    search_max_concurrent_searches: int = DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES
     openwa_base_url: str = ""
     openwa_api_key: str = ""
     openwa_dashboard_url: str = ""
@@ -168,6 +170,13 @@ def load_settings(
         source.get("SEARCH_CACHE_TTL_SECONDS", str(DEFAULT_SEARCH_CACHE_TTL_SECONDS)),
         name="SEARCH_CACHE_TTL_SECONDS",
     )
+    search_max_concurrent_searches = parse_positive_int(
+        source.get(
+            "SEARCH_MAX_CONCURRENT_SEARCHES",
+            str(DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES),
+        ),
+        name="SEARCH_MAX_CONCURRENT_SEARCHES",
+    )
     enable_openwa_chat_handoff = parse_bool(
         source.get("ENABLE_OPENWA_CHAT_HANDOFF", "false"),
         name="ENABLE_OPENWA_CHAT_HANDOFF",
@@ -201,6 +210,7 @@ def load_settings(
         openai_timeout_seconds=openai_timeout_seconds,
         openai_max_refines=openai_max_refines,
         search_cache_ttl_seconds=search_cache_ttl_seconds,
+        search_max_concurrent_searches=search_max_concurrent_searches,
         openwa_base_url=openwa_base_url,
         openwa_api_key=openwa_api_key,
         openwa_dashboard_url=openwa_dashboard_url,

@@ -11,6 +11,7 @@ from app.config import (
     DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT,
     DEFAULT_RUNTIME_MODE,
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
+    DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES,
     DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
     DEFAULT_WATCHFACTS_URL,
@@ -109,6 +110,7 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.openai_timeout_seconds == DEFAULT_OPENAI_TIMEOUT_SECONDS
     assert settings.openai_max_refines == DEFAULT_OPENAI_MAX_REFINES
     assert settings.search_cache_ttl_seconds == DEFAULT_SEARCH_CACHE_TTL_SECONDS
+    assert settings.search_max_concurrent_searches == DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES
     assert settings.enable_openwa_chat_handoff is False
     assert settings.openwa_base_url == ""
     assert settings.openwa_api_key == ""
@@ -197,6 +199,17 @@ def test_load_settings_reads_search_cache_ttl(tmp_path: Path) -> None:
     )
 
     assert settings.search_cache_ttl_seconds == 120
+
+
+def test_load_settings_reads_search_max_concurrent_searches(tmp_path: Path) -> None:
+    settings = load_search_settings(
+        env={
+            "SEARCH_MAX_CONCURRENT_SEARCHES": "2",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.search_max_concurrent_searches == 2
 
 
 def test_load_settings_reads_openwa_handoff_options(tmp_path: Path) -> None:

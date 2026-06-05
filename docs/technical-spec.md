@@ -72,6 +72,7 @@ Expected environment:
 | `HEADLESS` | No | `true` | Browser headless mode |
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
 | `SEARCH_CACHE_TTL_SECONDS` | No | `300` | Fresh-result cache lifetime for identical normalized searches before calling WatchFacts again |
+| `SEARCH_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum non-Telegram WatchFacts searches running at the same time; identical queries still coalesce |
 | `HYBRID_AI_MODE` | No | `off` | Controlled AI mode: `off`, `shadow`, `review`, or `guarded`; only `guarded` can alter search output |
 | `OPENAI_API_KEY` | Required when AI mode is not `off` | None | OpenAI API key; never logged or shown in Telegram |
 | `OPENAI_MODEL` | No | Cost-conscious current model | Model used for structured refinement suggestions |
@@ -94,6 +95,7 @@ Configuration rules:
 - Load MCP/search runtime settings without requiring `TELEGRAM_BOT_TOKEN`.
 - Validate Telegram result limit as a positive integer.
 - Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
+- Use `SEARCH_MAX_CONCURRENT_SEARCHES` to serialize or bound Hermes/MCP WatchFacts browser searches.
 - Remove local model runtime support from the production path.
 - Keep `HYBRID_AI_MODE=off` by default; use `shadow` or `review` to collect safe suggestions before considering `guarded`.
 - Require `OPENAI_API_KEY` only when OpenAI-assisted modes are enabled.

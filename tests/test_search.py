@@ -195,6 +195,46 @@ def test_search_workflow_coalesces_concurrent_same_query_fetches(tmp_path) -> No
     assert query_count == 2
 
 
+def test_search_workflow_limits_search_runtime_concurrent_distinct_queries(tmp_path) -> None:
+    settings = Settings(
+        telegram_bot_token="",
+        telegram_allowed_user_ids=(),
+        telegram_result_limit=5,
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+        headless=True,
+        enable_crawl4ai=True,
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+        db_path=tmp_path / "data" / "bot.db",
+        browser_state_path=tmp_path / "data" / "watchfacts_state.json",
+        runtime_mode="search",
+        search_max_concurrent_searches=1,
+    )
+    active_fetches = 0
+    max_active_fetches = 0
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal active_fetches, max_active_fetches
+        active_fetches += 1
+        max_active_fetches = max(max_active_fetches, active_fetches)
+        await asyncio.sleep(0.01)
+        active_fetches -= 1
+        return ScrapeResult(html="{}", final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    async def run_searches() -> None:
+        await asyncio.gather(
+            workflow.search("5712g"),
+            workflow.search("5712r"),
+        )
+
+    asyncio.run(run_searches())
+
+    assert max_active_fetches == 1
+
+
 def test_search_workflow_persists_no_result_queries(tmp_path) -> None:
     settings = make_settings(tmp_path)
 

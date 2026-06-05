@@ -89,7 +89,7 @@ Cloudflare, or anti-bot systems.
    WatchFacts listing number when available. Avoid changing the existing MCP
    field without a compatibility note for Hermes.
 
-3. Required: add MCP search backpressure for distinct queries.
+3. Resolved: add MCP search backpressure for distinct queries.
 
    `WatchFactsSearchWorkflow` coalesces identical in-flight searches, but the
    MCP path does not have a shared concurrency limit for different queries. A
@@ -97,10 +97,11 @@ Cloudflare, or anti-bot systems.
    WatchFacts requests at the same time. Telegram has
    `TELEGRAM_MAX_CONCURRENT_SEARCHES`; MCP needs an equivalent runtime guard.
 
-   Recommended fix: add a search-runtime semaphore for the MCP/tool-runtime path,
-   backed by a search-mode environment setting. Keep identical-query coalescing
-   in place, and return clear wait/error behavior instead of allowing unbounded
-   browser fan-out.
+   Implemented fix: search-mode runtime settings now include
+   `SEARCH_MAX_CONCURRENT_SEARCHES`, defaulting to 1. The search workflow applies
+   a semaphore only for `runtime_mode="search"`, so Hermes/MCP and diagnostics
+   are bounded while Telegram keeps its existing queue behavior. Identical-query
+   coalescing still happens before the concurrency gate.
 
 4. Resolved: narrow `create_chat_draft` response exposure.
 
@@ -155,8 +156,10 @@ python -m pytest -q
 Result:
 
 ```text
-371 passed, 1 skipped
+373 passed, 1 skipped
 ```
 
 The stale rank follow-up issue described above is fixed by
 `tests/test_tool_runtime.py::test_watchfacts_create_chat_draft_rank_uses_latest_cached_result`.
+Search runtime backpressure is covered by
+`tests/test_search.py::test_search_workflow_limits_search_runtime_concurrent_distinct_queries`.
