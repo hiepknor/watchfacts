@@ -102,17 +102,17 @@ Cloudflare, or anti-bot systems.
    in place, and return clear wait/error behavior instead of allowing unbounded
    browser fan-out.
 
-4. Required: narrow `create_chat_draft` response exposure.
+4. Resolved: narrow `create_chat_draft` response exposure.
 
    `watchfacts_create_chat_draft_payload()` returns the full OpenWA draft payload
    to the MCP caller, including raw listing fields. The OpenWA API needs the
    payload, but Hermes generally should not receive raw listing text unless a
    diagnostic path explicitly asks for it.
 
-   Recommended fix: return only safe follow-up fields from MCP
-   `create_chat_draft`: status, result_id, rank, draft_id, chat_id, and
-   dashboard_url. Keep the full payload internal or behind an explicit diagnostic
-   option that is not exposed to normal Hermes usage.
+   Implemented fix: normal `create_chat_draft` responses return only safe
+   follow-up fields: status, result_id, rank, draft_id, chat_id, and
+   dashboard_url. The full OpenWA payload remains internal to the OpenWA client
+   call.
 
 5. Important: add a Docker healthcheck for `watchfacts-mcp`.
 

@@ -256,6 +256,7 @@ def test_watchfacts_create_chat_draft_uses_cached_search_result(tmp_path) -> Non
     assert draft_payload["result_id"] == result_id
     assert draft_payload["draft_id"] == "draft-1"
     assert draft_payload["dashboard_url"] == "https://dashboard.example/chats/drafts/draft-1"
+    assert "payload" not in draft_payload
     assert requests[0]["sourceResultId"] == result_id
     assert requests[0]["seller"]["phone"] == "8617826241887"
     assert requests[0]["sourceUrl"] == "https://watchfacts.com/listing/1"

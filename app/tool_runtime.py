@@ -181,7 +181,6 @@ async def watchfacts_create_chat_draft_payload(
         "draft_id": response.draft_id,
         "chat_id": response.chat_id,
         "dashboard_url": response.dashboard_url,
-        "payload": payload,
     }
 
 
