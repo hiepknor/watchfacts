@@ -217,6 +217,7 @@ from app.tool_runtime import watchfacts_search_payload
 payload = await watchfacts_search_payload(
     "5712g",
     limit=5,
+    offset=0,
     include_similar=True,
     include_raw=False,
 )
@@ -230,7 +231,7 @@ The MCP bridge exposes the runtime as structured tools for Hermes:
 
 | Tool | Purpose |
 | --- | --- |
-| `search` | Search WatchFacts and return ranked results with `result_id` handles |
+| `search` | Search WatchFacts and return paginated ranked results with `result_id` handles |
 | `health` | Check WatchFacts session, database, OpenWA, and search readiness |
 | `create_chat_draft` | Create an OpenWA chat draft from a prior `search` result |
 | `report_issue` | Record result feedback for owner review |

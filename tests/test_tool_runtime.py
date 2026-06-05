@@ -58,8 +58,12 @@ def test_watchfacts_search_payload_serializes_results_for_tool_runtime() -> None
     assert workflow.queries == ["5712g"]
     assert payload["query"] == "5712g"
     assert payload["total_count"] == 2
+    assert payload["offset"] == 0
+    assert payload["limit"] == 1
     assert payload["result_count"] == 1
     assert payload["truncated"] is True
+    assert payload["has_more"] is True
+    assert payload["next_offset"] == 1
     assert payload["result_cache_ttl_seconds"] == 1800
     result = payload["results"][0]
     assert result["rank"] == 1
@@ -119,6 +123,33 @@ def test_watchfacts_search_payload_can_include_raw_and_similar_results() -> None
     ]
 
 
+def test_watchfacts_search_payload_supports_offset_pagination() -> None:
+    workflow = FakeWorkflow(
+        [
+            SearchResult("5712G first"),
+            SearchResult("5712G second"),
+            SearchResult("5712G third"),
+        ]
+    )
+
+    payload = asyncio.run(
+        watchfacts_search_payload(
+            "5712g",
+            workflow=workflow,
+            limit=1,
+            offset=1,
+        )
+    )
+
+    assert payload["offset"] == 1
+    assert payload["limit"] == 1
+    assert payload["result_count"] == 1
+    assert payload["has_more"] is True
+    assert payload["next_offset"] == 2
+    assert payload["results"][0]["rank"] == 2
+    assert payload["results"][0]["listing_text"] == "5712G second"
+
+
 def test_watchfacts_search_payload_rejects_empty_query() -> None:
     with pytest.raises(ValueError, match="query must not be empty"):
         asyncio.run(watchfacts_search_payload(" ", workflow=FakeWorkflow([])))
@@ -128,6 +159,13 @@ def test_watchfacts_search_payload_rejects_non_positive_limit() -> None:
     with pytest.raises(ValueError, match="limit must be a positive integer"):
         asyncio.run(
             watchfacts_search_payload("5712g", workflow=FakeWorkflow([]), limit=0)
+        )
+
+
+def test_watchfacts_search_payload_rejects_negative_offset() -> None:
+    with pytest.raises(ValueError, match="offset must not be negative"):
+        asyncio.run(
+            watchfacts_search_payload("5712g", workflow=FakeWorkflow([]), offset=-1)
         )
 
 

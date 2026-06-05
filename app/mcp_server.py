@@ -34,12 +34,14 @@ app = FastMCP(
 async def search(
     query: str,
     limit: int = 5,
+    offset: int = 0,
     include_similar: bool = True,
 ) -> dict[str, object]:
     """Search WatchFacts and return a structured payload."""
     return await watchfacts_search_payload(
         query=query,
         limit=limit,
+        offset=offset,
         include_similar=include_similar,
         include_raw=False,
     )

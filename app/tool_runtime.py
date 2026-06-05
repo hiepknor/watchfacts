@@ -53,6 +53,7 @@ async def watchfacts_search_payload(
     query: str,
     *,
     limit: int | None = None,
+    offset: int = 0,
     include_similar: bool = True,
     include_raw: bool = False,
     settings: Settings | None = None,
@@ -60,19 +61,26 @@ async def watchfacts_search_payload(
 ) -> dict[str, object]:
     normalized_query = _require_text(query, "query")
     _validate_limit(limit)
+    _validate_offset(offset)
 
     active_workflow = workflow or WatchFactsSearchWorkflow(
         settings or load_search_settings()
     )
     results = await active_workflow.search(normalized_query)
     _store_results(normalized_query, results)
-    visible_results = results[:limit] if limit is not None else results
+    visible_results = results[offset : offset + limit] if limit is not None else results[offset:]
+    next_offset = offset + len(visible_results)
+    has_more = next_offset < len(results)
 
     return {
         "query": normalized_query,
         "total_count": len(results),
+        "offset": offset,
+        "limit": limit,
         "result_count": len(visible_results),
-        "truncated": len(visible_results) < len(results),
+        "truncated": offset > 0 or has_more,
+        "has_more": has_more,
+        "next_offset": next_offset if has_more else None,
         "result_cache_ttl_seconds": RESULT_CACHE_TTL_SECONDS,
         "results": [
             _search_result_payload(
@@ -82,7 +90,7 @@ async def watchfacts_search_payload(
                 include_similar=include_similar,
                 include_raw=include_raw,
             )
-            for rank, result in enumerate(visible_results, start=1)
+            for rank, result in enumerate(visible_results, start=offset + 1)
         ],
     }
 
@@ -557,6 +565,11 @@ def _validate_issue_type(issue_type: str) -> str:
 def _validate_limit(limit: int | None) -> None:
     if limit is not None and limit <= 0:
         raise ValueError("limit must be a positive integer")
+
+
+def _validate_offset(offset: int) -> None:
+    if offset < 0:
+        raise ValueError("offset must not be negative")
 
 
 def _require_text(value: str, name: str) -> str:
