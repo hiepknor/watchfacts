@@ -310,7 +310,7 @@ def test_watchfacts_http_client_posts_query_from_saved_browser_state(tmp_path) -
 
         assert request.method == "POST"
         posted = urllib.parse.parse_qs(request.content.decode())
-        assert posted["reference"] == ["116500 black"]
+        assert posted["reference"] == ["116500"]
         assert posted["_token"] == ["csrf-token"]
         return httpx.Response(
             200,

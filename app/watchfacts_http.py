@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.config import Settings
+from app.matcher_token_classification import parse_query_terms
 from app.scraper import (
     BrowserSessionError,
     ScrapeResult,
@@ -349,7 +350,7 @@ class WatchFactsHttpClient:
         try:
             response = await client.post(
                 form.action_url,
-                data=search_form_data(form.token, query),
+                data=search_form_data(form.token, _server_search_query(query)),
                 headers={"Accept": "application/json, text/plain, */*"},
                 timeout=self._search_request_timeout(timeout_ms),
             )
@@ -736,6 +737,13 @@ def watchfacts_http_error_type(exc: Exception) -> str:
     if isinstance(exc, httpx.HTTPError):
         return "httpx_error"
     return exc.__class__.__name__
+
+
+def _server_search_query(query: str) -> str:
+    reference_terms, _ = parse_query_terms(query)
+    if not reference_terms:
+        return query.strip()
+    return " ".join(" ".join(parts) for parts in reference_terms)
 
 
 def _scraper_error(message: str, error_type: str) -> ScraperError:

@@ -473,6 +473,45 @@ def test_watchfacts_http_manager_uses_longer_search_timeout_for_post(
     ]
 
 
+def test_watchfacts_http_manager_posts_reference_only_query(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+    posted_references: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return form_response(request)
+        posted = urllib.parse.parse_qs(request.content.decode())
+        posted_references.extend(posted["reference"])
+        return search_response(request)
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+
+    async def run() -> None:
+        manager = WatchFactsHttpClientManager(client_factory=client_factory)
+        try:
+            await manager.fetch_search(
+                settings,
+                "7118/1200a blue new",
+                timeout_ms=30_000,
+            )
+        finally:
+            await manager.close_all()
+
+    asyncio.run(run())
+
+    assert posted_references == ["7118/1200a"]
+
+
 def test_watchfacts_http_manager_warmup_caches_form_before_first_search(
     tmp_path: Path,
 ) -> None:
