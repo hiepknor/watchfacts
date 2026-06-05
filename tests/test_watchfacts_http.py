@@ -414,6 +414,65 @@ def test_watchfacts_http_manager_uses_lower_caller_timeout_when_provided(
     assert {timeout.read for timeout in captured_timeouts} == {1.234}
 
 
+def test_watchfacts_http_manager_uses_longer_search_timeout_for_post(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    settings = Settings(
+        **{
+            **settings.__dict__,
+            "watchfacts_http_read_timeout_seconds": 13,
+            "watchfacts_http_search_read_timeout_seconds": 120,
+        }
+    )
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+    captured_timeouts: list[tuple[str, httpx.Timeout]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return form_response(request)
+        return search_response(request)
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+
+    async def run() -> None:
+        manager = WatchFactsHttpClientManager(client_factory=client_factory)
+        try:
+            client = await manager._client_for(settings)
+            original_request_timeout = client._request_timeout
+            original_search_request_timeout = client._search_request_timeout
+
+            def capture_request_timeout(timeout_ms: int) -> httpx.Timeout:
+                timeout = original_request_timeout(timeout_ms)
+                captured_timeouts.append(("form", timeout))
+                return timeout
+
+            def capture_search_request_timeout(timeout_ms: int) -> httpx.Timeout:
+                timeout = original_search_request_timeout(timeout_ms)
+                captured_timeouts.append(("search", timeout))
+                return timeout
+
+            client._request_timeout = capture_request_timeout
+            client._search_request_timeout = capture_search_request_timeout
+            await manager.fetch_search(settings, "7118/1200a blue", timeout_ms=30_000)
+        finally:
+            await manager.close_all()
+
+    asyncio.run(run())
+
+    assert [(kind, timeout.read) for kind, timeout in captured_timeouts] == [
+        ("form", 13),
+        ("search", 120),
+    ]
+
+
 def test_watchfacts_http_manager_warmup_caches_form_before_first_search(
     tmp_path: Path,
 ) -> None:

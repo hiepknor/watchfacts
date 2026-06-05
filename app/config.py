@@ -22,6 +22,7 @@ DEFAULT_WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS = 10
 DEFAULT_WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS = 10
 DEFAULT_WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS = 60
 DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS = 30
+DEFAULT_WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS = 120
 DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS = 60
 DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH = True
 DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT = "/api/chats/drafts"
@@ -73,6 +74,9 @@ class Settings:
     )
     watchfacts_http_read_timeout_seconds: int = (
         DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS
+    )
+    watchfacts_http_search_read_timeout_seconds: int = (
+        DEFAULT_WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS
     )
     watchfacts_http_failure_cooldown_seconds: int = (
         DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS
@@ -243,6 +247,13 @@ def load_settings(
         ),
         name="WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS",
     )
+    watchfacts_http_search_read_timeout_seconds = parse_positive_int(
+        source.get(
+            "WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS",
+            str(DEFAULT_WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS),
+        ),
+        name="WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS",
+    )
     watchfacts_http_failure_cooldown_seconds = parse_positive_int(
         source.get(
             "WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS",
@@ -297,6 +308,9 @@ def load_settings(
         watchfacts_http_pool_timeout_seconds=watchfacts_http_pool_timeout_seconds,
         watchfacts_http_keepalive_expiry_seconds=watchfacts_http_keepalive_expiry_seconds,
         watchfacts_http_read_timeout_seconds=watchfacts_http_read_timeout_seconds,
+        watchfacts_http_search_read_timeout_seconds=(
+            watchfacts_http_search_read_timeout_seconds
+        ),
         watchfacts_http_failure_cooldown_seconds=watchfacts_http_failure_cooldown_seconds,
         watchfacts_http_warmup_on_health=watchfacts_http_warmup_on_health,
         openwa_base_url=openwa_base_url,

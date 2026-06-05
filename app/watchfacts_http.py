@@ -30,7 +30,7 @@ WATCHFACTS_HTTP_MAX_KEEPALIVE_CONNECTIONS = 2
 CSRF_RETRY_STATUSES = {401, 403, 419}
 HttpxClientFactory = Callable[[httpx.Cookies, httpx.Timeout, httpx.Limits], httpx.AsyncClient]
 HttpClientBaseKey = tuple[str, str]
-HttpClientKey = tuple[str, str, bool, int, int, int, int, int, int]
+HttpClientKey = tuple[str, str, bool, int, int, int, int, int, int, int]
 
 
 @dataclass(frozen=True)
@@ -351,7 +351,7 @@ class WatchFactsHttpClient:
                 form.action_url,
                 data=search_form_data(form.token, query),
                 headers={"Accept": "application/json, text/plain, */*"},
-                timeout=self._request_timeout(timeout_ms),
+                timeout=self._search_request_timeout(timeout_ms),
             )
             return response
         finally:
@@ -401,6 +401,21 @@ class WatchFactsHttpClient:
             request_timeout_seconds,
             self.settings.watchfacts_http_read_timeout_seconds,
         )
+        return self._timeout_with_read(read_timeout)
+
+    def _search_request_timeout(self, timeout_ms: int) -> httpx.Timeout:
+        request_timeout_seconds = (
+            timeout_ms / 1000
+            if timeout_ms > 0
+            else self.settings.watchfacts_http_search_read_timeout_seconds
+        )
+        read_timeout = max(
+            request_timeout_seconds,
+            self.settings.watchfacts_http_search_read_timeout_seconds,
+        )
+        return self._timeout_with_read(read_timeout)
+
+    def _timeout_with_read(self, read_timeout: float) -> httpx.Timeout:
         return httpx.Timeout(
             read_timeout,
             connect=self.settings.watchfacts_http_connect_timeout_seconds,
@@ -663,6 +678,7 @@ class WatchFactsHttpClientManager:
             settings.watchfacts_http_pool_timeout_seconds,
             settings.watchfacts_http_keepalive_expiry_seconds,
             settings.watchfacts_http_read_timeout_seconds,
+            settings.watchfacts_http_search_read_timeout_seconds,
             settings.watchfacts_http_failure_cooldown_seconds,
         )
 
