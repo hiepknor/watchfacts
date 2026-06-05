@@ -94,8 +94,10 @@ The scraper should act like an authenticated browser controlled by the operator.
 Allowed:
 
 - Load saved browser state.
+- Read saved browser-state cookies into memory for HTTPX requests to the same WatchFacts host.
 - Navigate to the configured WatchFacts page.
 - Parse page HTML visible to the logged-in account.
+- Submit the visible WatchFacts search form with the CSRF token returned to the authenticated session.
 
 Not allowed:
 
@@ -103,6 +105,7 @@ Not allowed:
 - Automate credential stuffing.
 - Defeat bot protection.
 - Extract hidden authentication material.
+- Log, expose, or persist cookies, CSRF tokens, or browser storage state outside the operator-created session file.
 
 ## OpenAI Data Boundary
 

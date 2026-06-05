@@ -1,5 +1,6 @@
 python-telegram-bot[job-queue]
 mcp>=1.0,<2
+httpx
 playwright
 crawl4ai
 beautifulsoup4

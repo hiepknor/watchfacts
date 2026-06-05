@@ -15,6 +15,8 @@ from app.config import (
     DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
     DEFAULT_WATCHFACTS_URL,
+    DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS,
+    DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED,
     load_settings,
     load_search_settings,
     parse_bool,
@@ -111,6 +113,8 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.openai_max_refines == DEFAULT_OPENAI_MAX_REFINES
     assert settings.search_cache_ttl_seconds == DEFAULT_SEARCH_CACHE_TTL_SECONDS
     assert settings.search_max_concurrent_searches == DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES
+    assert settings.watchfacts_http_client_enabled == DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED
+    assert settings.watchfacts_form_cache_ttl_seconds == DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS
     assert settings.enable_openwa_chat_handoff is False
     assert settings.openwa_base_url == ""
     assert settings.openwa_api_key == ""
@@ -210,6 +214,19 @@ def test_load_settings_reads_search_max_concurrent_searches(tmp_path: Path) -> N
     )
 
     assert settings.search_max_concurrent_searches == 2
+
+
+def test_load_settings_reads_watchfacts_http_client_options(tmp_path: Path) -> None:
+    settings = load_search_settings(
+        env={
+            "WATCHFACTS_HTTP_CLIENT_ENABLED": "false",
+            "WATCHFACTS_FORM_CACHE_TTL_SECONDS": "1200",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.watchfacts_http_client_enabled is False
+    assert settings.watchfacts_form_cache_ttl_seconds == 1200
 
 
 def test_load_settings_reads_openwa_handoff_options(tmp_path: Path) -> None:

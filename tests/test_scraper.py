@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import urllib.parse
 
+import httpx
 import pytest
 
 from app.config import Settings
@@ -9,6 +12,7 @@ from app.scraper import (
     BrowserSessionError,
     ScrapeResult,
     ScraperError,
+    WatchFactsHttpClient,
     fetch_watchfacts_html,
 )
 
@@ -171,7 +175,12 @@ class FakePlaywrightManager:
         return None
 
 
-def make_settings(tmp_path, *, state_exists: bool = True) -> Settings:
+def make_settings(
+    tmp_path,
+    *,
+    state_exists: bool = True,
+    http_client_enabled: bool = False,
+) -> Settings:
     state_path = tmp_path / "data" / "watchfacts_state.json"
     if state_exists:
         state_path.parent.mkdir(parents=True)
@@ -189,7 +198,32 @@ def make_settings(tmp_path, *, state_exists: bool = True) -> Settings:
         logs_dir=tmp_path / "logs",
         db_path=tmp_path / "data" / "bot.db",
         browser_state_path=state_path,
+        watchfacts_http_client_enabled=http_client_enabled,
     )
+
+
+def write_storage_state(settings: Settings, *, cookies: list[dict[str, object]]) -> None:
+    settings.browser_state_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.browser_state_path.write_text(
+        json.dumps(
+            {
+                "cookies": cookies,
+                "origins": [],
+            }
+        )
+    )
+
+
+def watchfacts_cookie(name: str, value: str, *, domain: str = "watchfacts.example") -> dict[str, object]:
+    return {
+        "name": name,
+        "value": value,
+        "domain": domain,
+        "path": "/",
+        "secure": True,
+        "httpOnly": True,
+        "sameSite": "Lax",
+    }
 
 
 def make_playwright_factory(page: FakePage):
@@ -242,6 +276,284 @@ def make_request_bootstrap_playwright_factory(
         return FakePlaywrightManager(FakePlaywright(chromium))
 
     return factory, request
+
+
+def test_watchfacts_http_client_posts_query_from_saved_browser_state(tmp_path) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=True)
+    write_storage_state(
+        settings,
+        cookies=[
+            watchfacts_cookie("wf_session", "secret"),
+            watchfacts_cookie("other_session", "ignored", domain="other.example"),
+        ],
+    )
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            assert request.headers.get("cookie") == "wf_session=secret"
+            return httpx.Response(
+                200,
+                text=(
+                    '<html><body><form id="mode3Form" action="/simon-search-matches">'
+                    '<input name="_token" value="csrf-token"></form></body></html>'
+                ),
+                request=request,
+            )
+
+        assert request.method == "POST"
+        posted = urllib.parse.parse_qs(request.content.decode())
+        assert posted["reference"] == ["116500 black"]
+        assert posted["_token"] == ["csrf-token"]
+        return httpx.Response(
+            200,
+            text='{"listings":[{"title":"116500 black"}]}',
+            request=request,
+        )
+
+    async def run() -> ScrapeResult:
+        http_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+        client = WatchFactsHttpClient.from_settings(settings, client=http_client)
+        try:
+            return await client.fetch_search("116500 black", timeout_ms=1234)
+        finally:
+            await client.close()
+
+    result = asyncio.run(run())
+
+    assert result == ScrapeResult(
+        html='{"listings":[{"title":"116500 black"}]}',
+        final_url="https://watchfacts.example/simon-search-matches",
+        server_filtered=True,
+    )
+    assert [request.method for request in requests] == ["GET", "POST"]
+
+
+def test_watchfacts_http_client_reuses_cached_search_form(tmp_path) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=True)
+    write_storage_state(settings, cookies=[watchfacts_cookie("wf_session", "secret")])
+    now = 100.0
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                text=(
+                    '<html><body><form id="mode3Form" action="/simon-search-matches">'
+                    '<input name="_token" value="cached-token"></form></body></html>'
+                ),
+                request=request,
+            )
+        return httpx.Response(200, text='{"listings":[]}', request=request)
+
+    async def run() -> None:
+        http_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+        client = WatchFactsHttpClient.from_settings(
+            settings,
+            client=http_client,
+            now=lambda: now,
+        )
+        try:
+            await client.fetch_search("5712g", timeout_ms=1234)
+            await client.fetch_search("5712r", timeout_ms=1234)
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+    assert [request.method for request in requests] == ["GET", "POST", "POST"]
+    posted = urllib.parse.parse_qs(requests[-1].content.decode())
+    assert posted["_token"] == ["cached-token"]
+    assert posted["reference"] == ["5712r"]
+
+
+def test_watchfacts_http_client_refreshes_form_after_expired_token(tmp_path) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=True)
+    write_storage_state(settings, cookies=[watchfacts_cookie("wf_session", "secret")])
+    get_count = 0
+    post_count = 0
+    posted_tokens: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal get_count, post_count
+        if request.method == "GET":
+            get_count += 1
+            token = f"token-{get_count}"
+            return httpx.Response(
+                200,
+                text=(
+                    '<html><body><form id="mode3Form" action="/simon-search-matches">'
+                    f'<input name="_token" value="{token}"></form></body></html>'
+                ),
+                request=request,
+            )
+
+        post_count += 1
+        posted = urllib.parse.parse_qs(request.content.decode())
+        posted_tokens.append(posted["_token"][0])
+        if post_count == 1:
+            return httpx.Response(419, text="Page Expired", request=request)
+        return httpx.Response(
+            200,
+            text='{"listings":[{"title":"228253a choco"}]}',
+            request=request,
+        )
+
+    async def run() -> ScrapeResult:
+        http_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+        client = WatchFactsHttpClient.from_settings(settings, client=http_client)
+        try:
+            return await client.fetch_search("228253a choco", timeout_ms=1234)
+        finally:
+            await client.close()
+
+    result = asyncio.run(run())
+
+    assert result.html == '{"listings":[{"title":"228253a choco"}]}'
+    assert get_count == 2
+    assert posted_tokens == ["token-1", "token-2"]
+
+
+def test_watchfacts_http_client_rejects_cross_origin_search_action(tmp_path) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=True)
+    write_storage_state(settings, cookies=[watchfacts_cookie("wf_session", "secret")])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            text=(
+                '<html><body><form id="mode3Form" action="https://evil.example/search">'
+                '<input name="_token" value="csrf-token"></form></body></html>'
+            ),
+            request=request,
+        )
+
+    async def run() -> None:
+        http_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+        client = WatchFactsHttpClient.from_settings(settings, client=http_client)
+        try:
+            with pytest.raises(ScraperError, match="cross-origin"):
+                await client.fetch_search("5712g", timeout_ms=1234)
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+
+def test_watchfacts_http_client_rejects_invalid_storage_state(tmp_path) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=True)
+    settings.browser_state_path.write_text("{not-json")
+
+    async def run() -> None:
+        http_client = httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, text="{}", request=request)
+            ),
+            follow_redirects=True,
+        )
+        client = WatchFactsHttpClient.from_settings(settings, client=http_client)
+        try:
+            with pytest.raises(BrowserSessionError, match="Invalid browser session"):
+                await client.fetch_search("5712g", timeout_ms=1234)
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+
+def test_fetch_watchfacts_html_uses_http_client_for_query(tmp_path) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=True)
+    fetched: list[tuple[str, int]] = []
+
+    class FakeHttpClient:
+        async def fetch_search(self, query: str, *, timeout_ms: int) -> ScrapeResult:
+            fetched.append((query, timeout_ms))
+            return ScrapeResult(
+                html='{"listings":[{"title":"5712g"}]}',
+                final_url="https://watchfacts.example/simon-search-matches",
+                server_filtered=True,
+            )
+
+        async def close(self) -> None:
+            return None
+
+    def fail_playwright_factory():
+        raise AssertionError("Playwright should not launch when HTTPX search succeeds")
+
+    result = asyncio.run(
+        fetch_watchfacts_html(
+            settings,
+            query=" 5712g ",
+            playwright_factory=fail_playwright_factory,
+            http_client_factory=lambda _: FakeHttpClient(),
+            timeout_ms=1234,
+        )
+    )
+
+    assert result == ScrapeResult(
+        html='{"listings":[{"title":"5712g"}]}',
+        final_url="https://watchfacts.example/simon-search-matches",
+        server_filtered=True,
+    )
+    assert fetched == [("5712g", 1234)]
+
+
+def test_fetch_watchfacts_html_falls_back_to_playwright_when_http_client_fails(tmp_path) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=True)
+    page = FakeSearchPage("<html><body>Should not need page navigation</body></html>", settings.watchfacts_url)
+    get_response = FakeSearchResponse(
+        url=settings.watchfacts_url,
+        body=(
+            '<html><body><form id="mode3Form" action="/simon-search-matches">'
+            '<input name="_token" value="csrf-token"></form></body></html>'
+        ),
+    )
+    post_response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
+    factory, request = make_request_bootstrap_playwright_factory(
+        page,
+        get_response=get_response,
+        post_response=post_response,
+    )
+
+    class FailingHttpClient:
+        async def fetch_search(self, query: str, *, timeout_ms: int) -> ScrapeResult:
+            raise ScraperError("HTTPX search failed")
+
+        async def close(self) -> None:
+            return None
+
+    result = asyncio.run(
+        fetch_watchfacts_html(
+            settings,
+            query="116500 black",
+            playwright_factory=factory,
+            http_client_factory=lambda _: FailingHttpClient(),
+            timeout_ms=1234,
+        )
+    )
+
+    assert result == ScrapeResult(
+        html='{"listings":[{"title":"116500 black"}]}',
+        final_url="https://watchfacts.example/simon-search-matches",
+        server_filtered=True,
+    )
+    assert request.gets == [(settings.watchfacts_url, 90_000)]
+    assert request.posts
 
 
 def test_missing_browser_state_raises_clear_error(tmp_path) -> None:

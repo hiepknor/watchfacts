@@ -16,7 +16,8 @@ production integration target is Hermes over MCP.
 - Hermes MCP integration
 - Legacy Telegram bot integration
 - WatchFacts authenticated search
-- Playwright browser automation
+- HTTPX WatchFacts search client with Playwright fallback
+- Playwright browser automation for login/session checks
 - WatchFacts JSON search response parsing with HTML fallback
 - BeautifulSoup + lxml HTML parsing
 - Regex and token-based matching
@@ -43,6 +44,7 @@ production integration target is Hermes over MCP.
 - Python
 - MCP / FastMCP-compatible server
 - python-telegram-bot
+- HTTPX
 - Playwright
 - BeautifulSoup4
 - lxml
@@ -96,6 +98,10 @@ Set `SEARCH_CACHE_TTL_SECONDS` to reuse fresh identical search results before
 calling WatchFacts again; the default is 300 seconds.
 Set `SEARCH_MAX_CONCURRENT_SEARCHES` to limit concurrent non-Telegram
 WatchFacts searches, including Hermes/MCP requests; the default is 1.
+Set `WATCHFACTS_HTTP_CLIENT_ENABLED=false` to force the older Playwright search
+path. Set `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to control how long the HTTPX
+search client reuses the authenticated WatchFacts search form action and CSRF
+token; the default is 900 seconds.
 
 Create an authenticated WatchFacts browser session:
 
@@ -378,6 +384,13 @@ Control Hermes/MCP WatchFacts search concurrency:
 SEARCH_MAX_CONCURRENT_SEARCHES=1
 ```
 
+Control the HTTPX search client and WatchFacts form cache:
+
+```bash
+WATCHFACTS_HTTP_CLIENT_ENABLED=true
+WATCHFACTS_FORM_CACHE_TTL_SECONDS=900
+```
+
 Bot commands:
 
 | Command | Purpose |
@@ -531,16 +544,19 @@ Current `requirements.txt`:
 
 ```text
 python-telegram-bot[job-queue]
+mcp>=1.0,<2
+httpx
 playwright
 crawl4ai
 beautifulsoup4
 lxml
 python-dotenv
 pytest
-mcp>=1.0,<2
 ```
 
-`ENABLE_CRAWL4AI` remains in config as a compatibility flag. Current production search uses WatchFacts JSON responses and HTML parsing.
+`ENABLE_CRAWL4AI` remains in config as a compatibility flag. Current production
+search uses WatchFacts JSON responses and HTML parsing, with HTTPX preferred
+for search POSTs and Playwright retained for login, session health, and fallback.
 
 ## Ignored Files
 

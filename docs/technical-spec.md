@@ -5,6 +5,7 @@
 - Python 3.11+
 - MCP server for Hermes tool access
 - `python-telegram-bot[job-queue]` for Telegram integration
+- HTTPX for lightweight authenticated WatchFacts search requests
 - Playwright Chromium for authenticated browser automation
 - WatchFacts authenticated JSON search response parsing with HTML fallback
 - BeautifulSoup4 + lxml for HTML parsing
@@ -24,7 +25,7 @@ app/
   mcp_server.py    # WatchFacts MCP tools for Hermes
   tool_runtime.py  # non-Telegram payload runtime used by MCP and diagnostics
   search_result.py # shared search result dataclass
-  scraper.py       # Playwright browser/session/crawl logic
+  scraper.py       # HTTPX search plus Playwright browser/session/fallback logic
   parser.py        # HTML/listing extraction
   matcher.py       # stable public matcher API
   matcher_normalization.py # normalization and tokenization helpers
@@ -73,6 +74,8 @@ Expected environment:
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
 | `SEARCH_CACHE_TTL_SECONDS` | No | `300` | Fresh-result cache lifetime for identical normalized searches before calling WatchFacts again |
 | `SEARCH_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum non-Telegram WatchFacts searches running at the same time; identical queries still coalesce |
+| `WATCHFACTS_HTTP_CLIENT_ENABLED` | No | `true` | Prefer the lightweight HTTPX search client before Playwright fallback |
+| `WATCHFACTS_FORM_CACHE_TTL_SECONDS` | No | `900` | Lifetime for cached WatchFacts search form action and CSRF token used by HTTPX |
 | `HYBRID_AI_MODE` | No | `off` | Controlled AI mode: `off`, `shadow`, `review`, or `guarded`; only `guarded` can alter search output |
 | `OPENAI_API_KEY` | Required when AI mode is not `off` | None | OpenAI API key; never logged or shown in Telegram |
 | `OPENAI_MODEL` | No | Cost-conscious current model | Model used for structured refinement suggestions |
@@ -96,6 +99,8 @@ Configuration rules:
 - Validate Telegram result limit as a positive integer.
 - Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
 - Use `SEARCH_MAX_CONCURRENT_SEARCHES` to serialize or bound Hermes/MCP WatchFacts browser searches.
+- Use `WATCHFACTS_HTTP_CLIENT_ENABLED=false` to force the older Playwright search path during rollback.
+- Use `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to reduce repeated WatchFacts form GETs while still refreshing on CSRF/auth failures.
 - Remove local model runtime support from the production path.
 - Keep `HYBRID_AI_MODE=off` by default; use `shadow` or `review` to collect safe suggestions before considering `guarded`.
 - Require `OPENAI_API_KEY` only when OpenAI-assisted modes are enabled.
@@ -108,7 +113,7 @@ Hermes user request
   -> Hermes MCP client
   -> watchfacts-mcp tool: search / health / create_chat_draft / issue tools
   -> tool_runtime payload function
-  -> scraper loads saved browser state and posts the WatchFacts search form when available
+  -> scraper loads saved browser state and posts the WatchFacts search form through HTTPX when possible, with Playwright fallback
   -> parser extracts listing candidates from JSON response or HTML fallback
   -> matcher filters or scopes listings by query tokens
   -> dedupe removes repeated latest reposts
@@ -194,9 +199,11 @@ Responsibilities:
 
 Responsibilities:
 
-- Launch Chromium with Playwright.
 - Load `data/watchfacts_state.json`.
-- Navigate to `WATCHFACTS_URL`.
+- Prefer HTTPX for authenticated WatchFacts search POSTs.
+- Cache WatchFacts search form action and CSRF token briefly, and refresh on token/auth failures.
+- Launch Chromium with Playwright for login/session checks and fallback page fetches.
+- Navigate to `WATCHFACTS_URL` when Playwright fallback is needed.
 - Wait for stable page content.
 - Submit the WatchFacts search form when present.
 - Return search response text plus metadata indicating whether the server already filtered results.
@@ -205,7 +212,7 @@ Responsibilities:
 Boundaries:
 
 - Do not bypass login, captcha, Cloudflare, or anti-bot systems.
-- Do not read or log cookies/tokens except through Playwright's normal storage-state mechanism.
+- Do not log or persist cookies/tokens. HTTPX may read the operator-created Playwright storage state into memory only for authenticated WatchFacts requests.
 - Do not store WatchFacts credentials.
 
 ### `parser.py`

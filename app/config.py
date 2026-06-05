@@ -16,6 +16,8 @@ DEFAULT_OPENAI_TIMEOUT_SECONDS = 12
 DEFAULT_OPENAI_MAX_REFINES = 3
 DEFAULT_SEARCH_CACHE_TTL_SECONDS = 5 * 60
 DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES = 1
+DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED = True
+DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS = 15 * 60
 DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT = "/api/chats/drafts"
 HybridAIMode = Literal["off", "shadow", "review", "guarded"]
 DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
@@ -54,6 +56,8 @@ class Settings:
     openwa_chat_draft_endpoint: str = DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT
     enable_openwa_chat_handoff: bool = False
     runtime_mode: RuntimeMode = DEFAULT_RUNTIME_MODE
+    watchfacts_http_client_enabled: bool = DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED
+    watchfacts_form_cache_ttl_seconds: int = DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS
 
 
 def parse_bool(value: str, *, name: str) -> bool:
@@ -177,6 +181,20 @@ def load_settings(
         ),
         name="SEARCH_MAX_CONCURRENT_SEARCHES",
     )
+    watchfacts_http_client_enabled = parse_bool(
+        source.get(
+            "WATCHFACTS_HTTP_CLIENT_ENABLED",
+            str(DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED).lower(),
+        ),
+        name="WATCHFACTS_HTTP_CLIENT_ENABLED",
+    )
+    watchfacts_form_cache_ttl_seconds = parse_positive_int(
+        source.get(
+            "WATCHFACTS_FORM_CACHE_TTL_SECONDS",
+            str(DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS),
+        ),
+        name="WATCHFACTS_FORM_CACHE_TTL_SECONDS",
+    )
     enable_openwa_chat_handoff = parse_bool(
         source.get("ENABLE_OPENWA_CHAT_HANDOFF", "false"),
         name="ENABLE_OPENWA_CHAT_HANDOFF",
@@ -211,6 +229,8 @@ def load_settings(
         openai_max_refines=openai_max_refines,
         search_cache_ttl_seconds=search_cache_ttl_seconds,
         search_max_concurrent_searches=search_max_concurrent_searches,
+        watchfacts_http_client_enabled=watchfacts_http_client_enabled,
+        watchfacts_form_cache_ttl_seconds=watchfacts_form_cache_ttl_seconds,
         openwa_base_url=openwa_base_url,
         openwa_api_key=openwa_api_key,
         openwa_dashboard_url=openwa_dashboard_url,
