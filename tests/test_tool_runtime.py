@@ -252,12 +252,48 @@ def test_watchfacts_create_chat_draft_uses_cached_search_result(tmp_path) -> Non
     )
 
     assert draft_payload["status"] == "created"
+    assert draft_payload["rank"] == 1
+    assert draft_payload["result_id"] == result_id
     assert draft_payload["draft_id"] == "draft-1"
     assert draft_payload["dashboard_url"] == "https://dashboard.example/chats/drafts/draft-1"
     assert requests[0]["sourceResultId"] == result_id
     assert requests[0]["seller"]["phone"] == "8617826241887"
     assert requests[0]["sourceUrl"] == "https://watchfacts.com/listing/1"
     assert requests[0]["product"]["imageUrl"] == "https://watchfacts.com/image/1.jpg"
+
+    rank_payload = asyncio.run(
+        watchfacts_create_chat_draft_payload(
+            "5712g",
+            rank=1,
+            settings=settings,
+            workflow=workflow,
+            openwa_client=fake_client,
+        )
+    )
+
+    assert rank_payload["status"] == "created"
+    assert rank_payload["rank"] == 1
+    assert rank_payload["result_id"] == result_id
+
+
+def test_watchfacts_create_chat_draft_requires_result_reference(tmp_path) -> None:
+    settings = load_search_settings(
+        env={
+            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
+            "OPENWA_BASE_URL": "https://openwa.example",
+            "OPENWA_API_KEY": "secret",
+        },
+        project_root=tmp_path,
+    )
+
+    with pytest.raises(ValueError, match="result_id or rank is required"):
+        asyncio.run(
+            watchfacts_create_chat_draft_payload(
+                "5712g",
+                settings=settings,
+                workflow=FakeWorkflow([]),
+            )
+        )
 
 
 def test_watchfacts_issue_queue_payloads_round_trip(tmp_path) -> None:

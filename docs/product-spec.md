@@ -64,8 +64,8 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 - Search payload must include `result_id` for follow-up actions.
 - Search payload should include `image_url` when WatchFacts provides a product image.
 - Expose MCP tool `health` for WatchFacts session, database, OpenWA, and search readiness.
-- Expose MCP tool `create_chat_draft(query, result_id)` for seller handoff through OpenWA.
-- Expose MCP issue tools `report_issue`, `list_issues`, `get_issue`, `update_issue`, and `suspicious_summary`.
+- Expose MCP tool `create_chat_draft(query, result_id=None, rank=None)` for seller handoff through OpenWA.
+- Expose MCP issue tools `report_issue`, `list_issues`, `get_issue`, `update_issue`, and `suspicious_summary`; issue reporting should accept `result_id` or `rank`.
 - Accept plain-text Telegram messages as search queries in the legacy bot.
 - Support `/start`, `/help`, `/settings`, and `/cancel`.
 - Support `/health` for checking whether the saved WatchFacts session is valid.

@@ -295,8 +295,9 @@ mcp_servers:
 `search(query, limit=5, offset=0, include_similar=true)` returns ranked results,
 `has_more`, and `next_offset`. Hermes should reuse the original query and pass
 `offset=next_offset` for "xem thêm" follow-ups. Search results include
-`result_id` for later handoff/feedback and `image_url` for product photos when
-WatchFacts provides one.
+`result_id` and absolute `rank` for later handoff/feedback. Follow-up tools
+accept `result_id` when available, or `rank` when the user says "kết quả 20".
+Results include `image_url` for product photos when WatchFacts provides one.
 
 Tool catalog:
 
@@ -304,7 +305,7 @@ Tool catalog:
 | --- | --- |
 | `search` | Search WatchFacts and return paginated ranked results with `result_id` handles |
 | `health` | Check WatchFacts session, database, OpenWA, and search readiness |
-| `create_chat_draft` | Create an OpenWA chat draft from a prior `search` result |
+| `create_chat_draft` | Create an OpenWA chat draft from a prior `search` result by `result_id` or `rank` |
 | `report_issue` | Record result feedback for owner review |
 | `list_issues` | List open feedback and suspicious QA issues |
 | `get_issue` | Read one feedback or suspicious issue by `F<id>` or `S<id>` |

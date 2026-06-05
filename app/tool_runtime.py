@@ -143,21 +143,24 @@ async def watchfacts_health_payload(
 
 async def watchfacts_create_chat_draft_payload(
     query: str,
-    result_id: str,
+    result_id: str | None = None,
     *,
+    rank: int | None = None,
     settings: Settings | None = None,
     workflow: SearchWorkflow | None = None,
     openwa_client: ChatDraftClient | None = None,
 ) -> dict[str, object]:
     normalized_query = _require_text(query, "query")
-    normalized_result_id = _require_text(result_id, "result_id")
+    normalized_result_id = _clean_optional_text(result_id)
     active_settings = settings or load_search_settings()
-    stored = await _resolve_result(
+    stored = await _resolve_result_reference(
         normalized_query,
-        normalized_result_id,
+        result_id=normalized_result_id,
+        rank=rank,
         settings=active_settings,
         workflow=workflow,
     )
+    resolved_result_id = _source_result_id(stored.query, stored.rank, stored.result)
 
     config = OpenWAHandoffConfig.from_settings(active_settings)
     payload = _build_openwa_chat_draft_payload(
@@ -173,7 +176,8 @@ async def watchfacts_create_chat_draft_payload(
 
     return {
         "status": "created",
-        "result_id": normalized_result_id,
+        "result_id": resolved_result_id,
+        "rank": stored.rank,
         "draft_id": response.draft_id,
         "chat_id": response.chat_id,
         "dashboard_url": response.dashboard_url,
@@ -183,27 +187,30 @@ async def watchfacts_create_chat_draft_payload(
 
 async def watchfacts_report_issue_payload(
     query: str,
-    result_id: str,
+    result_id: str | None,
     reason: str,
     *,
+    rank: int | None = None,
     notes: str | None = None,
     settings: Settings | None = None,
     workflow: SearchWorkflow | None = None,
     database: Database | None = None,
 ) -> dict[str, object]:
     normalized_query = _require_text(query, "query")
-    normalized_result_id = _require_text(result_id, "result_id")
+    normalized_result_id = _clean_optional_text(result_id)
     normalized_reason = _require_text(reason, "reason")
     if normalized_reason not in VALID_FEEDBACK_REASONS:
         raise ValueError("reason must be one of: missing_info, wrong_result, other")
 
     active_settings = settings or load_search_settings()
-    stored = await _resolve_result(
+    stored = await _resolve_result_reference(
         normalized_query,
-        normalized_result_id,
+        result_id=normalized_result_id,
+        rank=rank,
         settings=active_settings,
         workflow=workflow,
     )
+    resolved_result_id = _source_result_id(stored.query, stored.rank, stored.result)
     result = stored.result
     issue_database = database or Database(active_settings.db_path)
     issue_id = issue_database.record_result_feedback(
@@ -221,7 +228,8 @@ async def watchfacts_report_issue_payload(
 
     return {
         "status": "recorded",
-        "result_id": normalized_result_id,
+        "result_id": resolved_result_id,
+        "rank": stored.rank,
         "issue": _issue_payload(issue),
     }
 
@@ -393,6 +401,62 @@ async def _resolve_result(
     if stored is None:
         raise ValueError("result_id was not found for query; run search again")
     return stored
+
+
+async def _resolve_result_reference(
+    query: str,
+    *,
+    result_id: str | None,
+    rank: int | None,
+    settings: Settings,
+    workflow: SearchWorkflow | None,
+) -> StoredResult:
+    if result_id is not None:
+        return await _resolve_result(
+            query,
+            result_id,
+            settings=settings,
+            workflow=workflow,
+        )
+    if rank is None:
+        raise ValueError("result_id or rank is required")
+    return await _resolve_result_by_rank(
+        query,
+        rank,
+        settings=settings,
+        workflow=workflow,
+    )
+
+
+async def _resolve_result_by_rank(
+    query: str,
+    rank: int,
+    *,
+    settings: Settings,
+    workflow: SearchWorkflow | None,
+) -> StoredResult:
+    _validate_rank(rank)
+    now = time.monotonic()
+    _prune_result_cache(now)
+    stored = _lookup_stored_result_by_rank(query, rank)
+    if stored is not None:
+        return stored
+
+    active_workflow = workflow or WatchFactsSearchWorkflow(settings)
+    results = await active_workflow.search(query)
+    _store_results(query, results)
+    stored = _lookup_stored_result_by_rank(query, rank)
+    if stored is None:
+        raise ValueError("rank was not found for query; run search again")
+    return stored
+
+
+def _lookup_stored_result_by_rank(query: str, rank: int) -> StoredResult | None:
+    query_key = _query_key(query)
+    for stored in _RESULT_CACHE.values():
+        if stored.rank == rank and _query_key(stored.query) == query_key:
+            return stored
+    return None
 
 
 def _prune_result_cache(now: float) -> None:
@@ -570,6 +634,11 @@ def _validate_limit(limit: int | None) -> None:
 def _validate_offset(offset: int) -> None:
     if offset < 0:
         raise ValueError("offset must not be negative")
+
+
+def _validate_rank(rank: int) -> None:
+    if rank <= 0:
+        raise ValueError("rank must be a positive integer")
 
 
 def _require_text(value: str, name: str) -> str:

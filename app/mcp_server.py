@@ -29,7 +29,10 @@ app = FastMCP(
 
 @app.tool(
     name="search",
-    description="Search WatchFacts products and list matching SKUs.",
+    description=(
+        "Search WatchFacts products. Use offset/next_offset for pagination. "
+        "Results include rank, result_id, seller, seller_phone, image_url, and source_url."
+    ),
 )
 async def search(
     query: str,
@@ -58,30 +61,45 @@ async def health() -> dict[str, object]:
 
 @app.tool(
     name="create_chat_draft",
-    description="Create an OpenWA chat draft for a WatchFacts search result.",
+    description=(
+        "Create an OpenWA chat draft for a WatchFacts search result. "
+        "Pass result_id from search when available, or pass rank when the user says "
+        "a result number such as 'ket qua 20'. Do not use terminal/docker for this."
+    ),
 )
-async def create_chat_draft(query: str, result_id: str) -> dict[str, object]:
+async def create_chat_draft(
+    query: str,
+    result_id: str | None = None,
+    rank: int | None = None,
+) -> dict[str, object]:
     """Create an OpenWA chat draft from a prior search result."""
     return await watchfacts_create_chat_draft_payload(
         query=query,
         result_id=result_id,
+        rank=rank,
     )
 
 
 @app.tool(
     name="report_issue",
-    description="Report a missing-info or wrong-result issue for a WatchFacts search result.",
+    description=(
+        "Report a missing-info or wrong-result issue for a WatchFacts search result. "
+        "Pass result_id from search when available, or pass rank when the user refers "
+        "to a result number."
+    ),
 )
 async def report_issue(
     query: str,
-    result_id: str,
     reason: str,
+    result_id: str | None = None,
+    rank: int | None = None,
     notes: str | None = None,
 ) -> dict[str, object]:
     """Record result feedback for owner review."""
     return await watchfacts_report_issue_payload(
         query=query,
         result_id=result_id,
+        rank=rank,
         reason=reason,
         notes=notes,
     )

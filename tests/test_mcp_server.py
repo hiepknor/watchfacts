@@ -34,10 +34,15 @@ def test_search_tool_calls_payload(monkeypatch) -> None:
 
 
 def test_create_chat_draft_tool_calls_payload(monkeypatch) -> None:
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str | None, int | None]] = []
 
-    async def fake_payload(query: str, result_id: str) -> dict[str, object]:
-        calls.append((query, result_id))
+    async def fake_payload(
+        query: str,
+        result_id: str | None = None,
+        *,
+        rank: int | None = None,
+    ) -> dict[str, object]:
+        calls.append((query, result_id, rank))
         return {"status": "created"}
 
     monkeypatch.setattr(
@@ -48,7 +53,12 @@ def test_create_chat_draft_tool_calls_payload(monkeypatch) -> None:
 
     result = asyncio.run(mcp_server.create_chat_draft("5712g", "watchfacts:abc"))
 
-    assert calls == [("5712g", "watchfacts:abc")]
+    assert calls == [("5712g", "watchfacts:abc", None)]
+    assert result == {"status": "created"}
+
+    result = asyncio.run(mcp_server.create_chat_draft("5712g", rank=20))
+
+    assert calls[-1] == ("5712g", None, 20)
     assert result == {"status": "created"}
 
 
@@ -56,8 +66,8 @@ def test_issue_tools_call_payloads(monkeypatch) -> None:
     report_calls = []
     update_calls = []
 
-    async def fake_report(query, result_id, reason, notes=None):
-        report_calls.append((query, result_id, reason, notes))
+    async def fake_report(query, result_id, reason, rank=None, notes=None):
+        report_calls.append((query, result_id, reason, rank, notes))
         return {"status": "recorded"}
 
     def fake_list(issue_type="all", limit=10, min_severity=None):
@@ -84,7 +94,12 @@ def test_issue_tools_call_payloads(monkeypatch) -> None:
     )
 
     report = asyncio.run(
-        mcp_server.report_issue("5712g", "watchfacts:abc", "wrong_result", "bad year")
+        mcp_server.report_issue(
+            "5712g",
+            "wrong_result",
+            result_id="watchfacts:abc",
+            notes="bad year",
+        )
     )
     listed = mcp_server.list_issues("suspicious", 7, 3)
     detail = mcp_server.get_issue("S1")
@@ -92,7 +107,7 @@ def test_issue_tools_call_payloads(monkeypatch) -> None:
     summary = mcp_server.suspicious_summary(5)
 
     assert report == {"status": "recorded"}
-    assert report_calls == [("5712g", "watchfacts:abc", "wrong_result", "bad year")]
+    assert report_calls == [("5712g", "watchfacts:abc", "wrong_result", None, "bad year")]
     assert listed == {"issue_type": "suspicious", "limit": 7, "min_severity": 3}
     assert detail == {"issue_ref": "S1", "issue_type": None}
     assert updated == {"updated": True}

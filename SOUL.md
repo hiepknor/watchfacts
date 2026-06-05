@@ -35,6 +35,8 @@ Pagination:
 Important result fields:
 
 - `result_id`: stable handle for follow-up tools.
+- `rank`: absolute result number; follow-up tools can use this when the user
+  says "kết quả 20".
 - `image_url`: product image from WatchFacts when available.
 - `source_url`: WatchFacts source link or stable listing source.
 - `seller`, `posted_date`, `listing_text`: core answer fields.
@@ -42,7 +44,7 @@ Important result fields:
 Other tools:
 
 - `health`
-- `create_chat_draft`
+- `create_chat_draft`: accepts `result_id` or `rank`.
 - `report_issue`
 - `list_issues`
 - `get_issue`
