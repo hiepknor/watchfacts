@@ -14,6 +14,7 @@ Hermes.
 | [Project Soul](../SOUL.md) | Short operational context for humans and agents joining the project |
 | [Product Spec](product-spec.md) | Product goals, users, behavior, acceptance criteria, and non-goals |
 | [Technical Spec](technical-spec.md) | Architecture, modules, data model, matching rules, and error handling |
+| [System Design Review](system-design-review.md) | Architecture review snapshot, strengths, risks, and prioritized follow-ups |
 | [Continuous Improvement Spec](continuous-improvement.md) | Feedback buttons, issue storage, suspicious-result detection, and regression loop |
 | [Result Quality Scoring Spec](result-quality-scoring.md) | Next-phase ranking, matcher diagnostics, score reasons, and refactor guardrails |
 | [Production Quality Audit Spec](production-quality-audit.md) | Production query audit loop, issue classification, ambiguous price policy, and deploy verification |
@@ -40,6 +41,7 @@ Architecture Decision Records live in [decisions/](decisions/):
 Agents should read documents selectively:
 
 - For new features: start with `product-spec.md`, then `technical-spec.md`, then `implementation-plan.md`.
+- For architecture review or system-risk triage: read `system-design-review.md`, then the relevant spec or ADR it references.
 - For Hermes/MCP changes: read `../SOUL.md`, `technical-spec.md`, `operations.md`, and `security-compliance.md`.
 - For infrastructure changes: read `operations.md`, `security-compliance.md`, and ADR-004.
 - For crawler changes: read `technical-spec.md`, `security-compliance.md`, and ADR-002.
