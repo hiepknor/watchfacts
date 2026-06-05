@@ -453,10 +453,12 @@ async def _resolve_result_by_rank(
 
 def _lookup_stored_result_by_rank(query: str, rank: int) -> StoredResult | None:
     query_key = _query_key(query)
+    latest: StoredResult | None = None
     for stored in _RESULT_CACHE.values():
         if stored.rank == rank and _query_key(stored.query) == query_key:
-            return stored
-    return None
+            if latest is None or stored.stored_at >= latest.stored_at:
+                latest = stored
+    return latest
 
 
 def _prune_result_cache(now: float) -> None:

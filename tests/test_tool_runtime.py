@@ -276,6 +276,67 @@ def test_watchfacts_create_chat_draft_uses_cached_search_result(tmp_path) -> Non
     assert rank_payload["result_id"] == result_id
 
 
+def test_watchfacts_create_chat_draft_rank_uses_latest_cached_result(tmp_path) -> None:
+    settings = load_search_settings(
+        env={
+            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
+            "OPENWA_BASE_URL": "https://openwa.example",
+            "OPENWA_API_KEY": "secret",
+            "OPENWA_DASHBOARD_URL": "https://dashboard.example",
+        },
+        project_root=tmp_path,
+    )
+    old_workflow = FakeWorkflow(
+        [
+            SearchResult(
+                listing_text="5712G old listing",
+                source_url="/listing/old",
+            )
+        ]
+    )
+    new_workflow = FakeWorkflow(
+        [
+            SearchResult(
+                listing_text="5712G new listing",
+                source_url="/listing/new",
+            )
+        ]
+    )
+
+    old_payload = asyncio.run(
+        watchfacts_search_payload("5712g", workflow=old_workflow, settings=settings)
+    )
+    new_payload = asyncio.run(
+        watchfacts_search_payload("5712g", workflow=new_workflow, settings=settings)
+    )
+    old_result_id = old_payload["results"][0]["result_id"]
+    new_result_id = new_payload["results"][0]["result_id"]
+    requests = []
+
+    async def fake_client(payload):
+        requests.append(payload)
+        return OpenWAChatDraftResponse(
+            draft_id="draft-1",
+            chat_id=None,
+            dashboard_url="https://dashboard.example/chats/drafts/draft-1",
+        )
+
+    rank_payload = asyncio.run(
+        watchfacts_create_chat_draft_payload(
+            "5712g",
+            rank=1,
+            settings=settings,
+            workflow=new_workflow,
+            openwa_client=fake_client,
+        )
+    )
+
+    assert old_result_id != new_result_id
+    assert rank_payload["result_id"] == new_result_id
+    assert requests[0]["sourceResultId"] == new_result_id
+    assert requests[0]["listingText"] == "5712G new listing"
+
+
 def test_watchfacts_create_chat_draft_requires_result_reference(tmp_path) -> None:
     settings = load_search_settings(
         env={
