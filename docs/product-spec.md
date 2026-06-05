@@ -1,20 +1,34 @@
-# Product Spec: WatchFacts Telegram Bot
+# Product Spec: WatchFacts Runtime For Hermes
 
 ## Objective
 
-Maintain a self-hosted Telegram bot that lets an authorized user search WatchFacts trading listings by sending natural watch search text such as `228253a choco`.
+Maintain a self-hosted WatchFacts search runtime that lets an authorized user
+search WatchFacts trading listings through Hermes, for example:
 
-The bot uses an authenticated browser session, extracts listings from WatchFacts JSON/HTML responses, matches listings deterministically, deduplicates latest reposts, and returns concise Telegram-friendly summaries plus paginated result batches.
+```text
+@onioaibot tìm WatchFacts 5712G 2015 full set
+```
+
+Hermes calls the WatchFacts MCP tools. The runtime uses an authenticated browser
+session, extracts listings from WatchFacts JSON/HTML responses, matches listings
+deterministically, deduplicates latest reposts, and returns structured ranked
+results with seller, date, source link, product image, and stable result handles.
+
+The legacy Telegram bot remains available, but new business automation should
+use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 
 ## Users
 
-- Primary user: a watch trader or collector with a valid WatchFacts account.
-- Operator: the person who deploys the bot, manages `.env`, creates the browser login session, and monitors logs.
-- Maintainer: a developer or AI agent extending crawler, parser, matcher, database, or Telegram behavior.
+- Primary user: a watch trader or collector using Hermes/Telegram to search WatchFacts.
+- Operator: the person who deploys WatchFacts MCP, configures Hermes, manages `.env`, creates the browser login session, and monitors logs.
+- Maintainer: a developer or AI agent extending crawler, parser, matcher, database, MCP tools, OpenWA handoff, or legacy Telegram behavior.
 
 ## User Stories
 
-- As a Telegram user, I can send a model/reference query and receive relevant WatchFacts listings.
+- As a Hermes user, I can send a model/reference query and receive relevant WatchFacts listings.
+- As a Hermes user, I can ask for more results and receive the next page without losing the original query context.
+- As a Hermes user, I can see product images when WatchFacts provides `image_url`.
+- As a Hermes user, I can ask to contact a seller and let Hermes create an OpenWA chat draft from a selected `result_id`.
 - As a Telegram user, I can include multiple terms and get listings that contain all required tokens.
 - As an operator, I can log in to WatchFacts manually once and let the bot reuse the saved session.
 - As an operator, I can run the bot locally or through Docker Compose.
@@ -28,22 +42,31 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 
 ## Core Flow
 
-1. User sends a text query to the Telegram bot.
-2. Bot validates and normalizes the query.
-3. Bot loads or reuses an authenticated WatchFacts browser state.
-4. Bot crawls the configured WatchFacts URL.
-5. Bot extracts listing candidates from JSON search responses or HTML fallback.
-6. Bot matches or scopes listings against query tokens.
-7. Bot removes repeated latest reposts.
-8. Bot scores eligible listings by quality first, then newest posted date inside the same quality group.
-9. If OpenAI controlled intelligence is enabled, bot may record or apply a guarded suggestion only after strict validation.
-10. Bot stores query/cache/dedupe/issue data in SQLite.
-11. Bot returns a summary with an inline "Xem kết quả" button.
-12. User requests batches with "Xem kết quả" / "Xem thêm".
+1. User sends a WatchFacts request to Hermes.
+2. Hermes calls `search(query, limit=5, offset=0, include_similar=true)` on the WatchFacts MCP server.
+3. Runtime validates and normalizes the query.
+4. Runtime loads or reuses authenticated WatchFacts browser state.
+5. Runtime crawls the configured WatchFacts URL.
+6. Runtime extracts listing candidates from JSON search responses or HTML fallback.
+7. Runtime matches or scopes listings against query tokens.
+8. Runtime removes repeated latest reposts.
+9. Runtime scores eligible listings by quality first, then newest posted date inside the same quality group.
+10. If OpenAI controlled intelligence is enabled, runtime may record or apply a guarded suggestion only after strict validation.
+11. Runtime stores query/cache/dedupe/issue data in SQLite.
+12. MCP payload returns ranked results with `result_id`, `rank`, `image_url`, `has_more`, and `next_offset`.
+13. Hermes answers in Vietnamese and preserves `result_id` for contact/feedback follow-ups.
+14. For "xem thêm", Hermes calls the same query with `offset=next_offset`.
 
 ## Functional Requirements
 
-- Accept plain-text Telegram messages as search queries.
+- Expose MCP tool `search(query, limit=5, offset=0, include_similar=true)`.
+- Search payload must include pagination fields `offset`, `limit`, `has_more`, `next_offset`, and stable absolute `rank`.
+- Search payload must include `result_id` for follow-up actions.
+- Search payload should include `image_url` when WatchFacts provides a product image.
+- Expose MCP tool `health` for WatchFacts session, database, OpenWA, and search readiness.
+- Expose MCP tool `create_chat_draft(query, result_id)` for seller handoff through OpenWA.
+- Expose MCP issue tools `report_issue`, `list_issues`, `get_issue`, `update_issue`, and `suspicious_summary`.
+- Accept plain-text Telegram messages as search queries in the legacy bot.
 - Support `/start`, `/help`, `/settings`, and `/cancel`.
 - Support `/health` for checking whether the saved WatchFacts session is valid.
 - Support owner issue commands for user feedback and auto-QA queues:
@@ -67,6 +90,8 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Persist local cache, query history, and dedupe records in SQLite.
 - Reuse `data/watchfacts_state.json` for authenticated browser state.
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
+- Support Docker deployment of `watchfacts-mcp` on the same server/network as Hermes.
+- Support Makefile deployment with `make deploy-hermes-mcp` for MCP + Hermes restart.
 - Limit Telegram photo captions and text messages to platform-safe lengths.
 - Notify the owner in Vietnamese when WatchFacts browser session state is missing or expired.
 - Support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
@@ -77,6 +102,8 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 ## Non-Functional Requirements
 
 - No LLM is required for core behavior.
+- Hermes must not reimplement WatchFacts search logic; it should call MCP tools.
+- MCP tool output must be structured enough for Hermes to answer without inventing seller contact, result ids, source links, prices, product images, or OpenWA links.
 - Matching must be deterministic and testable.
 - Ranking must be deterministic, quality-first, and covered by regression tests.
 - Continuous improvement must be evidence collection and review, not autonomous code mutation.
@@ -94,7 +121,7 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 - Bypassing login, captcha, Cloudflare, or anti-bot controls.
 - Scraping WatchFacts without authorized access.
 - Storing WatchFacts passwords in source code or config examples.
-- Building a web UI in the initial version.
+- Building a WatchFacts web UI in the current phase.
 - Running local AI models in the production runtime.
 - Adding OpenAI ranking, summarization, or extraction as an uncontrolled primary result source.
 - Letting AI become the uncontrolled source of truth for listing extraction.
@@ -115,8 +142,10 @@ The bot uses an authenticated browser session, extracts listings from WatchFacts
 | Run lightweight checks | `make check` |
 | Run bot locally | `python -m app.main` |
 | Run login locally | `python scripts/ops/login.py` |
-| Deploy latest code | `make deploy` |
-| Deploy local unpushed code | `make deploy SKIP_PULL=1` |
+| Deploy legacy Telegram bot | `make deploy-bot` |
+| Deploy WatchFacts MCP | `make deploy-mcp` |
+| Deploy WatchFacts MCP and restart Hermes | `make deploy-hermes-mcp` |
+| Restart Hermes | `make restart-hermes` |
 
 Telegram commands:
 
@@ -141,8 +170,11 @@ at the start of the message or reply to a bot message.
 
 ## Success Criteria
 
-- A user can send a Telegram query and receive matching listings.
-- A user gets a result summary first, then explicit paginated batches.
+- A Hermes user can request WatchFacts search and receive matching listings.
+- A Hermes user can ask for more results and the MCP runtime returns the next page through `offset`.
+- Product image URLs are passed through when available and never invented.
+- A selected result can be handed off to OpenWA through `create_chat_draft`.
+- A legacy Telegram user can still send a query and receive matching listings.
 - Matching is case-insensitive, token-based, and covered by tests.
 - Output order prioritizes quality before recency, and recency is newest-first inside each quality group.
 - Duplicate listings are suppressed across a single search result set.
@@ -151,7 +183,7 @@ at the start of the message or reply to a bot message.
 - Reported or suspicious result issues can be reviewed and converted into regression tests after the continuous-improvement milestone is implemented.
 - OpenAI-assisted suggestions, when enabled, are schema-validated, safely logged, and never required for search availability.
 - Docker image builds successfully.
-- `make init`, `make build`, and `make check` work on a fresh clone.
+- `make init`, `make build`, `make check`, and `make deploy-hermes-mcp` work on the production server.
 - `.env`, `data/watchfacts_state.json`, `data/bot.db`, and `logs/` stay out of git.
 
 ## Open Questions

@@ -4,15 +4,67 @@
 
 1. Clone the repository.
 2. Run `make init`.
-3. Edit `.env` with the real Telegram bot token and WatchFacts URL if needed.
-   Set `TELEGRAM_ALLOWED_USER_IDS` to the owner Telegram user id if the bot
-   should be private. Leave it empty to allow everyone.
+3. Edit `.env` with WatchFacts, OpenWA, OpenAI, and optional Telegram values.
+   `TELEGRAM_BOT_TOKEN` is only required when running the legacy Telegram bot.
 4. Create browser state with `python scripts/ops/login.py`.
-5. Run `make deploy`.
-6. Inspect startup with `make logs` if needed.
+5. For Hermes/MCP production, configure Hermes to call
+   `http://watchfacts-mcp:8765/mcp`.
+6. Run `make deploy-hermes-mcp`.
+7. Inspect startup with `make mcp-logs` or `make hermes-logs` if needed.
 
 The bot expects `data/watchfacts_state.json` to exist before the first real search.
-`make deploy` also checks for `.env` and browser state before it pulls/builds.
+Deploy targets also check for `.env` and browser state before they pull/build.
+
+## Production Server Standard
+
+The production server should keep `/opt/watchfacts-bot` as a clean git checkout
+tracking `origin/master`. Deploy should run as user `ubuntu`, not `sudo`, so
+git-owned files do not become root-owned.
+
+Standard deploy:
+
+```bash
+cd /opt/watchfacts-bot
+make deploy-hermes-mcp
+```
+
+This target:
+
+- runs `git pull --ff-only`
+- builds `watchfacts-mcp`
+- runs pytest and compile checks inside the MCP Compose service
+- force-recreates `watchfacts-mcp`
+- recreates Hermes so it reloads MCP config/schema
+
+Do not use `SKIP_PULL=1` for normal production deploys. If the server working
+tree is dirty, fix the deploy checkout first rather than layering rsync changes
+over it.
+
+Hermes config lives outside this repository, normally at:
+
+```text
+/opt/hermes-agent/data/config.yaml
+/opt/hermes-agent/data/watchfacts_prefill.json
+```
+
+Expected Hermes MCP config shape:
+
+```yaml
+mcp_servers:
+  watchfacts:
+    url: "http://watchfacts-mcp:8765/mcp"
+    timeout: 120
+    tools:
+      include:
+        - search
+        - health
+        - create_chat_draft
+        - report_issue
+        - list_issues
+        - get_issue
+        - update_issue
+        - suspicious_summary
+```
 
 ## Local Setup
 
@@ -48,6 +100,14 @@ Telegram behavior:
 - Photo captions are limited to Telegram's caption size; long text fallback messages are also truncated safely.
 - In group chats, normal messages are ignored unless the bot is mentioned at the beginning or the user replies to a bot message.
 
+Hermes/MCP behavior:
+
+- Initial search should call `search(query=<full user text>, limit=5, offset=0, include_similar=true)`.
+- "Xem thêm" should call `search` again with the same query and previous `next_offset`.
+- Use `result_id` for `create_chat_draft` and issue reporting.
+- Use `image_url` as the product image when present.
+- Do not invent seller contact, result ids, source links, prices, image links, or OpenWA links.
+
 Issue queues:
 
 - `/issues` is the operator queue for user feedback. Treat these as production
@@ -62,17 +122,16 @@ Issue queues:
 
 OpenWA chat handoff:
 
-- When OpenWA runs as a sibling Docker Compose project, deploy WatchFacts with
-  the OpenWA override so the bot joins the OpenWA internal Docker network:
-  `make deploy OPENWA_COMPOSE=1`.
+- For Hermes/MCP production, set OpenWA values in `.env` and deploy with
+  `make deploy-hermes-mcp`.
 - Use `OPENWA_BASE_URL=http://openwa-api:2785` for server-to-server API calls
   and the public dashboard URL, for example `https://openwa.onio.cc`, for
   `OPENWA_DASHBOARD_URL`.
 - Set `ENABLE_OPENWA_CHAT_HANDOFF=true`, `OPENWA_API_KEY` to an OpenWA operator
   key, `OPENWA_CHAT_DRAFT_ENDPOINT=/api/chats/drafts`, and
   `OPENWA_DOCKER_NETWORK=openwa-network`.
-- Before restarting production, verify the merged Compose files with
-  `docker compose -f docker-compose.yml -f docker-compose.openwa.yml config --quiet`.
+- The legacy Telegram bot can still use `make deploy OPENWA_COMPOSE=1` if it
+  needs to join the separate OpenWA compose network.
 
 ## Docker Build
 
@@ -113,26 +172,31 @@ Restart:
 make restart
 ```
 
-Restart after updating code:
+Restart legacy Telegram bot after updating code:
 
 ```bash
 make deploy
 ```
 
-`make deploy` runs `git pull --ff-only`, builds the Docker image, runs pytest
-and compile checks inside the Compose image, force-recreates the bot container,
-prints Compose status, and shows recent startup logs.
-
-If you are deploying local unpushed changes, use:
+Restart WatchFacts MCP and reload Hermes after updating code or MCP schema:
 
 ```bash
-make deploy SKIP_PULL=1
+make deploy-hermes-mcp
 ```
+
+`make deploy-bot` runs `git pull --ff-only`, builds the Docker image, runs
+pytest and compile checks inside the Compose image, force-recreates the legacy
+bot container, prints Compose status, and shows recent startup logs.
+
+`make deploy-hermes-mcp` does the same for `watchfacts-mcp`, then recreates
+Hermes.
 
 Status:
 
 ```bash
 make ps
+make mcp-ps
+make hermes-ps
 ```
 
 Docker Compose also configures a lightweight container healthcheck and rotates

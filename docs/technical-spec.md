@@ -3,12 +3,15 @@
 ## Tech Stack
 
 - Python 3.11+
+- MCP server for Hermes tool access
 - `python-telegram-bot[job-queue]` for Telegram integration
 - Playwright Chromium for authenticated browser automation
 - WatchFacts authenticated JSON search response parsing with HTML fallback
 - BeautifulSoup4 + lxml for HTML parsing
 - SQLite for local cache, dedupe, and query history
 - Docker Compose for deployment
+- Hermes as the primary external agent runtime
+- OpenWA chat draft API for seller handoff
 - Optional OpenAI API integration for controlled AI refinement
 - Makefile for repeatable local commands
 
@@ -17,7 +20,10 @@
 ```text
 app/
   main.py          # application entrypoint
-  telegram_bot.py  # Telegram handlers and message formatting
+  telegram_bot.py  # legacy Telegram handlers and message formatting
+  mcp_server.py    # WatchFacts MCP tools for Hermes
+  tool_runtime.py  # non-Telegram payload runtime used by MCP and diagnostics
+  search_result.py # shared search result dataclass
   scraper.py       # Playwright browser/session/crawl logic
   parser.py        # HTML/listing extraction
   matcher.py       # stable public matcher API
@@ -30,6 +36,7 @@ app/
   db.py            # SQLite schema and persistence
   config.py        # environment/config loading
   issues.py        # suspicious-result heuristics for issue collection
+  openwa_handoff.py # OpenWA chat draft API boundary
   ai_refiner.py    # optional OpenAI-backed result refinement boundary
 scripts/
   *.py             # compatibility wrappers for older script paths
@@ -57,7 +64,7 @@ Expected environment:
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `TELEGRAM_BOT_TOKEN` | Yes | None | Telegram bot token |
+| `TELEGRAM_BOT_TOKEN` | Telegram runtime only | None | Telegram bot token |
 | `TELEGRAM_ALLOWED_USER_IDS` | No | Empty | Comma-separated owner Telegram user ids; empty allows everyone |
 | `TELEGRAM_RESULT_LIMIT` | No | `5` | Number of results to send per Telegram pagination batch |
 | `TELEGRAM_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum WatchFacts searches running at the same time; extra queries wait with a queue notice |
@@ -70,14 +77,21 @@ Expected environment:
 | `OPENAI_MODEL` | No | Cost-conscious current model | Model used for structured refinement suggestions |
 | `OPENAI_TIMEOUT_SECONDS` | No | `12` | Maximum OpenAI request time before deterministic fallback |
 | `OPENAI_MAX_REFINES` | No | `3` | Maximum snippets sent to OpenAI per query |
+| `ENABLE_OPENWA_CHAT_HANDOFF` | No | `false` | Enable OpenWA chat draft creation |
+| `OPENWA_BASE_URL` | Required for OpenWA handoff | None | Internal OpenWA API base URL, for example `http://openwa-api:2785` |
+| `OPENWA_API_KEY` | Required for OpenWA handoff | None | OpenWA operator API key |
+| `OPENWA_DASHBOARD_URL` | No | None | Public OpenWA dashboard URL used for returned links |
+| `OPENWA_CHAT_DRAFT_ENDPOINT` | No | `/api/chats/drafts` | OpenWA draft endpoint path |
+| `HERMES_DOCKER_NETWORK` | Server deploy only | `hermes-agent_default` | Docker network joined by `watchfacts-mcp` so Hermes can call it |
 
 Configuration rules:
 
 - Load from environment and `.env` during local development.
 - Never log real tokens or secrets.
-- Fail fast if required values are missing.
+- Fail fast if required values are missing for the selected runtime.
 - Treat boolean env values case-insensitively.
 - Restrict Telegram handlers to configured user ids when `TELEGRAM_ALLOWED_USER_IDS` is non-empty.
+- Load MCP/search runtime settings without requiring `TELEGRAM_BOT_TOKEN`.
 - Validate Telegram result limit as a positive integer.
 - Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
 - Remove local model runtime support from the production path.
@@ -88,8 +102,10 @@ Configuration rules:
 ## Runtime Architecture
 
 ```text
-Telegram update
-  -> telegram_bot handler
+Hermes user request
+  -> Hermes MCP client
+  -> watchfacts-mcp tool: search / health / create_chat_draft / issue tools
+  -> tool_runtime payload function
   -> scraper loads saved browser state and posts the WatchFacts search form when available
   -> parser extracts listing candidates from JSON response or HTML fallback
   -> matcher filters or scopes listings by query tokens
@@ -98,6 +114,16 @@ Telegram update
   -> suspicious-result detector records likely extraction issues
   -> optional OpenAI controlled refiner records suggestions or applies guarded refinements
   -> db records query/cache/dedupe state
+  -> MCP payload returns structured results, pagination, images, and result handles
+  -> Hermes replies in Vietnamese and may call OpenWA/issue tools later
+```
+
+Legacy Telegram path:
+
+```text
+Telegram update
+  -> telegram_bot handler
+  -> same search workflow
   -> telegram_bot sends a summary first, then paginated result batches
 ```
 
@@ -119,7 +145,7 @@ Responsibilities:
 
 Responsibilities:
 
-- Register Telegram command/message handlers.
+- Register legacy Telegram command/message handlers.
 - Validate empty or unsupported user input.
 - Call the search workflow asynchronously.
 - Format listing results for Telegram.
@@ -129,6 +155,36 @@ Responsibilities:
 - Ignore normal group chat messages unless the bot is mentioned or replied to.
 - Protect Telegram sends by limiting photo captions to 1024 characters and text messages to 4096 characters.
 - Attach feedback callbacks to results, handle feedback issue callbacks, and provide owner issue review commands.
+
+### `mcp_server.py`
+
+Responsibilities:
+
+- Expose the WatchFacts runtime as MCP tools for Hermes.
+- Keep tool names short and stable: `search`, `health`, `create_chat_draft`,
+  `report_issue`, `list_issues`, `get_issue`, `update_issue`,
+  `suspicious_summary`.
+- Use `query`, `limit`, `offset`, and `include_similar` for `search`.
+- Return structured JSON-like payloads without Telegram formatting concerns.
+- Avoid leaking raw listings unless a specific safe diagnostic path explicitly requests them.
+
+### `tool_runtime.py`
+
+Responsibilities:
+
+- Provide non-Telegram payload functions used by MCP tools and diagnostics.
+- Reuse the same scraper, parser, matcher, dedupe, scoring, cache, suspicious,
+  OpenAI, and SQLite behavior as the Telegram workflow.
+- Support offset-based pagination with `has_more` and `next_offset`.
+- Preserve stable `result_id` handles for later handoff or issue reporting.
+- Include product `image_url` when available.
+
+### `search_result.py`
+
+Responsibilities:
+
+- Hold the shared result dataclass used across Telegram, MCP, and diagnostics.
+- Keep product fields stable enough for ranking, formatting, OpenWA handoff, and issue storage.
 
 ### `scraper.py`
 

@@ -1,5 +1,9 @@
 # Roadmap
 
+Current operating model: WatchFacts search is a shared runtime. Hermes accesses
+it through the `watchfacts-mcp` Docker service. The Telegram bot remains
+available but is no longer the only product channel.
+
 ## Milestone 0: Project Foundation
 
 Status: complete.
@@ -307,6 +311,60 @@ Exit criteria:
 Detailed spec:
 
 - [Production Quality Audit Loop Spec](production-quality-audit.md)
+
+## Milestone 11: Hermes MCP Bridge And Runtime Decoupling
+
+Status: complete.
+
+Goal: let Hermes use WatchFacts search without depending on Telegram handlers or
+Telegram formatting.
+
+Decision:
+
+- Keep WatchFacts search logic in `app.tool_runtime`.
+- Expose a small MCP bridge in `app.mcp_server`.
+- Run `watchfacts-mcp` on the same Docker network as Hermes.
+- Keep tool names short and professional: `search`, `health`,
+  `create_chat_draft`, `report_issue`, `list_issues`, `get_issue`,
+  `update_issue`, and `suspicious_summary`.
+- Use `offset` / `next_offset` pagination instead of Telegram callback state.
+- Pass product images through `image_url`; never invent image links.
+
+Deliverables:
+
+- [x] Non-Telegram search payload runtime.
+- [x] Docker Compose service for `watchfacts-mcp`.
+- [x] Hermes MCP config wiring.
+- [x] MCP tools for search, health, OpenWA draft handoff, feedback, issue
+  review, and suspicious QA summary.
+- [x] Pagination contract with `offset`, `has_more`, and `next_offset`.
+- [x] Makefile deploy target `make deploy-hermes-mcp`.
+- [x] Server deploy path that does not require `sudo` or `SKIP_PULL`.
+
+Exit criteria:
+
+- [x] Hermes can list WatchFacts MCP tools.
+- [x] Hermes can call `search` with `query`, `limit`, `offset`, and
+  `include_similar`.
+- [x] `make deploy-hermes-mcp` pulls, builds, tests, recreates MCP, and restarts
+  Hermes.
+- [x] Search results include enough structured fields for Hermes to answer in
+  Vietnamese and perform follow-up handoff/feedback.
+
+## Future Work: Telegram Retirement
+
+Status: planned.
+
+Goal: remove or deprecate Telegram-specific runtime once Hermes fully owns the
+business flow.
+
+Required before changing defaults:
+
+- Confirm no production user still depends on direct `app.main` Telegram bot.
+- Move remaining owner review flows to Hermes MCP tools or another operator UI.
+- Change `make deploy` default from `deploy-bot` to `deploy-hermes-mcp`.
+- Deprecate or remove `TELEGRAM_BOT_TOKEN` from default server setup.
+- Keep regression tests for the shared runtime independent of Telegram.
 
 ## Later Ideas
 

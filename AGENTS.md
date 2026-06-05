@@ -1,21 +1,26 @@
-# AGENT.md
+# AGENTS.md
 
 Project-level instructions for AI coding agents working on `watchfacts-bot`.
 
 ## Project Summary
 
-`watchfacts-bot` is a Python Telegram bot that searches WatchFacts watch listings through an authenticated browser session.
+`watchfacts-bot` is a Python WatchFacts search runtime with a Hermes MCP bridge,
+OpenWA handoff support, and a legacy Telegram bot.
 
 Expected behavior:
 
-- Receive a watch query from Telegram.
+- Receive a WatchFacts query from Hermes through MCP, or from the legacy Telegram bot.
 - Crawl the WatchFacts trading page using an authenticated Playwright session.
 - Extract listing data with deterministic parsing.
 - Match listings by query tokens and regex-assisted rules.
 - Deduplicate results.
-- Return formatted listing details, including image, listing text, seller, and posted date.
+- Return structured ranked listing details, including `result_id`, image, listing text, seller, posted date, source, and pagination metadata.
+- Let Hermes create OpenWA chat drafts from selected `result_id` handles.
 
-Core constraint: this project does not require an LLM for product behavior. Matching and extraction logic should remain deterministic unless the user explicitly changes that direction.
+Core constraint: this project does not require an LLM for core WatchFacts search.
+Matching and extraction logic should remain deterministic unless the user
+explicitly changes that direction. Hermes must call the MCP runtime instead of
+reimplementing WatchFacts search in prompts.
 
 ## Local Skills
 
@@ -55,6 +60,9 @@ The README describes this intended layout:
 app/
   main.py
   telegram_bot.py
+  mcp_server.py
+  tool_runtime.py
+  search_result.py
   scraper.py
   parser.py
   matcher.py
@@ -65,6 +73,7 @@ app/
   result_scoring.py
   similarity.py
   issues.py
+  openwa_handoff.py
   ai_refiner.py
   match_debug.py
   dedupe.py
@@ -87,10 +96,12 @@ docs/
 logs/
 Dockerfile
 docker-compose.yml
+docker-compose.watchfacts-mcp.yml
 Makefile
 requirements.txt
 .env.example
 README.md
+SOUL.md
 ```
 
 The actual repository may be incomplete. Always inspect the current filesystem before assuming a file exists.
@@ -106,18 +117,23 @@ Use these commands when the matching files exist:
 | Install dependencies | `pip install -r requirements.txt` |
 | Install Playwright browser | `playwright install chromium` |
 | Create WatchFacts session | `python scripts/ops/login.py` |
-| Run bot locally | `python -m app.main` |
+| Run legacy bot locally | `python -m app.main` |
 | Initialize local runtime files | `make init` |
 | Build Docker image | `make build` |
-| Start Docker service | `make up` |
-| Stop Docker service | `make down` |
-| Follow Docker logs | `make logs` |
+| Deploy Hermes MCP runtime | `make deploy-hermes-mcp` |
+| Deploy MCP only | `make deploy-mcp` |
+| Restart Hermes | `make restart-hermes` |
+| Start legacy Docker service | `make up` |
+| Stop Docker services | `make down` |
+| Follow MCP logs | `make mcp-logs` |
+| Follow legacy bot logs | `make logs` |
 | Open container shell | `make shell` |
 | Run lightweight checks | `make check` |
 
 If tests or lint commands are added later, update this file and prefer those commands for verification.
 
-The Docker entrypoint is `python -m app.main`. If `app/main.py` is not present yet, Docker build can still pass but `make up` will not run the bot.
+The legacy bot Docker entrypoint is `python -m app.main`. The Hermes MCP service
+entrypoint is `python -m app.mcp_server`.
 
 ## Project Documentation
 
@@ -125,7 +141,9 @@ Use `docs/README.md` as the documentation index.
 
 Load docs selectively:
 
+- Project context: `SOUL.md`.
 - New features: `docs/product-spec.md`, `docs/technical-spec.md`, and `docs/implementation-plan.md`.
+- Hermes/MCP changes: `SOUL.md`, `docs/technical-spec.md`, `docs/operations.md`, and `docs/security-compliance.md`.
 - Crawler/auth changes: `docs/technical-spec.md`, `docs/security-compliance.md`, and `docs/decisions/002-authenticated-browser-session.md`.
 - Matching/parser/dedupe changes: `docs/technical-spec.md` and `docs/decisions/001-deterministic-matching.md`.
 - Docker/runtime changes: `docs/operations.md` and `docs/decisions/004-docker-compose-runtime.md`.
@@ -140,12 +158,16 @@ TELEGRAM_BOT_TOKEN=your_telegram_token
 WATCHFACTS_URL=https://watchfacts.com/simon-match-making
 HEADLESS=true
 ENABLE_CRAWL4AI=true
+ENABLE_OPENWA_CHAT_HANDOFF=false
+OPENWA_BASE_URL=
+OPENWA_API_KEY=
 ```
 
 Rules:
 
 - Never commit `.env`.
 - Never commit real Telegram tokens, WatchFacts credentials, cookies, browser state, or session files.
+- Never commit OpenWA API keys, OpenAI API keys, Hermes secrets, or MCP prefill files containing secrets.
 - Treat `data/watchfacts_state.json` as sensitive because it contains authenticated browser state.
 - Treat `data/bot.db` as local runtime data.
 - Keep `logs/`, `.venv/`, `__pycache__/`, and generated runtime files out of commits.
@@ -176,6 +198,8 @@ If a requested change appears to weaken these boundaries, stop and surface the c
 - For Playwright code, use explicit waits and stable selectors where available.
 - For SQLite, use parameterized queries and keep schema changes documented.
 - For Telegram handlers, avoid blocking calls in async paths.
+- For MCP tools, keep tool names/schema stable and return structured payloads rather than human-only text.
+- For Hermes answers, preserve `result_id`, use `offset` / `next_offset` for pagination, and never invent seller contacts, source links, images, prices, or OpenWA links.
 - Preserve clear error handling around network, login/session, parsing, and Telegram API failures.
 
 ## Verification Expectations

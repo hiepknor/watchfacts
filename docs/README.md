@@ -1,11 +1,17 @@
-# WatchFacts Bot Documentation
+# WatchFacts Runtime Documentation
 
 This directory is the project knowledge base for humans and AI agents.
+
+Current production direction: WatchFacts search logic lives in a reusable
+runtime, Hermes accesses it through the `watchfacts-mcp` Docker service, and the
+Telegram bot is a supported legacy channel while the business flow moves to
+Hermes.
 
 ## Documents
 
 | Document | Purpose |
 | --- | --- |
+| [Project Soul](../SOUL.md) | Short operational context for humans and agents joining the project |
 | [Product Spec](product-spec.md) | Product goals, users, behavior, acceptance criteria, and non-goals |
 | [Technical Spec](technical-spec.md) | Architecture, modules, data model, matching rules, and error handling |
 | [Continuous Improvement Spec](continuous-improvement.md) | Feedback buttons, issue storage, suspicious-result detection, and regression loop |
@@ -34,6 +40,7 @@ Architecture Decision Records live in [decisions/](decisions/):
 Agents should read documents selectively:
 
 - For new features: start with `product-spec.md`, then `technical-spec.md`, then `implementation-plan.md`.
+- For Hermes/MCP changes: read `../SOUL.md`, `technical-spec.md`, `operations.md`, and `security-compliance.md`.
 - For infrastructure changes: read `operations.md`, `security-compliance.md`, and ADR-004.
 - For crawler changes: read `technical-spec.md`, `security-compliance.md`, and ADR-002.
 - For matching/parser changes: read `technical-spec.md` and ADR-001.
@@ -41,6 +48,7 @@ Agents should read documents selectively:
 - For production query audits or quality gate changes: read `production-quality-audit.md`, `result-quality-scoring.md`, and `operations.md`.
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.
 - For OpenAI controlled refinement: read `roadmap.md` Milestone 7, `implementation-plan.md` Phase 7, `technical-spec.md`, `security-compliance.md`, and ADR-005.
-- For commits: follow `AGENT.md` and the workflow in `contributing.md`.
+- For deploys: use `make deploy-hermes-mcp` on the server unless the task is explicitly about the legacy Telegram bot.
+- For commits: follow `AGENTS.md` and the workflow in `contributing.md`.
 
 Do not load every document into context by default. Load the smallest set that applies to the task.

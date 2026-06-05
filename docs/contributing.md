@@ -2,7 +2,7 @@
 
 ## Workflow
 
-1. Read `AGENT.md`.
+1. Read `AGENTS.md`.
 2. Read only the docs and source files relevant to the task.
 3. Make a narrow change.
 4. Run verification.

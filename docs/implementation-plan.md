@@ -2,9 +2,20 @@
 
 ## Overview
 
-The initial implementation phases and the continuous-improvement loop are complete. Keep this document as the project baseline and use it to verify that future changes preserve the intended architecture.
+The initial implementation phases, continuous-improvement loop, OpenAI guarded
+refinement, and Hermes MCP bridge are complete. Keep this document as the
+project baseline and use it to verify that future changes preserve the intended
+architecture.
 
 For new work, add a focused task under "Future Work" before implementing if the change affects behavior, data retention, scraping strategy, or deployment.
+
+Current baseline:
+
+- Shared WatchFacts search logic lives outside Telegram in `app.tool_runtime`.
+- Hermes uses `app.mcp_server` through the `watchfacts-mcp` Docker service.
+- Legacy Telegram bot still exists, but new business workflows should use MCP.
+- Production deploy path is `make deploy-hermes-mcp`.
+- Server deploy should not require `sudo` or `SKIP_PULL`.
 
 ## Phase 0: Foundation
 
@@ -17,6 +28,7 @@ Acceptance:
 - [x] `Dockerfile` exists and installs Python dependencies plus Playwright Chromium.
 - [x] `docker-compose.yml` mounts `data/` and `logs/`.
 - [x] `Makefile` wraps common commands.
+- [x] `Makefile` includes `deploy-mcp`, `deploy-hermes-mcp`, and Hermes restart targets.
 - [x] `.env.example`, `.gitignore`, and `.dockerignore` exist.
 
 Verify:
@@ -32,7 +44,7 @@ docker compose config
 Acceptance:
 
 - [x] README explains quick start and commands.
-- [x] AGENT.md defines project context and agent rules.
+- [x] AGENTS.md defines project context and agent rules.
 - [x] Specs, roadmap, operations, security, and ADR docs exist.
 
 Verify:
@@ -50,7 +62,8 @@ Description: Implement typed environment loading and path constants.
 Acceptance:
 
 - [x] `app/config.py` loads required and optional environment variables.
-- [x] Missing `TELEGRAM_BOT_TOKEN` fails with a clear config error.
+- [x] Missing `TELEGRAM_BOT_TOKEN` fails clearly only for Telegram runtime.
+- [x] Search/MCP runtime can load config without requiring Telegram credentials.
 - [x] Boolean values support common forms such as `true`, `false`, `1`, and `0`.
 
 Verify:
@@ -1057,3 +1070,51 @@ Likely files:
 - `app/search.py`
 - `tests/test_config.py`
 - `tests/test_tool_runtime.py`
+
+## Phase 12: Hermes MCP Runtime
+
+Status: complete.
+
+### Task 12.1: Complete MCP Bridge
+
+Acceptance:
+
+- [x] `app.mcp_server` exposes `search`, `health`, `create_chat_draft`,
+  `report_issue`, `list_issues`, `get_issue`, `update_issue`, and
+  `suspicious_summary`.
+- [x] `search` accepts `query`, `limit`, `offset`, and `include_similar`.
+- [x] MCP results do not include unsafe raw data by default.
+
+Likely files:
+
+- `app/mcp_server.py`
+- `tests/test_mcp_server.py`
+
+### Task 12.2: Docker And Hermes Wiring
+
+Acceptance:
+
+- [x] `watchfacts-mcp` service runs in Docker.
+- [x] Compose override joins the Hermes Docker network through
+  `HERMES_DOCKER_NETWORK`.
+- [x] Hermes config points to `http://watchfacts-mcp:8765/mcp`.
+- [x] `make deploy-hermes-mcp` deploys MCP and recreates Hermes.
+
+Likely files:
+
+- `docker-compose.yml`
+- `docker-compose.watchfacts-mcp.yml`
+- `Makefile`
+- `/opt/hermes-agent/data/config.yaml`
+- `/opt/hermes-agent/data/watchfacts_prefill.json`
+
+### Task 12.3: MCP Pagination And Image Contract
+
+Acceptance:
+
+- [x] `search` supports `offset`.
+- [x] Payload returns `has_more` and `next_offset`.
+- [x] Result ranks remain absolute across pages.
+- [x] Product images are passed through as `image_url` when available.
+- [x] Hermes instructions tell the agent to use `next_offset` for "xem thêm"
+  and not invent image links.
