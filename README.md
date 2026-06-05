@@ -102,6 +102,12 @@ Set `WATCHFACTS_HTTP_CLIENT_ENABLED=false` to force the older Playwright search
 path. Set `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to control how long the HTTPX
 search client reuses the authenticated WatchFacts search form action and CSRF
 token; the default is 900 seconds.
+The HTTPX client is reused within the process for connection pooling and reloads
+cookies when `data/watchfacts_state.json` changes. Tune
+`WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS`,
+`WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS`, and
+`WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS` only when production logs show
+connection or pool pressure.
 
 Create an authenticated WatchFacts browser session:
 
@@ -389,6 +395,9 @@ Control the HTTPX search client and WatchFacts form cache:
 ```bash
 WATCHFACTS_HTTP_CLIENT_ENABLED=true
 WATCHFACTS_FORM_CACHE_TTL_SECONDS=900
+WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS=10
+WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS=10
+WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS=60
 ```
 
 Bot commands:

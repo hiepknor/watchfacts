@@ -16,7 +16,10 @@ from app.config import (
     DEFAULT_TELEGRAM_RESULT_LIMIT,
     DEFAULT_WATCHFACTS_URL,
     DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS,
+    DEFAULT_WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS,
     DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED,
+    DEFAULT_WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS,
+    DEFAULT_WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS,
     load_settings,
     load_search_settings,
     parse_bool,
@@ -115,6 +118,18 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.search_max_concurrent_searches == DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES
     assert settings.watchfacts_http_client_enabled == DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED
     assert settings.watchfacts_form_cache_ttl_seconds == DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS
+    assert (
+        settings.watchfacts_http_connect_timeout_seconds
+        == DEFAULT_WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS
+    )
+    assert (
+        settings.watchfacts_http_pool_timeout_seconds
+        == DEFAULT_WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS
+    )
+    assert (
+        settings.watchfacts_http_keepalive_expiry_seconds
+        == DEFAULT_WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS
+    )
     assert settings.enable_openwa_chat_handoff is False
     assert settings.openwa_base_url == ""
     assert settings.openwa_api_key == ""
@@ -221,12 +236,18 @@ def test_load_settings_reads_watchfacts_http_client_options(tmp_path: Path) -> N
         env={
             "WATCHFACTS_HTTP_CLIENT_ENABLED": "false",
             "WATCHFACTS_FORM_CACHE_TTL_SECONDS": "1200",
+            "WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS": "7",
+            "WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS": "3",
+            "WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS": "11",
         },
         project_root=tmp_path,
     )
 
     assert settings.watchfacts_http_client_enabled is False
     assert settings.watchfacts_form_cache_ttl_seconds == 1200
+    assert settings.watchfacts_http_connect_timeout_seconds == 7
+    assert settings.watchfacts_http_pool_timeout_seconds == 3
+    assert settings.watchfacts_http_keepalive_expiry_seconds == 11
 
 
 def test_load_settings_reads_openwa_handoff_options(tmp_path: Path) -> None:

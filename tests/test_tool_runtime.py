@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -19,6 +20,7 @@ from app.tool_runtime import (
     watchfacts_suspicious_summary_payload,
     watchfacts_update_issue_payload,
 )
+from app.watchfacts_http import WatchFactsHttpClientStatus
 
 
 class FakeWorkflow:
@@ -412,3 +414,46 @@ def test_watchfacts_health_payload_reports_dependencies(tmp_path) -> None:
     assert payload["database"]["ok"] is True
     assert payload["openwa"]["ready"] is False
     assert payload["search_runtime"]["ready"] is True
+
+
+def test_watchfacts_health_payload_includes_http_client_status_without_secrets(
+    tmp_path,
+) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+
+    async def fake_checker(active_settings):
+        assert active_settings == settings
+        return BrowserSessionStatus(
+            ok=True,
+            status="valid",
+            detail="Saved browser session is valid.",
+        )
+
+    def fake_http_status(active_settings):
+        assert active_settings == settings
+        return WatchFactsHttpClientStatus(
+            enabled=True,
+            form_cache_fresh=True,
+            last_error_type="timeout",
+            last_success_at=1000.0,
+            last_fallback_at=1005.0,
+        )
+
+    payload = asyncio.run(
+        watchfacts_health_payload(
+            settings=settings,
+            session_checker=fake_checker,
+            http_client_status_provider=fake_http_status,
+        )
+    )
+
+    assert payload["watchfacts_http_client"] == {
+        "enabled": True,
+        "form_cache_fresh": True,
+        "last_error_type": "timeout",
+        "last_success_at": 1000.0,
+        "last_fallback_at": 1005.0,
+    }
+    serialized = json.dumps(payload).casefold()
+    assert "cookie" not in serialized
+    assert "csrf" not in serialized

@@ -17,6 +17,7 @@ from app.openwa_handoff import (
 from app.scraper import BrowserSessionStatus, check_watchfacts_session
 from app.search import WatchFactsSearchWorkflow
 from app.search_result import SearchResult, search_result_to_dict
+from app.watchfacts_http import WatchFactsHttpClientStatus, watchfacts_http_client_status
 
 
 OPENWA_MAX_SOURCE_URL_LENGTH = 2048
@@ -36,6 +37,7 @@ class SearchWorkflow(Protocol):
 
 SessionChecker = Callable[[Settings], Awaitable[BrowserSessionStatus]]
 ChatDraftClient = Callable[[dict[str, Any]], Awaitable[OpenWAChatDraftResponse]]
+HttpClientStatusProvider = Callable[[Settings], WatchFactsHttpClientStatus]
 
 
 @dataclass(frozen=True)
@@ -99,6 +101,7 @@ async def watchfacts_health_payload(
     *,
     settings: Settings | None = None,
     session_checker: SessionChecker | None = None,
+    http_client_status_provider: HttpClientStatusProvider | None = None,
 ) -> dict[str, object]:
     active_settings = settings or load_search_settings()
     database = Database(active_settings.db_path)
@@ -128,9 +131,12 @@ async def watchfacts_health_payload(
         }
 
     openwa_config = OpenWAHandoffConfig.from_settings(active_settings)
+    http_status_provider = http_client_status_provider or watchfacts_http_client_status
+    http_client_status = http_status_provider(active_settings)
     return {
         "watchfacts_session": session_status,
         "database": database_status,
+        "watchfacts_http_client": http_client_status.to_payload(),
         "openwa": {
             "enabled": openwa_config.enabled,
             "ready": openwa_config.is_ready,

@@ -106,6 +106,7 @@ Not allowed:
 - Defeat bot protection.
 - Extract hidden authentication material.
 - Log, expose, or persist cookies, CSRF tokens, or browser storage state outside the operator-created session file.
+- Include cookies, CSRF tokens, or response bodies in health/metrics payloads.
 
 ## OpenAI Data Boundary
 

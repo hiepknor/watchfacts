@@ -76,6 +76,9 @@ Expected environment:
 | `SEARCH_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum non-Telegram WatchFacts searches running at the same time; identical queries still coalesce |
 | `WATCHFACTS_HTTP_CLIENT_ENABLED` | No | `true` | Prefer the lightweight HTTPX search client before Playwright fallback |
 | `WATCHFACTS_FORM_CACHE_TTL_SECONDS` | No | `900` | Lifetime for cached WatchFacts search form action and CSRF token used by HTTPX |
+| `WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS` | No | `10` | HTTPX connect timeout for WatchFacts requests |
+| `WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS` | No | `10` | HTTPX connection-pool acquisition timeout |
+| `WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS` | No | `60` | HTTPX keepalive expiry for pooled WatchFacts connections |
 | `HYBRID_AI_MODE` | No | `off` | Controlled AI mode: `off`, `shadow`, `review`, or `guarded`; only `guarded` can alter search output |
 | `OPENAI_API_KEY` | Required when AI mode is not `off` | None | OpenAI API key; never logged or shown in Telegram |
 | `OPENAI_MODEL` | No | Cost-conscious current model | Model used for structured refinement suggestions |
@@ -101,6 +104,8 @@ Configuration rules:
 - Use `SEARCH_MAX_CONCURRENT_SEARCHES` to serialize or bound Hermes/MCP WatchFacts browser searches.
 - Use `WATCHFACTS_HTTP_CLIENT_ENABLED=false` to force the older Playwright search path during rollback.
 - Use `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to reduce repeated WatchFacts form GETs while still refreshing on CSRF/auth failures.
+- Reuse the process-level HTTPX client for connection pooling; reload cookies and clear form cache when `data/watchfacts_state.json` changes.
+- Expose only safe HTTPX status metadata in `health`: enabled flag, form-cache freshness, last error type, and timestamps.
 - Remove local model runtime support from the production path.
 - Keep `HYBRID_AI_MODE=off` by default; use `shadow` or `review` to collect safe suggestions before considering `guarded`.
 - Require `OPENAI_API_KEY` only when OpenAI-assisted modes are enabled.
@@ -202,6 +207,8 @@ Responsibilities:
 - Load `data/watchfacts_state.json`.
 - Prefer HTTPX for authenticated WatchFacts search POSTs.
 - Cache WatchFacts search form action and CSRF token briefly, and refresh on token/auth failures.
+- Reuse an HTTPX client manager with bounded connection pool limits and explicit connect/read/write/pool timeouts.
+- Serialize form refreshes so concurrent uncached searches do not stampede the WatchFacts form endpoint.
 - Launch Chromium with Playwright for login/session checks and fallback page fetches.
 - Navigate to `WATCHFACTS_URL` when Playwright fallback is needed.
 - Wait for stable page content.

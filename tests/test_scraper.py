@@ -12,9 +12,9 @@ from app.scraper import (
     BrowserSessionError,
     ScrapeResult,
     ScraperError,
-    WatchFactsHttpClient,
     fetch_watchfacts_html,
 )
+from app.watchfacts_http import WatchFactsHttpClient
 
 
 class FakeResponse:
