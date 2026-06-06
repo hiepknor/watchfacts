@@ -16,7 +16,7 @@ production integration target is Hermes over MCP.
 - Hermes MCP integration
 - Legacy Telegram bot integration
 - WatchFacts authenticated search
-- HTTPX WatchFacts search client with Playwright fallback
+- HTTPX WatchFacts search client
 - Playwright browser automation for login/session checks
 - WatchFacts JSON search response parsing with HTML fallback
 - BeautifulSoup + lxml HTML parsing
@@ -98,10 +98,13 @@ Set `SEARCH_CACHE_TTL_SECONDS` to reuse fresh identical search results before
 calling WatchFacts again; the default is 300 seconds.
 Set `SEARCH_MAX_CONCURRENT_SEARCHES` to limit concurrent non-Telegram
 WatchFacts searches, including Hermes/MCP requests; the default is 1.
-Set `WATCHFACTS_HTTP_CLIENT_ENABLED=false` to force the older Playwright search
-path. Set `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to control how long the HTTPX
-search client reuses the authenticated WatchFacts search form action and CSRF
-token; the default is 900 seconds.
+Keep `WATCHFACTS_HTTP_CLIENT_ENABLED=true` for the normal Telegram and MCP
+search runtime. Playwright is reserved for manual login/session checks in the
+production path; disabling the HTTPX client disables query search instead of
+falling back to Playwright.
+Set `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to control how long the HTTPX search
+client reuses the authenticated WatchFacts search form action and CSRF token;
+the default is 900 seconds.
 The HTTPX client is reused within the process for connection pooling and reloads
 cookies when `data/watchfacts_state.json` changes. Tune
 `WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS`,
@@ -571,8 +574,8 @@ pytest
 ```
 
 `ENABLE_CRAWL4AI` remains in config as a compatibility flag. Current production
-search uses WatchFacts JSON responses and HTML parsing, with HTTPX preferred
-for search POSTs and Playwright retained for login, session health, and fallback.
+search uses WatchFacts JSON responses and HTML parsing, with HTTPX for search
+POSTs and Playwright retained for login and session health.
 
 Benchmark authorized HTTPX search latency without printing cookies, CSRF tokens,
 query output, or response bodies:

@@ -614,71 +614,42 @@ def test_fetch_watchfacts_html_uses_http_client_for_query(tmp_path) -> None:
     assert fetched == [("5712g", 1234)]
 
 
-def test_fetch_watchfacts_html_falls_back_to_playwright_when_http_client_fails(tmp_path) -> None:
+def test_fetch_watchfacts_html_does_not_fallback_to_playwright_when_http_client_fails(
+    tmp_path,
+) -> None:
     settings = make_settings(tmp_path, http_client_enabled=True)
-    page = FakeSearchPage(
-        "<html><body>Should not need page navigation</body></html>",
-        settings.watchfacts_url,
-    )
-    get_response = FakeSearchResponse(
-        url=settings.watchfacts_url,
-        body=(
-            '<html><body><form id="mode3Form" action="/simon-search-matches">'
-            '<input name="_token" value="csrf-token"></form></body></html>'
-        ),
-    )
-    post_response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
-    factory, request = make_request_bootstrap_playwright_factory(
-        page,
-        get_response=get_response,
-        post_response=post_response,
-    )
+    closed = False
 
     class FailingHttpClient:
         async def fetch_search(self, query: str, *, timeout_ms: int) -> ScrapeResult:
             raise ScraperError("HTTPX search failed")
 
         async def close(self) -> None:
-            return None
+            nonlocal closed
+            closed = True
 
-    result = asyncio.run(
-        fetch_watchfacts_html(
-            settings,
-            query="116500 black",
-            playwright_factory=factory,
-            http_client_factory=lambda _: FailingHttpClient(),
-            timeout_ms=1234,
+    def fail_playwright_factory():
+        raise AssertionError("Playwright should not launch after HTTPX search fails")
+
+    with pytest.raises(ScraperError, match="HTTPX search failed"):
+        asyncio.run(
+            fetch_watchfacts_html(
+                settings,
+                query="116500 black",
+                playwright_factory=fail_playwright_factory,
+                http_client_factory=lambda _: FailingHttpClient(),
+                timeout_ms=1234,
+            )
         )
-    )
 
-    assert result == ScrapeResult(
-        html='{"listings":[{"title":"116500 black"}]}',
-        final_url="https://watchfacts.example/simon-search-matches",
-        server_filtered=True,
-    )
-    assert request.gets == [(settings.watchfacts_url, 90_000)]
-    assert request.posts
+    assert closed is True
 
 
-def test_fetch_watchfacts_html_skips_playwright_fallback_for_http_timeout_by_default(
+def test_fetch_watchfacts_html_raises_http_timeout_without_playwright_fallback(
     tmp_path,
     monkeypatch,
 ) -> None:
     settings = make_settings(tmp_path, http_client_enabled=True)
-    page = FakeSearchPage("<html><body>Should not need page navigation</body></html>", settings.watchfacts_url)
-    get_response = FakeSearchResponse(
-        url=settings.watchfacts_url,
-        body=(
-            '<html><body><form id="mode3Form" action="/simon-search-matches">'
-            '<input name="_token" value="csrf-token"></form></body></html>'
-        ),
-    )
-    post_response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
-    factory, request = make_request_bootstrap_playwright_factory(
-        page,
-        get_response=get_response,
-        post_response=post_response,
-    )
 
     import app.watchfacts_http as watchfacts_http
 
@@ -703,82 +674,19 @@ def test_fetch_watchfacts_html_skips_playwright_fallback_for_http_timeout_by_def
                 await fetch_watchfacts_html(
                     settings,
                     query="116500 black",
-                    playwright_factory=factory,
+                    playwright_factory=fail_playwright_factory,
                     timeout_ms=1234,
                 )
             return watchfacts_http_client_status(settings)
         finally:
             await close_watchfacts_http_client()
 
+    def fail_playwright_factory():
+        raise AssertionError("Playwright should not launch after HTTPX search times out")
+
     status = asyncio.run(run())
 
-    assert request.posts == []
-    assert status.last_error_type == "timeout"
-    assert status.last_fallback_at is not None
-
-
-def test_fetch_watchfacts_html_can_fallback_for_http_timeout_when_enabled(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    base_settings = make_settings(tmp_path, http_client_enabled=True)
-    settings = Settings(
-        **{
-            **base_settings.__dict__,
-            "watchfacts_http_timeout_fallback_enabled": True,
-        }
-    )
-    page = FakeSearchPage("<html><body>Should not need page navigation</body></html>", settings.watchfacts_url)
-    get_response = FakeSearchResponse(
-        url=settings.watchfacts_url,
-        body=(
-            '<html><body><form id="mode3Form" action="/simon-search-matches">'
-            '<input name="_token" value="csrf-token"></form></body></html>'
-        ),
-    )
-    post_response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
-    factory, request = make_request_bootstrap_playwright_factory(
-        page,
-        get_response=get_response,
-        post_response=post_response,
-    )
-
-    import app.watchfacts_http as watchfacts_http
-
-    async def failing_http_search(active_settings, query: str, *, timeout_ms: int):
-        assert active_settings == settings
-        assert query == "116500 black"
-        assert timeout_ms == 1234
-        exc = ScraperError("HTTPX search timed out")
-        setattr(exc, "watchfacts_http_error_type", "timeout")
-        raise exc
-
-    monkeypatch.setattr(
-        watchfacts_http,
-        "fetch_watchfacts_http_search",
-        failing_http_search,
-    )
-
-    async def run():
-        await close_watchfacts_http_client()
-        try:
-            return await fetch_watchfacts_html(
-                settings,
-                query="116500 black",
-                playwright_factory=factory,
-                timeout_ms=1234,
-            )
-        finally:
-            await close_watchfacts_http_client()
-
-    result = asyncio.run(run())
-
-    assert result == ScrapeResult(
-        html='{"listings":[{"title":"116500 black"}]}',
-        final_url="https://watchfacts.example/simon-search-matches",
-        server_filtered=True,
-    )
-    assert request.posts
+    assert status.last_fallback_at is None
 
 
 def test_missing_browser_state_raises_clear_error(tmp_path) -> None:
@@ -812,142 +720,23 @@ def test_fetch_watchfacts_html_loads_state_and_navigates_to_configured_url(tmp_p
     assert browser.closed is True
 
 
-def test_fetch_watchfacts_html_posts_query_to_watchfacts_search(tmp_path) -> None:
-    settings = make_settings(tmp_path)
-    page = FakeSearchPage("<html><body>Should not need page navigation</body></html>", settings.watchfacts_url)
-    get_response = FakeSearchResponse(
-        url=settings.watchfacts_url,
-        body=(
-            '<html><body><form id="mode3Form" action="/simon-search-matches">'
-            '<input name="_token" value="csrf-token"></form></body></html>'
-        ),
-    )
-    post_response = FakeSearchResponse(body='{"listings":[{"title":"116500 black"}]}')
-    factory, request = make_request_bootstrap_playwright_factory(
-        page,
-        get_response=get_response,
-        post_response=post_response,
-    )
-
-    result = asyncio.run(
-        fetch_watchfacts_html(
-            settings,
-            query="116500 black",
-            playwright_factory=factory,
-            timeout_ms=1234,
-        )
-    )
-
-    assert result == ScrapeResult(
-        html='{"listings":[{"title":"116500 black"}]}',
-        final_url="https://watchfacts.example/simon-search-matches",
-        server_filtered=True,
-    )
-    assert page.goto_calls == []
-    assert request.gets == [(settings.watchfacts_url, 90_000)]
-    assert request.posts == [
-        (
-            "https://watchfacts.example/simon-search-matches",
-            {
-                "_token": "csrf-token",
-                "listingType": "sale",
-                "reference": "116500 black",
-                "region": "",
-                "dial_color": "",
-                "is_bundle": "",
-                "sort_by": "price-low",
-                "created_days": "90",
-            },
-            90_000,
-        )
-    ]
-
-
-def test_fetch_watchfacts_html_falls_back_to_page_fetch_when_api_post_aborts(tmp_path) -> None:
-    settings = make_settings(tmp_path)
-    page = FakeSearchPage("<html><body>Listings</body></html>", settings.watchfacts_url)
-    page.evaluate_result = {
-        "status": 200,
-        "url": "https://watchfacts.example/simon-search-matches",
-        "text": '{"listings":[{"title":"15467bc"}]}',
-    }
-    factory, request = make_fallback_search_playwright_factory(
-        page,
-        RuntimeError("APIRequestContext.post: aborted"),
-    )
-
-    result = asyncio.run(
-        fetch_watchfacts_html(
-            settings,
-            query="15467bc",
-            playwright_factory=factory,
-            timeout_ms=1234,
-        )
-    )
-
-    assert result == ScrapeResult(
-        html='{"listings":[{"title":"15467bc"}]}',
-        final_url="https://watchfacts.example/simon-search-matches",
-        server_filtered=True,
-    )
-    assert request.posts
-    assert page.evaluate_calls
-
-
-def test_fetch_watchfacts_html_uses_request_bootstrap_when_page_navigation_times_out(
+def test_fetch_watchfacts_html_rejects_query_when_http_client_is_disabled(
     tmp_path,
 ) -> None:
-    settings = make_settings(tmp_path)
-    page = FakePage(
-        "<html><head><title>WatchFacts</title></head>",
-        settings.watchfacts_url,
-        goto_error=TimeoutError("navigation timed out"),
-    )
-    get_response = FakeSearchResponse(
-        url=settings.watchfacts_url,
-        body=(
-            '<html><body><form id="mode3Form" action="/simon-search-matches">'
-            '<input name="_token" value="csrf-token"></form></body></html>'
-        ),
-    )
-    post_response = FakeSearchResponse(body='{"listings":[{"title":"7118/1200r"}]}')
-    factory, request = make_request_bootstrap_playwright_factory(
-        page,
-        get_response=get_response,
-        post_response=post_response,
-    )
+    settings = make_settings(tmp_path, http_client_enabled=False)
 
-    result = asyncio.run(
-        fetch_watchfacts_html(
-            settings,
-            query="7118/1200r",
-            playwright_factory=factory,
-            timeout_ms=1234,
-        )
-    )
+    def fail_playwright_factory():
+        raise AssertionError("Playwright should not launch for query search")
 
-    assert result == ScrapeResult(
-        html='{"listings":[{"title":"7118/1200r"}]}',
-        final_url="https://watchfacts.example/simon-search-matches",
-        server_filtered=True,
-    )
-    assert request.gets == [(settings.watchfacts_url, 90_000)]
-    assert request.posts == [
-        (
-            "https://watchfacts.example/simon-search-matches",
-            {
-                "_token": "csrf-token",
-                "listingType": "sale",
-                "reference": "7118/1200r",
-                "region": "",
-                "dial_color": "",
-                "is_bundle": "",
-                "sort_by": "price-low",
-                "created_days": "90",
-            },
-            90_000,
+    with pytest.raises(ScraperError, match="HTTP search client is disabled"):
+        asyncio.run(
+            fetch_watchfacts_html(
+                settings,
+                query="116500 black",
+                playwright_factory=fail_playwright_factory,
+                timeout_ms=1234,
+            )
         )
-    ]
 
 
 def test_expired_browser_state_raises_clear_error(tmp_path) -> None:

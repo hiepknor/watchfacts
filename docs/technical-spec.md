@@ -6,7 +6,7 @@
 - MCP server for Hermes tool access
 - `python-telegram-bot[job-queue]` for Telegram integration
 - HTTPX for lightweight authenticated WatchFacts search requests
-- Playwright Chromium for authenticated browser automation
+- Playwright Chromium for authenticated login and session checks
 - WatchFacts authenticated JSON search response parsing with HTML fallback
 - BeautifulSoup4 + lxml for HTML parsing
 - SQLite for local cache, dedupe, and query history
@@ -25,7 +25,7 @@ app/
   mcp_server.py    # WatchFacts MCP tools for Hermes
   tool_runtime.py  # non-Telegram payload runtime used by MCP and diagnostics
   search_result.py # shared search result dataclass
-  scraper.py       # HTTPX search plus Playwright browser/session/fallback logic
+  scraper.py       # HTTPX search plus Playwright browser/session helpers
   parser.py        # HTML/listing extraction
   matcher.py       # stable public matcher API
   matcher_normalization.py # normalization and tokenization helpers
@@ -74,12 +74,12 @@ Expected environment:
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
 | `SEARCH_CACHE_TTL_SECONDS` | No | `300` | Fresh-result cache lifetime for identical normalized searches before calling WatchFacts again |
 | `SEARCH_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum non-Telegram WatchFacts searches running at the same time; identical queries still coalesce |
-| `WATCHFACTS_HTTP_CLIENT_ENABLED` | No | `true` | Prefer the lightweight HTTPX search client before Playwright fallback |
+| `WATCHFACTS_HTTP_CLIENT_ENABLED` | No | `true` | Enable the lightweight HTTPX search client used by the normal Telegram/MCP runtime |
 | `WATCHFACTS_FORM_CACHE_TTL_SECONDS` | No | `900` | Lifetime for cached WatchFacts search form action and CSRF token used by HTTPX |
 | `WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS` | No | `10` | HTTPX connect timeout for WatchFacts requests |
 | `WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS` | No | `10` | HTTPX connection-pool acquisition timeout |
 | `WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS` | No | `60` | HTTPX keepalive expiry for pooled WatchFacts connections |
-| `WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS` | No | `30` | HTTPX read timeout cap before falling back to Playwright |
+| `WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS` | No | `30` | HTTPX read timeout cap for form/cache requests |
 | `WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS` | No | `120` | HTTPX read timeout cap for search POSTs (usually longer than generic read timeout) |
 | `WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS` | No | `60` | Time to skip HTTPX after a failed HTTPX attempt |
 | `WATCHFACTS_HTTP_WARMUP_ON_HEALTH` | No | `true` | Allow MCP health to prefetch and cache the WatchFacts search form |
@@ -106,10 +106,10 @@ Configuration rules:
 - Validate Telegram result limit as a positive integer.
 - Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
 - Use `SEARCH_MAX_CONCURRENT_SEARCHES` to serialize or bound Hermes/MCP WatchFacts browser searches.
-- Use `WATCHFACTS_HTTP_CLIENT_ENABLED=false` to force the older Playwright search path during rollback.
+- Keep `WATCHFACTS_HTTP_CLIENT_ENABLED=true` for normal Telegram/MCP search; disabling it disables query search instead of falling back to Playwright.
 - Use `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to reduce repeated WatchFacts form GETs while still refreshing on CSRF/auth failures.
 - Reuse the process-level HTTPX client for connection pooling; reload cookies and clear form cache when `data/watchfacts_state.json` changes.
-- Cap HTTPX read time separately from Playwright fallback so slow HTTPX attempts fail fast.
+- Cap HTTPX read time so slow HTTPX attempts fail fast without launching Playwright.
 - Expose only safe HTTPX status metadata in `health`: enabled flag, form-cache freshness, error type, coarse timings, HTTP version, cooldown state, and timestamps.
 - Do not expose cookies, CSRF tokens, query text, response bodies, or raw WatchFacts payloads in HTTPX health or diagnostics output.
 - Remove local model runtime support from the production path.
@@ -124,7 +124,7 @@ Hermes user request
   -> Hermes MCP client
   -> watchfacts-mcp tool: search / health / create_chat_draft / issue tools
   -> tool_runtime payload function
-  -> scraper loads saved browser state and posts the WatchFacts search form through HTTPX when possible, with Playwright fallback
+  -> scraper loads saved browser state and posts the WatchFacts search form through HTTPX
   -> parser extracts listing candidates from JSON response or HTML fallback
   -> matcher filters or scopes listings by query tokens
   -> dedupe removes repeated latest reposts
@@ -211,12 +211,12 @@ Responsibilities:
 Responsibilities:
 
 - Load `data/watchfacts_state.json`.
-- Prefer HTTPX for authenticated WatchFacts search POSTs.
+- Use HTTPX for authenticated WatchFacts search POSTs in the normal Telegram/MCP runtime.
 - Cache WatchFacts search form action and CSRF token briefly, and refresh on token/auth failures.
 - Reuse an HTTPX client manager with bounded connection pool limits and explicit connect/read/write/pool timeouts.
 - Serialize form refreshes so concurrent uncached searches do not stampede the WatchFacts form endpoint.
-- Launch Chromium with Playwright for login/session checks and fallback page fetches.
-- Navigate to `WATCHFACTS_URL` when Playwright fallback is needed.
+- Launch Chromium with Playwright for login/session checks.
+- Navigate to `WATCHFACTS_URL` when checking saved browser-session validity.
 - Wait for stable page content.
 - Submit the WatchFacts search form when present.
 - Return search response text plus metadata indicating whether the server already filtered results.

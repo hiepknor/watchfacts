@@ -25,7 +25,6 @@ DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS = 30
 DEFAULT_WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS = 120
 DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS = 60
 DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH = True
-DEFAULT_WATCHFACTS_HTTP_TIMEOUT_FALLBACK_ENABLED = False
 DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT = "/api/chats/drafts"
 HybridAIMode = Literal["off", "shadow", "review", "guarded"]
 DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
@@ -83,9 +82,6 @@ class Settings:
         DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS
     )
     watchfacts_http_warmup_on_health: bool = DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH
-    watchfacts_http_timeout_fallback_enabled: bool = (
-        DEFAULT_WATCHFACTS_HTTP_TIMEOUT_FALLBACK_ENABLED
-    )
 
 
 def parse_bool(value: str, *, name: str) -> bool:
@@ -272,13 +268,6 @@ def load_settings(
         ),
         name="WATCHFACTS_HTTP_WARMUP_ON_HEALTH",
     )
-    watchfacts_http_timeout_fallback_enabled = parse_bool(
-        source.get(
-            "WATCHFACTS_HTTP_TIMEOUT_FALLBACK_ENABLED",
-            str(DEFAULT_WATCHFACTS_HTTP_TIMEOUT_FALLBACK_ENABLED).lower(),
-        ),
-        name="WATCHFACTS_HTTP_TIMEOUT_FALLBACK_ENABLED",
-    )
     enable_openwa_chat_handoff = parse_bool(
         source.get("ENABLE_OPENWA_CHAT_HANDOFF", "false"),
         name="ENABLE_OPENWA_CHAT_HANDOFF",
@@ -324,9 +313,6 @@ def load_settings(
         ),
         watchfacts_http_failure_cooldown_seconds=watchfacts_http_failure_cooldown_seconds,
         watchfacts_http_warmup_on_health=watchfacts_http_warmup_on_health,
-        watchfacts_http_timeout_fallback_enabled=(
-            watchfacts_http_timeout_fallback_enabled
-        ),
         openwa_base_url=openwa_base_url,
         openwa_api_key=openwa_api_key,
         openwa_dashboard_url=openwa_dashboard_url,

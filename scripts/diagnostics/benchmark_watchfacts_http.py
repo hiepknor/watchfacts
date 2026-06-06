@@ -4,13 +4,11 @@ import argparse
 import asyncio
 import sys
 import time
-from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.config import load_search_settings
-from app.scraper import fetch_watchfacts_html
 from app.watchfacts_http import (
     close_watchfacts_http_client,
     fetch_watchfacts_http_search,
@@ -61,28 +59,6 @@ async def _run_httpx_case(
     return True
 
 
-async def _run_playwright_case(*, query: str, timeout_ms: int) -> None:
-    settings = replace(load_search_settings(), watchfacts_http_client_enabled=False)
-    started_at = time.perf_counter()
-    try:
-        result = await fetch_watchfacts_html(settings, query=query, timeout_ms=timeout_ms)
-    except Exception as exc:
-        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
-        print(
-            "PLAYWRIGHT "
-            f"ok=false elapsed_ms={elapsed_ms} error_type={exc.__class__.__name__}"
-        )
-        return
-
-    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
-    print(
-        "PLAYWRIGHT "
-        f"ok=true elapsed_ms={elapsed_ms} "
-        f"html_bytes={len(result.html.encode('utf-8'))} "
-        f"server_filtered={result.server_filtered}"
-    )
-
-
 async def _main_async(args: argparse.Namespace) -> int:
     settings = load_search_settings()
     await close_watchfacts_http_client()
@@ -117,9 +93,6 @@ async def _main_async(args: argparse.Namespace) -> int:
             ):
                 passed += 1
 
-        if args.include_playwright:
-            await _run_playwright_case(query=args.query, timeout_ms=args.timeout_ms)
-
         print(f"SUMMARY httpx_passed={passed}/{args.repeat}")
         return 0 if passed == args.repeat else 1
     finally:
@@ -134,7 +107,6 @@ def main() -> int:
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--timeout-ms", type=int, default=30_000)
     parser.add_argument("--warmup", action="store_true")
-    parser.add_argument("--include-playwright", action="store_true")
     args = parser.parse_args()
     if args.repeat <= 0:
         parser.error("--repeat must be positive")

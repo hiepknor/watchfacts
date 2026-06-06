@@ -17,7 +17,6 @@ from app.watchfacts_forms import (
 DEFAULT_TIMEOUT_MS = 30_000
 SEARCH_TIMEOUT_MS = 90_000
 logger = logging.getLogger(__name__)
-HTTP_TIMEOUT_ERROR_TYPES = {"timeout", "cooldown"}
 
 
 class ScraperError(RuntimeError):
@@ -184,7 +183,9 @@ async def fetch_watchfacts_html(
         playwright_factory = async_playwright
 
     normalized_query = query.strip() if query is not None else ""
-    http_fallback_error_type: str | None = None
+    if normalized_query and not settings.watchfacts_http_client_enabled:
+        raise ScraperError("WatchFacts HTTP search client is disabled.")
+
     if normalized_query and settings.watchfacts_http_client_enabled:
         if http_client_factory is not None:
             http_client = http_client_factory(settings)
@@ -194,26 +195,16 @@ async def fetch_watchfacts_html(
                     timeout_ms=timeout_ms,
                 )
             except Exception as exc:
-                http_fallback_error_type = _http_error_type(exc)
-                if not _should_fallback_after_http_error(
-                    settings,
-                    http_fallback_error_type,
-                ):
-                    logger.info(
-                        "event=watchfacts_http_client.fallback_skipped error_type=%s",
-                        http_fallback_error_type,
-                    )
-                    raise
                 logger.info(
-                    "event=watchfacts_http_client.fallback error_type=%s",
-                    http_fallback_error_type,
+                    "event=watchfacts_http_client.search_failed error_type=%s",
+                    _http_error_type(exc),
                 )
+                raise
             finally:
                 await http_client.close()
         else:
             from app.watchfacts_http import (
                 fetch_watchfacts_http_search,
-                record_watchfacts_http_fallback,
                 watchfacts_http_error_type,
             )
 
@@ -224,45 +215,18 @@ async def fetch_watchfacts_html(
                     timeout_ms=timeout_ms,
                 )
             except Exception as exc:
-                http_fallback_error_type = watchfacts_http_error_type(exc)
-                record_watchfacts_http_fallback(
-                    settings,
-                    error_type=http_fallback_error_type,
-                )
-                if not _should_fallback_after_http_error(
-                    settings,
-                    http_fallback_error_type,
-                ):
-                    logger.info(
-                        "event=watchfacts_http_client.fallback_skipped error_type=%s",
-                        http_fallback_error_type,
-                    )
-                    raise
                 logger.info(
-                    "event=watchfacts_http_client.fallback error_type=%s",
-                    http_fallback_error_type,
+                    "event=watchfacts_http_client.search_failed error_type=%s",
+                    watchfacts_http_error_type(exc),
                 )
+                raise
 
-    try:
-        result = await _fetch_watchfacts_html_with_playwright(
-            settings,
-            query=query,
-            playwright_factory=playwright_factory,
-            timeout_ms=timeout_ms,
-        )
-    except Exception:
-        if http_fallback_error_type is not None:
-            logger.info(
-                "event=watchfacts_http_client.fallback_failed error_type=%s",
-                http_fallback_error_type,
-            )
-        raise
-    if http_fallback_error_type is not None:
-        logger.info(
-            "event=watchfacts_http_client.fallback_success error_type=%s",
-            http_fallback_error_type,
-        )
-    return result
+    return await _fetch_watchfacts_html_with_playwright(
+        settings,
+        query=query,
+        playwright_factory=playwright_factory,
+        timeout_ms=timeout_ms,
+    )
 
 
 def _http_error_type(exc: Exception) -> str:
@@ -273,18 +237,6 @@ def _http_error_type(exc: Exception) -> str:
     if "timeout" in class_name.casefold():
         return "timeout"
     return class_name
-
-
-def _should_fallback_after_http_error(
-    settings: Settings,
-    error_type: str | None,
-) -> bool:
-    if (
-        error_type in HTTP_TIMEOUT_ERROR_TYPES
-        and not settings.watchfacts_http_timeout_fallback_enabled
-    ):
-        return False
-    return True
 
 
 async def _fetch_watchfacts_html_with_playwright(

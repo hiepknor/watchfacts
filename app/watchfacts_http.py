@@ -749,10 +749,6 @@ async def warm_watchfacts_http_client(
     await _DEFAULT_MANAGER.warmup(settings, timeout_ms=timeout_ms)
 
 
-def record_watchfacts_http_fallback(settings: Settings, *, error_type: str) -> None:
-    _DEFAULT_MANAGER.record_fallback(settings, error_type=error_type)
-
-
 def watchfacts_http_client_status(settings: Settings) -> WatchFactsHttpClientStatus:
     return _DEFAULT_MANAGER.status(settings)
 
