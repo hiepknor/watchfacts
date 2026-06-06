@@ -80,6 +80,7 @@ Expected environment:
 | `WATCHFACTS_HTTP_POOL_TIMEOUT_SECONDS` | No | `10` | HTTPX connection-pool acquisition timeout |
 | `WATCHFACTS_HTTP_KEEPALIVE_EXPIRY_SECONDS` | No | `60` | HTTPX keepalive expiry for pooled WatchFacts connections |
 | `WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS` | No | `30` | HTTPX read timeout cap before falling back to Playwright |
+| `WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS` | No | `120` | HTTPX read timeout cap for search POSTs (usually longer than generic read timeout) |
 | `WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS` | No | `60` | Time to skip HTTPX after a failed HTTPX attempt |
 | `WATCHFACTS_HTTP_WARMUP_ON_HEALTH` | No | `true` | Allow MCP health to prefetch and cache the WatchFacts search form |
 | `HYBRID_AI_MODE` | No | `off` | Controlled AI mode: `off`, `shadow`, `review`, or `guarded`; only `guarded` can alter search output |

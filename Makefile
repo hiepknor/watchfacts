@@ -28,12 +28,12 @@ help:
 	@printf "%s\n" "  make pull     Pull latest git changes unless SKIP_PULL=1"
 	@printf "%s\n" "  make build    Build Docker image"
 	@printf "%s\n" "  make predeploy-check Run tests and lightweight checks before deploy"
-	@printf "%s\n" "  make deploy   Alias for deploy-bot"
+	@printf "%s\n" "  make deploy   Alias for deploy-hermes-mcp"
 	@printf "%s\n" "  make deploy-bot Pull, build, recreate bot, show status and startup logs"
 	@printf "%s\n" "  make deploy-mcp Pull, build, test, recreate watchfacts-mcp"
 	@printf "%s\n" "  make deploy-hermes-mcp Deploy watchfacts-mcp, then restart Hermes"
 	@printf "%s\n" "  make deploy-all Deploy bot and watchfacts-mcp"
-	@printf "%s\n" "  make deploy OPENWA_COMPOSE=1 Deploy with the OpenWA network override"
+	@printf "%s\n" "  make deploy-bot OPENWA_COMPOSE=1 Deploy legacy bot with OpenWA network override"
 	@printf "%s\n" "  make update   Alias for deploy"
 	@printf "%s\n" "  make up       Start bot with Docker Compose"
 	@printf "%s\n" "  make down     Stop Docker Compose services"
@@ -79,7 +79,7 @@ predeploy-check:
 	$(COMPOSE) run --rm $(SERVICE) python -m pytest -q
 	$(COMPOSE) run --rm $(SERVICE) python -m compileall app scripts
 
-deploy: deploy-bot
+deploy: deploy-hermes-mcp
 
 deploy-bot: verify-env pull build predeploy-check
 	$(COMPOSE) up -d --force-recreate $(SERVICE)

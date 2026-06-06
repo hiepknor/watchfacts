@@ -129,7 +129,7 @@ Run the legacy Telegram bot with Docker:
 
 ```bash
 make init
-make deploy
+make deploy-bot
 ```
 
 Run the WatchFacts MCP service and restart Hermes after schema/config changes:
@@ -145,7 +145,7 @@ values in `.env` and deploy with the MCP target:
 make deploy-hermes-mcp
 ```
 
-The legacy Telegram bot can still use `make deploy OPENWA_COMPOSE=1` when it
+The legacy Telegram bot can still use `make deploy-bot OPENWA_COMPOSE=1` when it
 needs the separate OpenWA compose override.
 
 ## Commands
@@ -155,12 +155,12 @@ needs the separate OpenWA compose override.
 | `make init` | Create `data/`, `logs/`, and `.env` from `.env.example` when missing |
 | `make verify-env` | Check `.env` and `data/watchfacts_state.json` before deploy |
 | `make predeploy-check` | Run pytest plus lightweight repository checks |
-| `make deploy` | Alias for `make deploy-bot` |
+| `make deploy` | Alias for `make deploy-hermes-mcp` |
 | `make deploy-bot` | Pull latest code, build, recreate the legacy Telegram bot, and show startup logs |
 | `make deploy-mcp` | Pull latest code, build, test, and recreate `watchfacts-mcp` |
 | `make deploy-hermes-mcp` | Deploy `watchfacts-mcp`, then recreate Hermes so it reloads MCP config/schema |
 | `make deploy-all` | Deploy both legacy bot and MCP service |
-| `make deploy OPENWA_COMPOSE=1` | Deploy with the OpenWA network override |
+| `make deploy-bot OPENWA_COMPOSE=1` | Deploy legacy bot with the OpenWA network override |
 | `make pull` | Pull latest git changes unless `SKIP_PULL=1` |
 | `make build` | Build the Docker image |
 | `make mcp-predeploy-check` | Run MCP predeploy checks inside the MCP Compose service |

@@ -133,7 +133,7 @@ OpenWA chat handoff:
 - Set `ENABLE_OPENWA_CHAT_HANDOFF=true`, `OPENWA_API_KEY` to an OpenWA operator
   key, `OPENWA_CHAT_DRAFT_ENDPOINT=/api/chats/drafts`, and
   `OPENWA_DOCKER_NETWORK=openwa-network`.
-- The legacy Telegram bot can still use `make deploy OPENWA_COMPOSE=1` if it
+- The legacy Telegram bot can still use `make deploy-bot OPENWA_COMPOSE=1` if it
   needs to join the separate OpenWA compose network.
 
 ## Docker Build
@@ -178,7 +178,7 @@ make restart
 Restart legacy Telegram bot after updating code:
 
 ```bash
-make deploy
+make deploy-bot
 ```
 
 Restart WatchFacts MCP and reload Hermes after updating code or MCP schema:
@@ -315,7 +315,7 @@ Checklist:
 - Run focused tests, then the full suite.
 - Bump `SEARCH_CACHE_VERSION` when scoring or quality gates can change cached
   output.
-- Deploy with `make deploy`.
+- Deploy with `make deploy-hermes-mcp`.
 - Verify the container is healthy and the production git HEAD matches the
   deployed commit.
 - Rerun the focused production audit after deploy.

@@ -225,7 +225,7 @@ you need to lock an accepted clean shorthand or a known-good ranking example.
 
 - [ ] Run the 10-query audit before deploy when matcher/scoring changes.
 - [ ] Run full local tests before commit.
-- [ ] Deploy with `make deploy`.
+- [ ] Deploy with `make deploy-hermes-mcp`.
 - [ ] Verify container health and production HEAD.
 - [ ] Rerun focused production audit after deploy.
 - [ ] Capture unresolved findings into PMO or docs before stopping.
