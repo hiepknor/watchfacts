@@ -183,8 +183,8 @@ Responsibilities:
   `report_issue`, `list_issues`, `get_issue`, `update_issue`,
   `suspicious_summary`.
 - Use `query`, `limit`, `offset`, and `include_similar` for `search`.
-- Let follow-up tools accept either `result_id` from search or absolute `rank`
-  when the user refers to a result number.
+- Let follow-up tools accept either the short-lived `result_id` from search or
+  absolute `rank` when the user refers to a result number.
 - Return structured JSON-like payloads without Telegram formatting concerns.
 - Avoid leaking raw listings unless a specific safe diagnostic path explicitly requests them.
 
@@ -196,7 +196,7 @@ Responsibilities:
 - Reuse the same scraper, parser, matcher, dedupe, scoring, cache, suspicious,
   OpenAI, and SQLite behavior as the Telegram workflow.
 - Support offset-based pagination with `has_more` and `next_offset`.
-- Preserve stable `result_id` handles for later handoff or issue reporting.
+- Return short-lived `result_id` cache handles for later handoff or issue reporting.
 - Include product `image_url` when available.
 
 ### `search_result.py`

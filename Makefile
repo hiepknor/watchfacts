@@ -1,10 +1,12 @@
 SHELL := /bin/sh
 
 COMPOSE ?= docker compose
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python)
 SERVICE ?= bot
 LOG_LINES ?= 80
 SKIP_PULL ?= 0
 OPENWA_COMPOSE ?= 0
+SMOKE_QUERY ?= 5712g
 MCP_COMPOSE_SUFFIX ?= -f docker-compose.watchfacts-mcp.yml
 MCP_SERVICE ?= watchfacts-mcp
 export HERMES_DOCKER_NETWORK ?= hermes-agent_default
@@ -18,7 +20,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-all deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps restart-hermes hermes-ps hermes-logs
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-all deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke restart-hermes hermes-ps hermes-logs
 
 help:
 	@printf "%s\n" "watchfacts-bot commands"
@@ -27,7 +29,7 @@ help:
 	@printf "%s\n" "  make verify-env Check server runtime files before deploy"
 	@printf "%s\n" "  make pull     Pull latest git changes unless SKIP_PULL=1"
 	@printf "%s\n" "  make build    Build Docker image"
-	@printf "%s\n" "  make predeploy-check Run tests and lightweight checks before deploy"
+	@printf "%s\n" "  make predeploy-check Run tests and repository checks before deploy"
 	@printf "%s\n" "  make deploy   Alias for deploy-hermes-mcp"
 	@printf "%s\n" "  make deploy-bot Pull, build, recreate bot, show status and startup logs"
 	@printf "%s\n" "  make deploy-mcp Pull, build, test, recreate watchfacts-mcp"
@@ -50,10 +52,11 @@ help:
 	@printf "%s\n" "  make mcp-restart    Restart watchfacts-mcp"
 	@printf "%s\n" "  make mcp-logs       Follow watchfacts-mcp logs"
 	@printf "%s\n" "  make mcp-ps         Show watchfacts-mcp status"
+	@printf "%s\n" "  make mcp-smoke      Run one authorized HTTPX search smoke check"
 	@printf "%s\n" "  make restart-hermes Recreate Hermes service after MCP schema/config changes"
 	@printf "%s\n" "  make hermes-ps      Show Hermes service status"
 	@printf "%s\n" "  make hermes-logs    Follow Hermes logs"
-	@printf "%s\n" "  make check    Run lightweight repository checks"
+	@printf "%s\n" "  make check    Run repository checks"
 	@printf "%s\n" "  make clean    Remove local Python caches"
 
 init:
@@ -116,10 +119,10 @@ shell:
 	$(COMPOSE) run --rm $(SERVICE) /bin/sh
 
 run:
-	python -m app.main
+	$(PYTHON) -m app.main
 
 login:
-	python scripts/ops/login.py
+	$(PYTHON) scripts/ops/login.py
 
 MCP_COMPOSE_CMD = docker compose -f docker-compose.yml $(MCP_COMPOSE_SUFFIX)
 
@@ -146,6 +149,9 @@ mcp-logs:
 mcp-ps:
 	$(MCP_COMPOSE_CMD) ps $(MCP_SERVICE)
 
+mcp-smoke:
+	$(PYTHON) scripts/diagnostics/benchmark_watchfacts_http.py --query "$(SMOKE_QUERY)" --warmup --repeat 1
+
 restart-hermes:
 	cd $(HERMES_DIR) && $(HERMES_COMPOSE) up -d --force-recreate --no-deps $(HERMES_SERVICE)
 
@@ -157,11 +163,17 @@ hermes-logs:
 
 check:
 	git diff --check
+	@if [ -d tests ]; then $(PYTHON) -m pytest -q; fi
 	@paths=""; \
 	for path in app scripts; do \
 		if [ -d "$$path" ]; then paths="$$paths $$path"; fi; \
 	done; \
-	if [ -n "$$paths" ]; then python -m compileall $$paths; fi
+	if [ -n "$$paths" ]; then $(PYTHON) -m compileall $$paths; fi
+	@if command -v docker >/dev/null 2>&1; then \
+		$(MCP_COMPOSE_CMD) config >/dev/null; \
+	else \
+		printf "%s\n" "Skipping Docker Compose config check because docker is not installed"; \
+	fi
 
 clean:
 	@find . -type d -name __pycache__ -prune -exec rm -rf {} +

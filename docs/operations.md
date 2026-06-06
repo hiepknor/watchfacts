@@ -106,8 +106,8 @@ Hermes/MCP behavior:
 
 - Initial search should call `search(query=<full user text>, limit=5, offset=0, include_similar=true)`.
 - "Xem thêm" should call `search` again with the same query and previous `next_offset`.
-- Use `result_id` for `create_chat_draft` and issue reporting when available.
-  If the user says "kết quả 20", pass `rank=20`.
+- Use the short-lived `result_id` for `create_chat_draft` and issue reporting
+  when available. If the user says "kết quả 20", pass `rank=20`.
 - Use `image_url` as the product image when present.
 - Do not invent seller contact, result ids, source links, prices, image links, or OpenWA links.
 

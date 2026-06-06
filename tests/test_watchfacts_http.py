@@ -210,10 +210,15 @@ def test_watchfacts_http_manager_reports_status_without_secrets(tmp_path: Path) 
     write_storage_state(settings, cookie_value="first", mtime_ns=100)
     monotonic_now = 100.0
     wall_now = 1_700_000_000.0
+    post_count = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal post_count
         if request.method == "GET":
             return form_response(request)
+        post_count += 1
+        if post_count == 2:
+            return httpx.Response(500, text="temporary failure", request=request)
         return search_response(request)
 
     def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
@@ -235,7 +240,8 @@ def test_watchfacts_http_manager_reports_status_without_secrets(tmp_path: Path) 
         try:
             await manager.fetch_search(settings, "5712g", timeout_ms=1234)
             wall_now += 5
-            manager.record_fallback(settings, error_type="timeout")
+            with pytest.raises(ScraperError, match="HTTP 500"):
+                await manager.fetch_search(settings, "5712r", timeout_ms=1234)
             return manager.status(settings)
         finally:
             await manager.close_all()
@@ -246,15 +252,16 @@ def test_watchfacts_http_manager_reports_status_without_secrets(tmp_path: Path) 
     assert payload == {
         "enabled": True,
         "form_cache_fresh": True,
-        "last_error_type": "timeout",
+        "last_error_type": "http_status",
         "last_success_at": 1_700_000_000.0,
-        "last_fallback_at": 1_700_000_005.0,
+        "last_failure_at": 1_700_000_005.0,
+        "last_fallback_at": None,
         "last_elapsed_ms": 0,
         "last_form_refresh_elapsed_ms": 0,
         "last_post_elapsed_ms": 0,
         "last_http_version": "HTTP/1.1",
-        "last_status_code": 200,
-        "last_response_bytes": len(b'{"listings":[{"title":"5712g"}]}'),
+        "last_status_code": 500,
+        "last_response_bytes": len(b"temporary failure"),
         "last_server_query_changed": False,
         "last_server_query_token_count": 1,
         "consecutive_failures": 1,

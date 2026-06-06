@@ -12,7 +12,8 @@ search WatchFacts trading listings through Hermes, for example:
 Hermes calls the WatchFacts MCP tools. The runtime uses an authenticated browser
 session, extracts listings from WatchFacts JSON/HTML responses, matches listings
 deterministically, deduplicates latest reposts, and returns structured ranked
-results with seller, date, source link, product image, and stable result handles.
+results with seller, date, source link, product image, and short-lived result
+handles.
 
 The legacy Telegram bot remains available, but new business automation should
 use the non-Telegram runtime and MCP bridge instead of reimplementing search.
@@ -46,7 +47,7 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 2. Hermes calls `search(query, limit=5, offset=0, include_similar=true)` on the WatchFacts MCP server.
 3. Runtime validates and normalizes the query.
 4. Runtime loads or reuses authenticated WatchFacts browser state.
-5. Runtime crawls the configured WatchFacts URL.
+5. Runtime posts the WatchFacts search form through HTTPX.
 6. Runtime extracts listing candidates from JSON search responses or HTML fallback.
 7. Runtime matches or scopes listings against query tokens.
 8. Runtime removes repeated latest reposts.
@@ -54,14 +55,14 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 10. If OpenAI controlled intelligence is enabled, runtime may record or apply a guarded suggestion only after strict validation.
 11. Runtime stores query/cache/dedupe/issue data in SQLite.
 12. MCP payload returns ranked results with `result_id`, `rank`, `image_url`, `has_more`, and `next_offset`.
-13. Hermes answers in Vietnamese and preserves `result_id` for contact/feedback follow-ups.
+13. Hermes answers in Vietnamese and preserves the short-lived `result_id` for contact/feedback follow-ups.
 14. For "xem thêm", Hermes calls the same query with `offset=next_offset`.
 
 ## Functional Requirements
 
 - Expose MCP tool `search(query, limit=5, offset=0, include_similar=true)`.
 - Search payload must include pagination fields `offset`, `limit`, `has_more`, `next_offset`, and stable absolute `rank`.
-- Search payload must include `result_id` for follow-up actions.
+- Search payload must include a short-lived `result_id` for follow-up actions.
 - Search payload should include `image_url` when WatchFacts provides a product image.
 - Expose MCP tool `health` for WatchFacts session, database, OpenWA, and search readiness.
 - Expose MCP tool `create_chat_draft(query, result_id=None, rank=None)` for seller handoff through OpenWA.
@@ -139,7 +140,7 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 | Stop Docker service | `make down` |
 | Follow logs | `make logs` |
 | Open container shell | `make shell` |
-| Run lightweight checks | `make check` |
+| Run repository checks | `make check` |
 | Run bot locally | `python -m app.main` |
 | Run login locally | `python scripts/ops/login.py` |
 | Deploy legacy Telegram bot | `make deploy-bot` |

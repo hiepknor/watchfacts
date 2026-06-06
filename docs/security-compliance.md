@@ -75,7 +75,7 @@ Logs must not include:
 - Keep MCP tool names and schemas stable so Hermes does not need prompt hacks to call them.
 - Do not expose `.env`, browser state, raw cookies, OpenWA API keys, or Telegram tokens through MCP payloads.
 - Do not let Hermes invent seller contact, source links, prices, product images, result ids, or OpenWA links.
-- Use `result_id` from `search` for follow-up tools such as `create_chat_draft` and `report_issue`.
+- Use the short-lived `result_id` from `search` for follow-up tools such as `create_chat_draft` and `report_issue`.
 - Use `offset` / `next_offset` for pagination instead of hidden Telegram callback state.
 - `watchfacts_prefill.json` may contain operating instructions, but must not contain secrets.
 

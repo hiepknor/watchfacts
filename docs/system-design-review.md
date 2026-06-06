@@ -76,7 +76,7 @@ Cloudflare, or anti-bot systems.
    query/rank. Regression coverage stores two result sets for the same
    query/rank and verifies rank follow-up resolves to the latest search payload.
 
-2. Required: clarify `result_id` stability.
+2. Resolved: clarify `result_id` stability.
 
    The MCP contract describes `result_id` as stable, but the current hash
    includes query, rank, listing text, raw listing text, and source URL. This is
@@ -84,10 +84,10 @@ Cloudflare, or anti-bot systems.
    extracted listing text changes. That is acceptable for an operational cache
    handle, but not for a durable listing identity.
 
-   Recommended fix: document `result_id` as a short-lived follow-up handle, or
-   introduce a separate durable listing identifier derived from source URL or
-   WatchFacts listing number when available. Avoid changing the existing MCP
-   field without a compatibility note for Hermes.
+   Current fix: document `result_id` as a short-lived follow-up handle. A
+   separate durable listing identifier derived from source URL or WatchFacts
+   listing number can be introduced later without changing the existing MCP
+   field.
 
 3. Resolved: add MCP search backpressure for distinct queries.
 

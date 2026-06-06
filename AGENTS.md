@@ -128,7 +128,8 @@ Use these commands when the matching files exist:
 | Follow MCP logs | `make mcp-logs` |
 | Follow legacy bot logs | `make logs` |
 | Open container shell | `make shell` |
-| Run lightweight checks | `make check` |
+| Run repository checks | `make check` |
+| Run authorized HTTPX WatchFacts smoke search | `make mcp-smoke` |
 
 If tests or lint commands are added later, update this file and prefer those commands for verification.
 

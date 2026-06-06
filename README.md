@@ -6,7 +6,7 @@ and the legacy Telegram bot.
 The project keeps WatchFacts search logic in a non-Telegram runtime. Hermes calls
 that runtime through the `watchfacts-mcp` service, receives structured ranked
 results, paginates with `offset` / `next_offset`, uses `image_url` for product
-photos, and can create OpenWA chat drafts from stable `result_id` handles.
+photos, and can create OpenWA chat drafts from short-lived `result_id` handles.
 
 The Telegram bot still exists as a supported legacy channel, but the current
 production integration target is Hermes over MCP.
@@ -23,7 +23,7 @@ production integration target is Hermes over MCP.
 - Regex and token-based matching
 - Duplicate listing filtering
 - Structured MCP tools for search, health, chat draft handoff, issue review, and suspicious QA
-- Offset-based MCP pagination with stable result ranks and `result_id` handles
+- Offset-based MCP pagination with stable result ranks and short-lived `result_id` handles
 - Product image propagation via `image_url`
 - Summary-first Telegram pagination with "Xem kết quả" / "Xem thêm"
 - Telegram message length guards for long listings
@@ -157,7 +157,7 @@ needs the separate OpenWA compose override.
 | --- | --- |
 | `make init` | Create `data/`, `logs/`, and `.env` from `.env.example` when missing |
 | `make verify-env` | Check `.env` and `data/watchfacts_state.json` before deploy |
-| `make predeploy-check` | Run pytest plus lightweight repository checks |
+| `make predeploy-check` | Run pytest plus repository checks |
 | `make deploy` | Alias for `make deploy-hermes-mcp` |
 | `make deploy-bot` | Pull latest code, build, recreate the legacy Telegram bot, and show startup logs |
 | `make deploy-mcp` | Pull latest code, build, test, and recreate `watchfacts-mcp` |
@@ -170,6 +170,7 @@ needs the separate OpenWA compose override.
 | `make mcp-up` | Start `watchfacts-mcp` with the Hermes network override |
 | `make mcp-logs` | Follow `watchfacts-mcp` logs |
 | `make mcp-ps` | Show `watchfacts-mcp` status |
+| `make mcp-smoke` | Run one authorized HTTPX WatchFacts search smoke check |
 | `make restart-hermes` | Recreate Hermes after MCP schema/config changes |
 | `make hermes-logs` | Follow Hermes logs |
 | `make hermes-ps` | Show Hermes status |
@@ -181,7 +182,7 @@ needs the separate OpenWA compose override.
 | `make shell` | Open a shell in the bot container |
 | `make run` | Run the bot locally on the host |
 | `make login` | Run the WatchFacts browser login locally on the host |
-| `make check` | Run lightweight repository checks |
+| `make check` | Run repository checks |
 | `python scripts/ops/login.py` | Open Chromium for manual WatchFacts login and save browser state |
 | `python scripts/diagnostics/debug_match.py <query> <listing>` | Inspect matcher trace and result score locally |
 | `python -m app.main` | Run the Telegram bot locally |
@@ -315,16 +316,17 @@ mcp_servers:
 
 `search(query, limit=5, offset=0, include_similar=true)` returns ranked results,
 `has_more`, and `next_offset`. Hermes should reuse the original query and pass
-`offset=next_offset` for "xem thêm" follow-ups. Search results include
-`result_id` and absolute `rank` for later handoff/feedback. Follow-up tools
-accept `result_id` when available, or `rank` when the user says "kết quả 20".
+`offset=next_offset` for "xem thêm" follow-ups. Search results include a
+short-lived `result_id` cache handle and absolute `rank` for later
+handoff/feedback. Follow-up tools accept `result_id` when available, or `rank`
+when the user says "kết quả 20".
 Results include `image_url` for product photos when WatchFacts provides one.
 
 Tool catalog:
 
 | Tool | Purpose |
 | --- | --- |
-| `search` | Search WatchFacts and return paginated ranked results with `result_id` handles |
+| `search` | Search WatchFacts and return paginated ranked results with short-lived `result_id` handles |
 | `health` | Check WatchFacts session, database, OpenWA, and search readiness |
 | `create_chat_draft` | Create an OpenWA chat draft from a prior `search` result by `result_id` or `rank` |
 | `report_issue` | Record result feedback for owner review |
@@ -582,6 +584,12 @@ query output, or response bodies:
 
 ```bash
 python scripts/diagnostics/benchmark_watchfacts_http.py --query "5712g" --warmup --repeat 3
+```
+
+Run a single authorized HTTPX smoke search with the default query `5712g`:
+
+```bash
+make mcp-smoke
 ```
 
 ## Ignored Files

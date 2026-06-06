@@ -31,7 +31,8 @@ app = FastMCP(
     name="search",
     description=(
         "Search WatchFacts products. Use offset/next_offset for pagination. "
-        "Results include rank, result_id, seller, seller_phone, image_url, and source_url."
+        "Results include rank, short-lived result_id, seller, seller_phone, "
+        "image_url, and source_url."
     ),
 )
 async def search(
@@ -63,8 +64,9 @@ async def health() -> dict[str, object]:
     name="create_chat_draft",
     description=(
         "Create an OpenWA chat draft for a WatchFacts search result. "
-        "Pass result_id from search when available, or pass rank when the user says "
-        "a result number such as 'ket qua 20'. Do not use terminal/docker for this."
+        "Pass the short-lived result_id from search when available, or pass rank "
+        "when the user says a result number such as 'ket qua 20'. Do not use "
+        "terminal/docker for this."
     ),
 )
 async def create_chat_draft(
@@ -84,8 +86,8 @@ async def create_chat_draft(
     name="report_issue",
     description=(
         "Report a missing-info or wrong-result issue for a WatchFacts search result. "
-        "Pass result_id from search when available, or pass rank when the user refers "
-        "to a result number."
+        "Pass the short-lived result_id from search when available, or pass rank "
+        "when the user refers to a result number."
     ),
 )
 async def report_issue(

@@ -51,19 +51,13 @@ class BrowserStateFingerprint:
 
 
 @dataclass(frozen=True)
-class FallbackStatus:
-    error_type: str
-    at: float
-    consecutive_failures: int
-    cooldown_until: float | None
-
-
-@dataclass(frozen=True)
 class WatchFactsHttpClientStatus:
     enabled: bool
     form_cache_fresh: bool
     last_error_type: str | None = None
     last_success_at: float | None = None
+    last_failure_at: float | None = None
+    # Deprecated compatibility key; HTTPX search no longer has a Playwright fallback.
     last_fallback_at: float | None = None
     last_elapsed_ms: int | None = None
     last_form_refresh_elapsed_ms: int | None = None
@@ -82,6 +76,7 @@ class WatchFactsHttpClientStatus:
             "form_cache_fresh": self.form_cache_fresh,
             "last_error_type": self.last_error_type,
             "last_success_at": self.last_success_at,
+            "last_failure_at": self.last_failure_at,
             "last_fallback_at": self.last_fallback_at,
             "last_elapsed_ms": self.last_elapsed_ms,
             "last_form_refresh_elapsed_ms": self.last_form_refresh_elapsed_ms,
@@ -118,7 +113,7 @@ class WatchFactsHttpClient:
         self._form_lock = asyncio.Lock()
         self._last_error_type: str | None = None
         self._last_success_at: float | None = None
-        self._last_fallback_at: float | None = None
+        self._last_failure_at: float | None = None
         self._last_elapsed_ms: int | None = None
         self._last_form_refresh_elapsed_ms: int | None = None
         self._last_post_elapsed_ms: int | None = None
@@ -267,19 +262,14 @@ class WatchFactsHttpClient:
                 "httpx_error",
             ) from exc
 
-    def record_fallback(self, *, error_type: str) -> None:
-        if error_type != "cooldown" and self._last_error_type != error_type:
-            self._record_failure(error_type, self._now())
-        self._last_error_type = error_type
-        self._last_fallback_at = self._wall_clock()
-
     def status(self) -> WatchFactsHttpClientStatus:
         return WatchFactsHttpClientStatus(
             enabled=self.settings.watchfacts_http_client_enabled,
             form_cache_fresh=self._form_cache_is_fresh(),
             last_error_type=self._last_error_type,
             last_success_at=self._last_success_at,
-            last_fallback_at=self._last_fallback_at,
+            last_failure_at=self._last_failure_at,
+            last_fallback_at=None,
             last_elapsed_ms=self._last_elapsed_ms,
             last_form_refresh_elapsed_ms=self._last_form_refresh_elapsed_ms,
             last_post_elapsed_ms=self._last_post_elapsed_ms,
@@ -558,10 +548,11 @@ class WatchFactsHttpClient:
         self._last_elapsed_ms = _elapsed_ms(self._now(), started_at)
         if error_type == "cooldown":
             return
+        failure_at = self._wall_clock()
+        self._last_failure_at = failure_at
         self._consecutive_failures += 1
         self._cooldown_until = (
-            self._wall_clock()
-            + self.settings.watchfacts_http_failure_cooldown_seconds
+            failure_at + self.settings.watchfacts_http_failure_cooldown_seconds
         )
 
     def _record_success(self, started_at: float) -> None:
@@ -594,7 +585,6 @@ class WatchFactsHttpClientManager:
         self._now = now
         self._wall_clock = wall_clock
         self._clients: dict[HttpClientKey, WatchFactsHttpClient] = {}
-        self._fallback_status: dict[HttpClientBaseKey, FallbackStatus] = {}
         self._lock = asyncio.Lock()
 
     async def fetch_search(
@@ -611,59 +601,24 @@ class WatchFactsHttpClientManager:
         client = await self._client_for(settings)
         await client.warmup(timeout_ms=timeout_ms)
 
-    def record_fallback(self, settings: Settings, *, error_type: str) -> None:
-        key = self._key(settings)
-        client = self._clients.get(key)
-        if client is not None:
-            client.record_fallback(error_type=error_type)
-            return
-        base_key = self._base_key(settings)
-        existing = self._fallback_status.get(base_key)
-        if error_type == "cooldown" and existing is not None:
-            consecutive_failures = existing.consecutive_failures
-            cooldown_until = existing.cooldown_until
-        else:
-            consecutive_failures = (
-                existing.consecutive_failures if existing is not None else 0
-            ) + 1
-            cooldown_until = (
-                self._wall_clock()
-                + settings.watchfacts_http_failure_cooldown_seconds
-            )
-        self._fallback_status[base_key] = FallbackStatus(
-            error_type,
-            self._wall_clock(),
-            consecutive_failures,
-            cooldown_until,
-        )
-
     def status(self, settings: Settings) -> WatchFactsHttpClientStatus:
         key = self._key(settings)
         client = self._clients.get(key)
         if client is not None:
             return client.status()
-        fallback = self._fallback_status.get(self._base_key(settings))
         return WatchFactsHttpClientStatus(
             enabled=settings.watchfacts_http_client_enabled,
             form_cache_fresh=False,
-            last_error_type=fallback.error_type if fallback is not None else None,
-            last_fallback_at=fallback.at if fallback is not None else None,
-            consecutive_failures=(
-                fallback.consecutive_failures if fallback is not None else 0
-            ),
-            cooldown_until=fallback.cooldown_until if fallback is not None else None,
         )
 
     async def close_all(self) -> None:
         clients = list(self._clients.values())
         self._clients.clear()
-        self._fallback_status.clear()
         for client in clients:
             await client.close()
 
     async def close(self, settings: Settings) -> None:
         base_key = self._base_key(settings)
-        self._fallback_status.pop(base_key, None)
         clients = [
             self._clients.pop(key)
             for key in list(self._clients)
