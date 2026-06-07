@@ -30,3 +30,15 @@ def test_watchfacts_mcp_override_joins_openwa_network() -> None:
     assert "      - openwa" in service_text
     assert "  openwa:" in compose_text
     assert "name: ${OPENWA_DOCKER_NETWORK:-openwa-network}" in compose_text
+
+
+def test_watchfacts_mcp_override_publishes_localhost_only_for_results_proxy() -> None:
+    compose_text = Path("docker-compose.watchfacts-mcp.yml").read_text()
+    service_text = compose_text.split("  watchfacts-mcp:", 1)[1].split(
+        "\n\nnetworks:",
+        1,
+    )[0]
+
+    assert '      - "127.0.0.1:8765:8765"' in service_text
+    assert '      - "0.0.0.0:8765:8765"' not in service_text
+    assert '      - "8765:8765"' not in service_text
