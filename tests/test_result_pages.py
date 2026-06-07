@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import html
+import json
+import os
+import re
+import shutil
+import subprocess
+
+import pytest
 
 from app.result_pages import (
     ResultPageConfig,
@@ -21,6 +29,18 @@ def make_config(tmp_path, *, public_base_url: str = "https://mcp.example/results
     )
 
 
+def chrome_executable() -> str | None:
+    candidates = [
+        os.environ.get("CHROME_BIN"),
+        shutil.which("google-chrome"),
+        shutil.which("chrome"),
+        shutil.which("chromium"),
+        shutil.which("chromium-browser"),
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ]
+    return next((candidate for candidate in candidates if candidate and os.path.exists(candidate)), None)
+
+
 def test_render_result_page_template_defaults_to_null_results() -> None:
     html = render_result_page_template()
 
@@ -31,6 +51,12 @@ def test_render_result_page_template_includes_operational_dashboard_hooks() -> N
     html = render_result_page_template()
 
     assert "id=\"resultsMeta\"" in html
+    assert "class=\"header-main\"" in html
+    assert "summary-item summary-total" in html
+    assert "summary-item summary-status" in html
+    assert ".header-main" in html
+    assert ".meta-chip + .meta-chip" in html
+    assert ".summary-item::before" in html
     assert "id=\"densityDense\"" in html
     assert "function renderHeader()" in html
     assert "function renderToolbarState()" in html
@@ -39,11 +65,321 @@ def test_render_result_page_template_includes_operational_dashboard_hooks() -> N
     assert "No result payload" in html
 
 
+def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
+    html = render_result_page_template()
+
+    assert '"result-media"' in html
+    assert '"result-body"' in html
+    assert '"result-lead"' in html
+    assert '"result-actions-primary"' in html
+    assert '"result-details"' in html
+    assert 'id="resultModal"' in html
+    assert 'aria-modal="true"' in html
+    assert "--listing-accent" in html
+    assert "repeat(auto-fill, minmax(13.5rem, 1fr))" in html
+    assert "repeat(auto-fill, minmax(11rem, 1fr))" in html
+    assert "-webkit-line-clamp: 4" in html
+    assert "truncate(item.listing_text, 220)" in html
+    assert "body.append(lead, actions);" in html
+    assert "article.append(media, body);" in html
+    assert "function hasImage(item)" in html
+    assert "function createDetailsMeta(item)" in html
+    assert 'function createOverflowActions(item, similarPanel, className = "")' in html
+    assert "function createResultDetailsContent(item)" in html
+    assert "function formattedListingFields(item)" in html
+    assert 'function createFormattedListingDisplay(item, className = "", titleTag = "h2")' in html
+    assert "function formatListingCopy(item)" in html
+    assert "formattedListingFields(item).map" in html
+    assert "function formatCopyDate(value)" in html
+    assert "raw.split(\"·\", 1)[0].split(\" - \", 1)[0].trim()" in html
+    assert 'return iso[3] + "/" + iso[2] + "/" + iso[1];' in html
+    assert 'return padDatePart(monthMatch[2]) + "/" + padDatePart(monthNumber) + "/" + monthMatch[3];' in html
+    assert "january: 1, jan: 1" in html
+    assert 'copyPrefix: "🏷️  "' in html
+    assert 'value: copyField(item.listing_text, "No listing text")' in html
+    assert 'copyPrefix: "👤 "' in html
+    assert "value: copyField(item.seller)" in html
+    assert 'copyPrefix: "📅 "' in html
+    assert "value: formatCopyDate(item.posted_date)" in html
+    assert 'join("\\n");' in html
+    assert "function makeFormattedCopyButton(item)" in html
+    assert 'createNode("span", "copy-label", "Copy Text")' in html
+    assert 'label.dataset.full = "Copy Text";' in html
+    assert 'label.dataset.short = "Copy";' in html
+    assert 'label.setAttribute("aria-hidden", "true");' in html
+    assert "primary.appendChild(makeFormattedCopyButton(item));" in html
+    assert 'makeButton("Copy ID", "Copy result_id"' in html
+    assert "--title-box" in html
+    assert "grid-template-rows: var(--title-box) var(--meta-box)" in html
+    assert "grid-template-rows: minmax(0, 1fr) auto" in html
+    assert "grid-template-columns: auto minmax(0, 1fr) auto" in html
+    assert ".listing-display-card" in html
+    assert ".listing-display-card .listing-line" in html
+    assert ".listing-display-card .listing-icon" in html
+    assert ".listing-display-card .listing-icon {\n      display: none;" in html
+    assert ".result-id-icon" in html
+    assert ".detail-icon" in html
+    assert ".modal-heading" in html
+    assert ".modal-section" in html
+    assert ".modal-listing-section" in html
+    assert ".modal-meta-section" in html
+    assert ".modal-actions-section" in html
+    assert ".modal-actions" in html
+    assert ".modal-similar-section" in html
+    assert "grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr)" in html
+    assert "position: sticky" in html
+    assert ".listing-line-title .listing-value" in html
+    assert ".listing-display-detail .listing-line-title" in html
+    assert ".listing-display-detail .listing-line-title .listing-icon" in html
+    assert ".listing-display-detail .listing-line-meta" in html
+    assert "border-radius: 999px" in html
+    assert "box-shadow: 0 1px 0 rgba(17, 24, 23, 0.03)" in html
+    assert 'listingSection.appendChild(createFormattedListingDisplay(item, "listing-display-detail", "div"));' in html
+    assert 'row.appendChild(createFormattedListingDisplay(similarItem, "listing-display-similar", "div"));' in html
+    assert 'const listingDisplay = createFormattedListingDisplay(item, "listing-display-card");' in html
+    assert "lead.appendChild(listingDisplay);" in html
+    assert ".copy-label::after" in html
+    assert "content: attr(data-full)" in html
+    assert "content: attr(data-short)" in html
+    assert ".toolbar-actions {\n        flex: 1 0 100%;\n        min-width: 0;\n        flex-wrap: wrap;" in html
+    assert "overflow-x: auto" not in html
+    assert '"result-rail"' not in html
+    assert '"row-actions"' not in html
+    assert '"has-media-slot"' not in html
+    assert '"media body actions"' not in html
+    assert "article.append(media, body, details);" not in html
+    assert '"result-meta"' not in html
+    assert "function primaryMeta(item)" not in html
+    assert 'primary.appendChild(makeButton("ID"' not in html
+    assert 'primary.appendChild(makeButton("Text"' not in html
+    assert '"🆔Copy ID"' not in html
+    assert '"☎️OpenWA"' not in html
+    assert '"🔗Copy URL"' not in html
+    assert 'const title = createNode("h2", "listing-title", titleFromListing(item));' not in html
+    assert 'details.appendChild(createNode("p", "detail-listing", text(item.listing_text, "No listing text")));' not in html
+    assert '"copy-label-full"' not in html
+    assert '"copy-label-short"' not in html
+    assert 'makeButton("Copy", "Copy result_id"' not in html
+    assert 'secondary.appendChild(makeButton("Copy Text"' not in html
+
+
+def test_render_result_page_template_wires_result_details_modal_behavior() -> None:
+    html = render_result_page_template()
+
+    assert '<div class="result-modal" id="resultModal" role="dialog" aria-modal="true" aria-labelledby="resultModalTitle" hidden>' in html
+    assert 'detailsToggle.setAttribute("aria-haspopup", "dialog")' in html
+    assert 'detailsToggle.setAttribute("aria-controls", "resultModal")' in html
+    assert 'openDetailsModal(item, detailsToggle)' in html
+    assert "function openDetailsModal(item, trigger)" in html
+    assert "function closeDetailsModal(options = {})" in html
+    assert "function handleModalKeydown(event)" in html
+    assert "function modalTitle(item)" in html
+    assert "els.modalTitle.textContent = modalTitle(item);" in html
+    assert "els.modalBody.replaceChildren(createResultDetailsContent(item));" in html
+    assert 'values.push("👤 " + text(item.seller));' in html
+    assert 'values.push("📅 " + formatCopyDate(item.posted_date));' in html
+    assert 'const idIcon = createNode("span", "result-id-icon", "🆔");' in html
+    assert 'idWrap.append(idIcon, idText, idCopy);' in html
+    assert 'icon: "☎️"' in html
+    assert 'icon: "🔗"' in html
+    assert 'const icon = createNode("span", "detail-icon", value.icon);' in html
+    assert '"☎️ Phone: " + similarItem.seller_phone' in html
+    assert '"🔗 Source: " + hostName(similarItem.source_url)' in html
+    assert 'const listingSection = createNode("section", "modal-section modal-listing-section");' in html
+    assert 'const metaSection = createNode("section", "modal-section modal-meta-section");' in html
+    assert 'metaSection.appendChild(idWrap);' in html
+    assert 'const actionsSection = createNode("section", "modal-actions-section");' in html
+    assert 'actionsSection.appendChild(createOverflowActions(item, similar, "modal-actions"));' in html
+    assert html.index('const similarSection = createNode("section", "modal-section modal-similar-section");') < html.index('const actionsSection = createNode("section", "modal-actions-section");')
+    assert 'const similarSection = createNode("section", "modal-section modal-similar-section");' in html
+    assert 'document.body.classList.add("modal-open");' in html
+    assert "els.modalClose.focus();" in html
+    assert 'document.body.classList.remove("modal-open");' in html
+    assert "if (restoreFocus && lastModalTrigger) lastModalTrigger.focus();" in html
+    assert 'if (event.key === "Escape")' in html
+    assert 'if (event.key !== "Tab") return;' in html
+    assert 'els.modalClose.addEventListener("click", () => closeDetailsModal());' in html
+    assert 'els.modalBackdrop.addEventListener("click", () => closeDetailsModal());' in html
+    assert 'document.addEventListener("keydown", handleModalKeydown);' in html
+    assert "closeDetailsModal({ restoreFocus: false });" in html
+    assert "els.modalTitle.textContent = titleFromListing(item);" not in html
+
+
 def test_render_result_page_template_normalizes_reposted_dates_for_sort() -> None:
     html = render_result_page_template()
 
     assert 'split("·"' in html
     assert 'split(" - "' in html
+
+
+def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
+    chrome = chrome_executable()
+    if chrome is None:
+        pytest.skip("Chrome or Chromium is not installed")
+
+    payload = {
+        "query": "116500 panda",
+        "created_at": "2026-06-08T04:00:00Z",
+        "expires_at": "2026-06-08T05:00:00Z",
+        "total_count": 3,
+        "offset": 0,
+        "limit": 60,
+        "next_offset": None,
+        "result_count": 3,
+        "results": [
+            {
+                "rank": 1,
+                "result_id": "watchfacts-result-001",
+                "source_result_id": "watchfacts-result-001",
+                "listing_text": "5980/1R Like New. Full set NEW BUCKLE 2022 $210.000",
+                "seller": "Richie",
+                "posted_date": "June 2, 2026",
+                "image_url": None,
+                "source_url": "https://watchfacts.example/listing/1",
+                "seller_phone": "+1 555 10001",
+                "similar_results": [],
+            },
+            {
+                "rank": 2,
+                "result_id": "watchfacts-result-002",
+                "source_result_id": "watchfacts-result-002",
+                "listing_text": "116500 panda full set, excellent condition, boxed papers",
+                "seller": "Seller 2",
+                "posted_date": "June 3, 2026 - reposted",
+                "image_url": None,
+                "source_url": "https://watchfacts.example/listing/2",
+                "seller_phone": None,
+                "similar_results": [
+                    {
+                        "listing_text": "Similar 116500 panda alternate listing",
+                        "seller": "Similar Seller",
+                        "posted_date": "May 17, 2026",
+                        "image_url": None,
+                        "source_url": "https://watchfacts.example/similar/2",
+                        "seller_phone": "+1 555 9000",
+                    }
+                ],
+            },
+            {
+                "rank": 3,
+                "result_id": "watchfacts-result-003",
+                "source_result_id": "watchfacts-result-003",
+                "listing_text": "5712g should be filterable but older",
+                "seller": "Seller 3",
+                "posted_date": "May 10, 2026",
+                "image_url": None,
+                "source_url": None,
+                "seller_phone": None,
+                "similar_results": [],
+            },
+        ],
+    }
+    audit_script = """
+    <script>
+      setTimeout(() => {
+        const output = {};
+        try {
+          window.__copiedText = [];
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText: async value => window.__copiedText.push(value) }
+          });
+
+          output.cardCount = document.querySelectorAll(".result-card").length;
+          output.query = document.querySelector("#queryText").textContent;
+          document.querySelectorAll('button[aria-label="Copy formatted listing text"]')[0].click();
+
+          setTimeout(() => {
+            output.copied = window.__copiedText.at(-1);
+            document.querySelectorAll('button[aria-label="Show result details"]')[1].click();
+            output.modalVisible = !document.querySelector("#resultModal").hidden;
+            output.modalTitle = document.querySelector("#resultModalTitle").textContent;
+            document.querySelector('button[aria-label="Show similar listings"]').click();
+            output.similarButton = document.querySelector('button[aria-label="Hide similar listings"]').textContent;
+            output.similarText = document.querySelector(".similar-panel").textContent;
+
+            const sort = document.querySelector("#sortSelect");
+            sort.value = "posted_desc";
+            sort.dispatchEvent(new Event("change", { bubbles: true }));
+            output.sortedFirstRank = document.querySelector(".rank-badge").textContent;
+
+            const filter = document.querySelector("#filterInput");
+            filter.value = "richie";
+            filter.dispatchEvent(new Event("input", { bubbles: true }));
+            output.filteredCount = document.querySelectorAll(".result-card").length;
+            output.filteredRank = document.querySelector(".rank-badge").textContent;
+
+            filter.value = "";
+            filter.dispatchEvent(new Event("input", { bubbles: true }));
+            document.querySelector("#densityDense").click();
+            output.denseClass = document.querySelector("#resultsList").className;
+            document.querySelector("#densityComfortable").click();
+            output.comfortableClass = document.querySelector("#resultsList").className;
+
+            const node = document.createElement("pre");
+            node.id = "behaviorAudit";
+            node.textContent = JSON.stringify(output);
+            document.body.appendChild(node);
+          }, 0);
+        } catch (error) {
+          const node = document.createElement("pre");
+          node.id = "behaviorAudit";
+          node.textContent = JSON.stringify({ error: String(error && error.stack || error) });
+          document.body.appendChild(node);
+        }
+      }, 0);
+    </script>
+    """
+    page_path = tmp_path / "result-page.html"
+    page_path.write_text(
+        render_result_page_template(payload).replace("</body>", f"{audit_script}</body>"),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            chrome,
+            "--headless=new",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--virtual-time-budget=2000",
+            "--dump-dom",
+            page_path.as_uri(),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    match = re.search(r'<pre id="behaviorAudit">([^<]+)</pre>', result.stdout)
+    assert match is not None, result.stdout
+    behavior = json.loads(html.unescape(match.group(1)))
+
+    assert behavior == {
+        "cardCount": 3,
+        "query": "116500 panda",
+        "copied": (
+            "🏷️  5980/1R Like New. Full set NEW BUCKLE 2022 $210.000\n"
+            "👤 Richie\n"
+            "📅 02/06/2026"
+        ),
+        "modalVisible": True,
+        "modalTitle": "Result #2 details",
+        "similarButton": "Hide similar",
+        "similarText": (
+            "Similar listings"
+            "🏷️Similar 116500 panda alternate listing"
+            "👤Similar Seller"
+            "📅17/05/2026"
+            "☎️ Phone: +1 555 9000"
+            "🔗 Source: watchfacts.example"
+        ),
+        "sortedFirstRank": "#2",
+        "filteredCount": 1,
+        "filteredRank": "#1",
+        "denseClass": "results density-dense",
+        "comfortableClass": "results density-comfortable",
+    }
 
 
 def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
