@@ -27,6 +27,25 @@ def test_render_result_page_template_defaults_to_null_results() -> None:
     assert "let results = null;" in html
 
 
+def test_render_result_page_template_includes_operational_dashboard_hooks() -> None:
+    html = render_result_page_template()
+
+    assert "id=\"resultsMeta\"" in html
+    assert "id=\"densityDense\"" in html
+    assert "function renderHeader()" in html
+    assert "function renderToolbarState()" in html
+    assert "function renderResults()" in html
+    assert "function createResultCard(item)" in html
+    assert "No result payload" in html
+
+
+def test_render_result_page_template_normalizes_reposted_dates_for_sort() -> None:
+    html = render_result_page_template()
+
+    assert 'split("·"' in html
+    assert 'split(" - "' in html
+
+
 def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
     config = make_config(tmp_path)
     now = datetime(2026, 6, 7, 12, 0, tzinfo=timezone.utc)

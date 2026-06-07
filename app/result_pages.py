@@ -318,111 +318,225 @@ _HTML_TEMPLATE = """<!doctype html>
   <style>
     :root {
       color-scheme: light;
-      --bg: #f6f5f2;
+      --bg: #f4f7f6;
       --surface: #ffffff;
-      --surface-soft: #f0eee9;
-      --text: #171717;
-      --muted: #66615a;
-      --border: #d8d3ca;
+      --surface-raised: #fbfcfc;
+      --surface-soft: #edf3f2;
+      --text: #111817;
+      --muted: #5d6865;
+      --subtle: #7d8985;
+      --border: #d6dfdc;
+      --border-strong: #b5c3bf;
       --accent: #0f766e;
-      --accent-strong: #0b4f4a;
+      --accent-strong: #0a4f49;
+      --accent-soft: #e1f2f0;
+      --warning: #8a5a00;
       --danger: #b42318;
+      --shadow: 0 1px 2px rgba(17, 24, 23, 0.06);
       --radius: 8px;
     }
+
     * { box-sizing: border-box; }
+
+    html {
+      min-width: 0;
+    }
+
     body {
       margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-width: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.45;
     }
+
     button, input, select {
       font: inherit;
     }
+
     button, .source-link {
       min-height: 2.25rem;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--surface);
       color: var(--text);
-      padding: 0.45rem 0.7rem;
+      padding: 0.45rem 0.65rem;
       cursor: pointer;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 0.35rem;
+      max-width: 100%;
       white-space: nowrap;
     }
+
     button:hover, .source-link:hover {
       border-color: var(--accent);
       color: var(--accent-strong);
+      background: var(--surface-raised);
     }
-    button[aria-pressed="true"] {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
+
+    button:focus-visible, .source-link:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
-    header {
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
+
+    button[disabled] {
+      cursor: not-allowed;
+      color: var(--subtle);
+      background: var(--surface-soft);
     }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .wrap {
       width: min(1180px, calc(100vw - 2rem));
       margin: 0 auto;
     }
+
+    .page-header {
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
     .header-inner {
-      padding: 1rem 0;
+      padding: 0.95rem 0 0.85rem;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) minmax(14rem, auto);
       gap: 1rem;
       align-items: end;
     }
+
+    .eyebrow {
+      margin-bottom: 0.25rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
     h1 {
-      margin: 0 0 0.35rem;
-      font-size: 1.35rem;
+      margin: 0;
+      font-size: clamp(1.25rem, 2vw, 1.65rem);
+      line-height: 1.15;
       letter-spacing: 0;
     }
+
     .query {
       display: block;
       overflow-wrap: anywhere;
     }
-    .meta {
-      color: var(--muted);
-      font-size: 0.9rem;
+
+    .header-meta {
+      margin-top: 0.6rem;
       display: flex;
       flex-wrap: wrap;
-      gap: 0.4rem 0.85rem;
+      gap: 0.35rem 0.45rem;
+      color: var(--muted);
+      font-size: 0.84rem;
     }
-    .count {
-      font-size: 1.8rem;
+
+    .meta-chip, .fact-chip {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface-raised);
+      padding: 0.28rem 0.55rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      overflow-wrap: anywhere;
+    }
+
+    .meta-label, .fact-label {
+      color: var(--subtle);
+      font-size: 0.72rem;
       font-weight: 700;
-      text-align: right;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      white-space: nowrap;
     }
-    .toolbar {
+
+    .meta-value, .fact-value {
+      min-width: 0;
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+
+    .summary-panel {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+      min-width: 16rem;
+    }
+
+    .summary-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-raised);
+      padding: 0.65rem 0.7rem;
+      box-shadow: var(--shadow);
+    }
+
+    .summary-label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .summary-value {
+      display: block;
+      margin-top: 0.15rem;
+      font-size: 1.25rem;
+      font-weight: 750;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+
+    .summary-value.status-value {
+      font-size: 0.95rem;
+      color: var(--accent-strong);
+    }
+
+    .commandbar {
       position: sticky;
       top: 0;
-      z-index: 2;
+      z-index: 4;
       border-bottom: 1px solid var(--border);
-      background: rgba(246, 245, 242, 0.96);
-      backdrop-filter: blur(8px);
+      background: rgba(244, 247, 246, 0.96);
+      backdrop-filter: blur(10px);
     }
+
     .toolbar-inner {
-      padding: 0.75rem 0;
+      padding: 0.7rem 0;
       display: grid;
-      grid-template-columns: minmax(12rem, 1fr) auto auto;
-      gap: 0.6rem;
+      grid-template-columns: minmax(14rem, 1fr) minmax(9rem, 11rem) auto;
+      gap: 0.55rem;
       align-items: center;
     }
-    .toolbar-actions {
-      display: flex;
-      gap: 0.45rem;
-      flex-wrap: wrap;
-      justify-content: flex-end;
+
+    .search-control, .sort-control {
+      min-width: 0;
     }
+
     input[type="search"], select {
-      min-height: 2.25rem;
+      min-height: 2.35rem;
       width: 100%;
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -430,47 +544,101 @@ _HTML_TEMPLATE = """<!doctype html>
       color: var(--text);
       padding: 0.45rem 0.65rem;
     }
-    .view-toggle {
+
+    input[type="search"]::placeholder {
+      color: var(--subtle);
+    }
+
+    .toolbar-actions {
+      min-width: 0;
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .density-toggle {
       display: inline-flex;
       border: 1px solid var(--border);
       border-radius: 7px;
       overflow: hidden;
       background: var(--surface);
     }
-    .view-toggle button {
+
+    .density-toggle button {
       border: 0;
       border-radius: 0;
+      min-height: 2.25rem;
+      padding: 0.42rem 0.6rem;
     }
+
+    .density-toggle button + button {
+      border-left: 1px solid var(--border);
+    }
+
+    .density-toggle button[aria-pressed="true"] {
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    .tool-button {
+      min-width: 0;
+    }
+
     main {
-      padding: 1rem 0 2rem;
+      padding: 0.9rem 0 2rem;
     }
-    .status {
-      min-height: 1.5rem;
+
+    .results-head {
+      min-height: 1.55rem;
+      margin-bottom: 0.65rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: center;
       color: var(--muted);
-      font-size: 0.9rem;
-      margin-bottom: 0.75rem;
+      font-size: 0.88rem;
     }
+
+    .status {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .view-note {
+      flex: 0 0 auto;
+      color: var(--subtle);
+    }
+
     .results {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 0.75rem;
+      gap: 0.65rem;
     }
-    .result {
+
+    .result-card {
       display: grid;
-      grid-template-columns: 8.5rem minmax(0, 1fr);
+      grid-template-columns: 8.75rem minmax(0, 1fr);
       gap: 0.85rem;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       background: var(--surface);
-      padding: 0.85rem;
+      padding: 0.8rem;
+      box-shadow: var(--shadow);
     }
-    .results.compact .result {
-      grid-template-columns: 5.5rem minmax(0, 1fr);
-      padding: 0.65rem;
+
+    .result-card:hover {
+      border-color: var(--border-strong);
     }
+
+    .result-media {
+      min-width: 0;
+    }
+
     .thumb {
       width: 100%;
-      aspect-ratio: 1;
+      aspect-ratio: 4 / 3;
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
@@ -478,73 +646,241 @@ _HTML_TEMPLATE = """<!doctype html>
       display: grid;
       place-items: center;
       color: var(--muted);
-      font-size: 0.82rem;
+      font-size: 0.78rem;
       text-align: center;
       padding: 0.5rem;
     }
+
     .thumb img {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
     }
-    .result-head {
-      display: flex;
+
+    .result-content {
+      min-width: 0;
+      display: grid;
       gap: 0.5rem;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 0.45rem;
     }
-    .rank {
-      font-weight: 700;
+
+    .result-top {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 0.55rem;
+      align-items: start;
+    }
+
+    .rank-badge {
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      background: var(--accent-soft);
       color: var(--accent-strong);
+      font-weight: 800;
+      line-height: 1;
+      padding: 0.38rem 0.48rem;
+      white-space: nowrap;
     }
-    .result-id {
+
+    .listing-title {
+      margin: 0;
+      min-width: 0;
+      font-size: 1.02rem;
+      line-height: 1.25;
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .result-id-wrap {
+      max-width: 15rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-raised);
+      padding: 0.28rem 0.42rem;
+      display: flex;
+      gap: 0.35rem;
+      align-items: center;
       color: var(--muted);
+    }
+
+    .result-id {
+      min-width: 0;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size: 0.78rem;
+      font-size: 0.72rem;
+      line-height: 1.25;
       overflow-wrap: anywhere;
-      text-align: right;
     }
-    .listing {
-      margin: 0 0 0.65rem;
-      font-size: 1rem;
-      overflow-wrap: anywhere;
+
+    .mini-copy {
+      min-height: 1.5rem;
+      padding: 0.15rem 0.35rem;
+      font-size: 0.72rem;
+      flex: 0 0 auto;
+    }
+
+    .listing-body {
+      margin: 0;
+      color: var(--text);
+      font-size: 0.92rem;
+      line-height: 1.45;
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
+
     .facts {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.35rem 0.7rem;
-      color: var(--muted);
-      font-size: 0.9rem;
-      margin-bottom: 0.7rem;
+      gap: 0.35rem;
+      min-width: 0;
     }
+
+    .fact-chip {
+      border-radius: 6px;
+      padding: 0.28rem 0.45rem;
+      font-size: 0.82rem;
+      background: var(--surface-raised);
+    }
+
+    .fact-chip.source-chip .fact-value {
+      color: var(--accent-strong);
+    }
+
     .actions {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.45rem;
+      gap: 0.4rem;
+      min-width: 0;
     }
-    .similar {
-      margin-top: 0.7rem;
+
+    .action-button, .source-link {
+      min-height: 2rem;
+      padding: 0.35rem 0.55rem;
+      font-size: 0.84rem;
+    }
+
+    .source-link {
+      color: var(--accent-strong);
+    }
+
+    .similar-panel {
+      margin-top: 0.2rem;
       border-top: 1px solid var(--border);
-      padding-top: 0.7rem;
+      padding-top: 0.55rem;
     }
-    .similar[hidden] { display: none; }
+
+    .similar-panel[hidden] {
+      display: none;
+    }
+
+    .similar-title {
+      margin: 0 0 0.35rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
     .similar-item {
-      padding: 0.55rem 0;
-      border-bottom: 1px solid var(--surface-soft);
+      padding: 0.45rem 0;
+      border-top: 1px solid var(--surface-soft);
       color: var(--muted);
       overflow-wrap: anywhere;
     }
-    .empty {
-      border: 1px dashed var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-      padding: 2rem;
-      text-align: center;
+
+    .similar-item:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .similar-text {
+      margin: 0 0 0.3rem;
+      font-size: 0.86rem;
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+
+    .similar-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem 0.5rem;
+      font-size: 0.78rem;
       color: var(--muted);
     }
+
+    .results.density-dense {
+      gap: 0.45rem;
+    }
+
+    .results.density-dense .result-card {
+      grid-template-columns: 6.25rem minmax(0, 1fr);
+      gap: 0.65rem;
+      padding: 0.58rem 0.65rem;
+    }
+
+    .results.density-dense .thumb {
+      aspect-ratio: 1;
+      font-size: 0.72rem;
+    }
+
+    .results.density-dense .result-content {
+      gap: 0.35rem;
+    }
+
+    .results.density-dense .result-top {
+      grid-template-columns: auto minmax(0, 1fr) minmax(7rem, 13rem);
+      gap: 0.45rem;
+    }
+
+    .results.density-dense .listing-title {
+      font-size: 0.95rem;
+    }
+
+    .results.density-dense .listing-body {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      white-space: normal;
+      font-size: 0.84rem;
+    }
+
+    .results.density-dense .fact-chip {
+      padding: 0.2rem 0.38rem;
+      font-size: 0.78rem;
+    }
+
+    .results.density-dense .action-button,
+    .results.density-dense .source-link {
+      min-height: 1.85rem;
+      padding: 0.25rem 0.45rem;
+      font-size: 0.78rem;
+    }
+
+    .empty {
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 2rem 1.25rem;
+      text-align: center;
+      color: var(--muted);
+      box-shadow: var(--shadow);
+    }
+
+    .empty-title {
+      margin: 0 0 0.35rem;
+      color: var(--text);
+      font-size: 1rem;
+      letter-spacing: 0;
+    }
+
+    .empty-message {
+      margin: 0 auto;
+      max-width: 34rem;
+      overflow-wrap: anywhere;
+    }
+
     .toast {
       position: fixed;
       right: 1rem;
@@ -552,102 +888,242 @@ _HTML_TEMPLATE = """<!doctype html>
       max-width: min(24rem, calc(100vw - 2rem));
       border-radius: 7px;
       background: var(--text);
-      color: #fff;
+      color: #ffffff;
       padding: 0.65rem 0.8rem;
       opacity: 0;
       transform: translateY(0.5rem);
       transition: opacity 150ms ease, transform 150ms ease;
       pointer-events: none;
-      z-index: 5;
+      z-index: 8;
     }
+
     .toast.show {
       opacity: 1;
       transform: translateY(0);
     }
+
+    @media (max-width: 840px) {
+      .header-inner {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+
+      .summary-panel {
+        min-width: 0;
+      }
+
+      .toolbar-inner {
+        grid-template-columns: minmax(0, 1fr) minmax(8rem, 10rem);
+        grid-template-areas:
+          "search search"
+          "sort actions";
+      }
+
+      .search-control { grid-area: search; }
+      .sort-control { grid-area: sort; }
+      .toolbar-actions { grid-area: actions; }
+    }
+
     @media (max-width: 760px) {
       .wrap {
         width: min(100vw - 1rem, 44rem);
       }
-      .header-inner, .toolbar-inner {
-        grid-template-columns: 1fr;
-        align-items: stretch;
+
+      .header-inner {
+        padding: 0.8rem 0;
       }
-      .count {
-        text-align: left;
-        font-size: 1.35rem;
+
+      .header-meta {
+        font-size: 0.8rem;
       }
+
+      .summary-panel {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .toolbar-inner {
+        gap: 0.45rem;
+      }
+
       .toolbar-actions {
-        justify-content: flex-start;
+        justify-content: flex-end;
+        gap: 0.3rem;
       }
-      .result, .results.compact .result {
+
+      .density-toggle button, .tool-button {
+        min-height: 2.15rem;
+        padding: 0.38rem 0.48rem;
+      }
+
+      .results-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
+
+      .result-card,
+      .results.density-dense .result-card {
         grid-template-columns: 1fr;
+        padding: 0.7rem;
       }
-      .thumb {
-        max-width: 12rem;
+
+      .result-media {
+        max-width: 10.5rem;
       }
-      .result-head {
+
+      .result-top,
+      .results.density-dense .result-top {
+        grid-template-columns: auto minmax(0, 1fr);
+      }
+
+      .result-id-wrap {
+        grid-column: 1 / -1;
+        max-width: 100%;
+      }
+
+      .listing-body,
+      .results.density-dense .listing-body {
         display: block;
+        overflow: visible;
+        white-space: pre-wrap;
+        font-size: 0.9rem;
       }
-      .result-id {
-        margin-top: 0.2rem;
-        text-align: left;
-      }
+
       button, .source-link {
         white-space: normal;
       }
     }
+
+    @media (max-width: 520px) {
+      .wrap {
+        width: min(100vw - 0.75rem, 44rem);
+      }
+
+      h1 {
+        font-size: 1.22rem;
+      }
+
+      .summary-value {
+        font-size: 1rem;
+      }
+
+      .summary-item {
+        padding: 0.55rem;
+      }
+
+      .toolbar-inner {
+        display: flex;
+        flex-wrap: wrap;
+      }
+
+      .search-control {
+        flex: 1 1 0;
+      }
+
+      .sort-control {
+        flex: 0 0 7.5rem;
+      }
+
+      .toolbar-actions {
+        flex: 1 0 100%;
+        min-width: 0;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        overflow-x: auto;
+        padding-bottom: 0.1rem;
+        scrollbar-width: thin;
+      }
+
+      .density-toggle {
+        flex: 0 0 auto;
+      }
+
+      .tool-button {
+        flex: 0 0 auto;
+      }
+    }
+
     @media print {
-      .toolbar, .actions, .toast {
+      .commandbar, .actions, .toast {
         display: none;
       }
+
       body {
-        background: #fff;
+        background: #ffffff;
       }
-      .result {
+
+      .page-header, .result-card {
+        box-shadow: none;
+      }
+
+      .result-card {
         break-inside: avoid;
       }
     }
   </style>
 </head>
 <body>
-  <header>
+  <header class="page-header">
     <div class="wrap header-inner">
       <div>
-        <h1>WatchFacts Results</h1>
-        <strong class="query" id="queryText"></strong>
-        <div class="meta">
-          <span id="createdAt"></span>
-          <span id="expiresAt"></span>
+        <div class="eyebrow">WatchFacts search</div>
+        <h1><span class="sr-only">Query </span><span class="query" id="queryText">No result payload</span></h1>
+        <div class="header-meta" id="resultsMeta" aria-label="Result page metadata">
+          <span class="meta-chip"><span class="meta-label">Generated</span><span class="meta-value" id="createdAt">Unknown</span></span>
+          <span class="meta-chip"><span class="meta-label">Expires</span><span class="meta-value" id="expiresAt">Unknown</span></span>
+          <span class="meta-chip"><span class="meta-label">Page</span><span class="meta-value" id="pageRange">Unavailable</span></span>
         </div>
       </div>
-      <div class="count" id="resultCount"></div>
+      <div class="summary-panel" aria-label="Result summary">
+        <div class="summary-item">
+          <span class="summary-label">Total</span>
+          <span class="summary-value" id="resultCount">0</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Status</span>
+          <span class="summary-value status-value" id="pageStatus">Unavailable</span>
+        </div>
+      </div>
     </div>
   </header>
-  <section class="toolbar">
+
+  <section class="commandbar" aria-label="Result controls">
     <div class="wrap toolbar-inner">
-      <input id="filterInput" type="search" autocomplete="off" placeholder="Filter results">
-      <select id="sortSelect" aria-label="Sort results">
-        <option value="rank">Rank</option>
-        <option value="posted_desc">Posted date</option>
-        <option value="seller">Seller</option>
-      </select>
+      <div class="search-control">
+        <label class="sr-only" for="filterInput">Filter results</label>
+        <input id="filterInput" type="search" autocomplete="off" placeholder="Filter model, seller, phone, source">
+      </div>
+      <div class="sort-control">
+        <label class="sr-only" for="sortSelect">Sort results</label>
+        <select id="sortSelect" aria-label="Sort results">
+          <option value="rank">Rank</option>
+          <option value="posted_desc">Posted date</option>
+          <option value="seller">Seller</option>
+        </select>
+      </div>
       <div class="toolbar-actions">
-        <div class="view-toggle" aria-label="View density">
-          <button type="button" id="viewComfortable" aria-pressed="true">List</button>
-          <button type="button" id="viewCompact" aria-pressed="false">Dense</button>
+        <div class="density-toggle" role="group" aria-label="View density">
+          <button type="button" id="densityComfortable" aria-pressed="true">Comfort</button>
+          <button type="button" id="densityDense" aria-pressed="false">Dense</button>
         </div>
-        <button type="button" id="copyPageLink">Copy link</button>
-        <button type="button" id="exportJson">JSON</button>
-        <button type="button" id="exportCsv">CSV</button>
-        <button type="button" id="printPage">Print</button>
+        <button type="button" class="tool-button" id="copyPageLink">Link</button>
+        <button type="button" class="tool-button" id="exportJson">JSON</button>
+        <button type="button" class="tool-button" id="exportCsv">CSV</button>
+        <button type="button" class="tool-button" id="printPage">Print</button>
       </div>
     </div>
   </section>
+
   <main class="wrap">
-    <div class="status" id="statusText"></div>
-    <section class="results" id="resultsList"></section>
+    <div class="results-head">
+      <div class="status" id="statusText" role="status" aria-live="polite"></div>
+      <div class="view-note" id="viewNote"></div>
+    </div>
+    <section class="results" id="resultsList" aria-label="WatchFacts results"></section>
   </main>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
   <script>
     let results = null;
     results = __WATCHFACTS_RESULTS_PAYLOAD__;
@@ -655,25 +1131,83 @@ _HTML_TEMPLATE = """<!doctype html>
     const state = {
       filter: "",
       sort: "rank",
-      compact: false
+      density: "comfortable"
     };
+
     const els = {
       query: document.getElementById("queryText"),
       createdAt: document.getElementById("createdAt"),
       expiresAt: document.getElementById("expiresAt"),
+      pageRange: document.getElementById("pageRange"),
       resultCount: document.getElementById("resultCount"),
+      pageStatus: document.getElementById("pageStatus"),
       filter: document.getElementById("filterInput"),
       sort: document.getElementById("sortSelect"),
       list: document.getElementById("resultsList"),
       status: document.getElementById("statusText"),
+      viewNote: document.getElementById("viewNote"),
       toast: document.getElementById("toast"),
-      viewComfortable: document.getElementById("viewComfortable"),
-      viewCompact: document.getElementById("viewCompact")
+      densityComfortable: document.getElementById("densityComfortable"),
+      densityDense: document.getElementById("densityDense"),
+      copyPageLink: document.getElementById("copyPageLink"),
+      exportJson: document.getElementById("exportJson"),
+      exportCsv: document.getElementById("exportCsv"),
+      printPage: document.getElementById("printPage")
     };
 
     function text(value, fallback = "") {
       if (value === null || value === undefined || value === "") return fallback;
       return String(value);
+    }
+
+    function numberValue(value, fallback = 0) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function truncate(value, maxLength) {
+      const raw = text(value).replace(/\\s+/g, " ").trim();
+      if (raw.length <= maxLength) return raw;
+      return raw.slice(0, maxLength - 3).trimEnd() + "...";
+    }
+
+    function allResults() {
+      return results && Array.isArray(results.results) ? results.results : [];
+    }
+
+    function resultLabel(count) {
+      const numeric = numberValue(count);
+      return numeric === 1 ? "1 result" : String(numeric) + " results";
+    }
+
+    function formatDate(value) {
+      const raw = text(value, "unknown");
+      const parsed = Date.parse(raw);
+      if (Number.isNaN(parsed)) return raw;
+      return new Date(parsed).toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    }
+
+    function pageRangeText() {
+      if (!results) return "Unavailable";
+      const offset = Math.max(numberValue(results.offset, 0), 0);
+      const count = allResults().length;
+      const total = numberValue(results.total_count, count);
+      if (!count) return "0 of " + total;
+      return String(offset + 1) + "-" + String(offset + count) + " of " + total;
+    }
+
+    function statusText() {
+      if (!results) return "Unavailable";
+      if (results.next_offset !== null && results.next_offset !== undefined) return "More available";
+      const count = allResults().length;
+      const total = numberValue(results.total_count, count);
+      return count < total ? "Partial page" : "Complete";
     }
 
     function showToast(message) {
@@ -721,12 +1255,27 @@ _HTML_TEMPLATE = """<!doctype html>
     function exportCsv() {
       const rows = [["rank", "result_id", "listing_text", "seller", "posted_date", "seller_phone", "source_url"]];
       for (const item of currentResults()) {
-        rows.push([item.rank, item.result_id, item.listing_text, item.seller, item.posted_date, item.seller_phone, item.source_url]);
+        rows.push([
+          item.rank,
+          item.result_id,
+          item.listing_text,
+          item.seller,
+          item.posted_date,
+          item.seller_phone,
+          item.source_url
+        ]);
       }
       download("watchfacts-results.csv", "text/csv", rows.map(row => row.map(csvEscape).join(",")).join("\\n"));
     }
 
+    function exportJson() {
+      download("watchfacts-results.json", "application/json", JSON.stringify(results || { results: [] }, null, 2));
+    }
+
     function resultText(item) {
+      const similarText = Array.isArray(item.similar_results)
+        ? item.similar_results.map(similar => text(similar.listing_text)).join(" ")
+        : "";
       return [
         item.rank,
         item.result_id,
@@ -734,52 +1283,78 @@ _HTML_TEMPLATE = """<!doctype html>
         item.seller,
         item.posted_date,
         item.seller_phone,
-        item.source_url
+        item.source_url,
+        similarText
       ].map(value => text(value).toLowerCase()).join(" ");
     }
 
     function postedTime(value) {
-      const parsed = Date.parse(text(value).split("·")[0]);
+      const normalized = text(value).split("·")[0].split(" - ")[0].trim();
+      const parsed = Date.parse(normalized);
       return Number.isNaN(parsed) ? 0 : parsed;
     }
 
     function currentResults() {
-      if (!results || !Array.isArray(results.results)) return [];
       const filter = state.filter.trim().toLowerCase();
-      let items = results.results.filter(item => !filter || resultText(item).includes(filter));
+      let items = allResults().filter(item => !filter || resultText(item).includes(filter));
       if (state.sort === "posted_desc") {
-        items = items.slice().sort((a, b) => postedTime(b.posted_date) - postedTime(a.posted_date) || Number(a.rank) - Number(b.rank));
+        items = items.slice().sort((a, b) => postedTime(b.posted_date) - postedTime(a.posted_date) || numberValue(a.rank) - numberValue(b.rank));
       } else if (state.sort === "seller") {
-        items = items.slice().sort((a, b) => text(a.seller).localeCompare(text(b.seller)) || Number(a.rank) - Number(b.rank));
+        items = items.slice().sort((a, b) => text(a.seller).localeCompare(text(b.seller)) || numberValue(a.rank) - numberValue(b.rank));
       } else {
-        items = items.slice().sort((a, b) => Number(a.rank) - Number(b.rank));
+        items = items.slice().sort((a, b) => numberValue(a.rank) - numberValue(b.rank));
       }
       return items;
     }
 
-    function makeButton(label, title, onClick) {
+    function createNode(tag, className, value) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (value !== undefined) node.textContent = value;
+      return node;
+    }
+
+    function makeButton(label, title, onClick, className = "action-button") {
       const button = document.createElement("button");
       button.type = "button";
+      button.className = className;
       button.textContent = label;
       button.title = title;
+      button.setAttribute("aria-label", title);
       button.addEventListener("click", onClick);
       return button;
     }
 
-    function appendFact(parent, label, value) {
+    function appendFact(parent, label, value, extraClass = "") {
       if (!value) return;
-      const item = document.createElement("span");
-      item.textContent = label + ": " + value;
+      const item = createNode("span", "fact-chip" + (extraClass ? " " + extraClass : ""));
+      const labelNode = createNode("span", "fact-label", label);
+      const valueNode = createNode("span", "fact-value", value);
+      item.append(labelNode, valueNode);
       parent.appendChild(item);
     }
 
+    function hostName(value) {
+      const raw = text(value);
+      if (!raw) return "";
+      try {
+        return new URL(raw).hostname.replace(/^www\\./, "");
+      } catch (error) {
+        return raw;
+      }
+    }
+
+    function titleFromListing(item) {
+      const listing = truncate(item.listing_text, 116);
+      return listing || "Listing #" + text(item.rank, "unknown");
+    }
+
     function createThumb(item) {
-      const thumb = document.createElement("div");
-      thumb.className = "thumb";
+      const thumb = createNode("div", "thumb");
       if (item.image_url) {
         const img = document.createElement("img");
         img.src = item.image_url;
-        img.alt = "Listing image";
+        img.alt = "Listing image for result " + text(item.rank, "");
         img.loading = "lazy";
         img.addEventListener("error", () => {
           img.remove();
@@ -792,107 +1367,178 @@ _HTML_TEMPLATE = """<!doctype html>
       return thumb;
     }
 
-    function createResult(item) {
+    function createResultCard(item) {
       const article = document.createElement("article");
-      article.className = "result";
-      article.appendChild(createThumb(item));
+      article.className = "result-card";
 
-      const body = document.createElement("div");
-      const head = document.createElement("div");
-      head.className = "result-head";
-      const rank = document.createElement("div");
-      rank.className = "rank";
-      rank.textContent = "#" + text(item.rank);
-      const id = document.createElement("div");
-      id.className = "result-id";
-      id.textContent = text(item.result_id);
-      head.append(rank, id);
+      const media = createNode("div", "result-media");
+      media.appendChild(createThumb(item));
 
-      const listing = document.createElement("p");
-      listing.className = "listing";
-      listing.textContent = text(item.listing_text, "No listing text");
+      const body = createNode("div", "result-content");
+      const top = createNode("div", "result-top");
+      const rank = createNode("span", "rank-badge", "#" + text(item.rank, "-"));
 
-      const facts = document.createElement("div");
-      facts.className = "facts";
+      const title = createNode("h2", "listing-title", titleFromListing(item));
+
+      const idWrap = createNode("div", "result-id-wrap");
+      const idText = createNode("span", "result-id", text(item.result_id, "No result_id"));
+      const idCopy = makeButton("Copy", "Copy result_id", () => copyText(item.result_id, "Result ID"), "mini-copy");
+      idWrap.append(idText, idCopy);
+      top.append(rank, title, idWrap);
+
+      const listing = createNode("p", "listing-body", text(item.listing_text, "No listing text"));
+
+      const facts = createNode("div", "facts");
       appendFact(facts, "Seller", item.seller);
       appendFact(facts, "Posted", item.posted_date);
       appendFact(facts, "Phone", item.seller_phone);
+      appendFact(facts, "Source", hostName(item.source_url), "source-chip");
 
-      const actions = document.createElement("div");
-      actions.className = "actions";
-      actions.appendChild(makeButton("Copy ID", "Copy result_id", () => copyText(item.result_id, "Result ID")));
-      actions.appendChild(makeButton("Copy text", "Copy listing text", () => copyText(item.listing_text, "Listing text")));
+      const actions = createNode("div", "actions");
+      actions.appendChild(makeButton("ID", "Copy result_id", () => copyText(item.result_id, "Result ID")));
+      actions.appendChild(makeButton("Text", "Copy listing text", () => copyText(item.listing_text, "Listing text")));
       if (item.source_url) {
-        actions.appendChild(makeButton("Copy URL", "Copy source URL", () => copyText(item.source_url, "Source URL")));
+        actions.appendChild(makeButton("URL", "Copy source URL", () => copyText(item.source_url, "Source URL")));
         const link = document.createElement("a");
         link.className = "source-link";
         link.href = item.source_url;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
-        link.textContent = "Open source";
+        link.textContent = "Source";
         actions.appendChild(link);
       }
-      actions.appendChild(makeButton("OpenWA prompt", "Copy handoff prompt", () => copyText(openWaPrompt(item), "OpenWA prompt")));
-      actions.appendChild(makeButton("Report prompt", "Copy issue report prompt", () => copyText(reportPrompt(item), "Report prompt")));
+      actions.appendChild(makeButton("OpenWA", "Copy OpenWA handoff prompt", () => copyText(openWaPrompt(item), "OpenWA prompt")));
+      actions.appendChild(makeButton("Report", "Copy issue report prompt", () => copyText(reportPrompt(item), "Report prompt")));
 
-      const similar = document.createElement("div");
-      similar.className = "similar";
+      const similar = createNode("section", "similar-panel");
       similar.hidden = true;
+      const similarId = "similar-" + text(item.rank, "result").replace(/[^a-zA-Z0-9_-]/g, "-");
+      similar.id = similarId;
+
       if (Array.isArray(item.similar_results) && item.similar_results.length) {
         const toggle = makeButton("Similar " + item.similar_results.length, "Show similar listings", () => {
-          similar.hidden = !similar.hidden;
+          const shouldShow = similar.hidden;
+          similar.hidden = !shouldShow;
+          toggle.setAttribute("aria-expanded", String(shouldShow));
+          toggle.textContent = shouldShow ? "Hide similar" : "Similar " + item.similar_results.length;
+          toggle.setAttribute("aria-label", shouldShow ? "Hide similar listings" : "Show similar listings");
+          toggle.title = shouldShow ? "Hide similar listings" : "Show similar listings";
         });
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.setAttribute("aria-controls", similarId);
         actions.appendChild(toggle);
+
+        const similarTitle = createNode("h3", "similar-title", "Similar listings");
+        similar.appendChild(similarTitle);
         for (const similarItem of item.similar_results) {
-          const row = document.createElement("div");
-          row.className = "similar-item";
-          row.textContent = text(similarItem.listing_text, "No listing text");
+          const row = createNode("div", "similar-item");
+          const rowText = createNode("p", "similar-text", text(similarItem.listing_text, "No listing text"));
+          const rowMeta = createNode("div", "similar-meta");
+          if (similarItem.seller) rowMeta.appendChild(createNode("span", "", "Seller: " + similarItem.seller));
+          if (similarItem.posted_date) rowMeta.appendChild(createNode("span", "", "Posted: " + similarItem.posted_date));
+          if (similarItem.seller_phone) rowMeta.appendChild(createNode("span", "", "Phone: " + similarItem.seller_phone));
+          if (similarItem.source_url) rowMeta.appendChild(createNode("span", "", "Source: " + hostName(similarItem.source_url)));
+          row.append(rowText, rowMeta);
           similar.appendChild(row);
         }
       }
 
-      body.append(head, listing, facts, actions, similar);
-      article.appendChild(body);
+      body.append(top, listing, facts, actions, similar);
+      article.append(media, body);
       return article;
     }
 
     function openWaPrompt(item) {
-      return "Create an OpenWA chat draft for query '" + text(results.query) + "' using result_id " + text(item.result_id) + ".";
+      return "Create an OpenWA chat draft for query '" + text(results && results.query) + "' using result_id " + text(item.result_id) + ".";
     }
 
     function reportPrompt(item) {
-      return "Report an issue for query '" + text(results.query) + "' using result_id " + text(item.result_id) + ": ";
+      return "Report an issue for query '" + text(results && results.query) + "' using result_id " + text(item.result_id) + ": ";
+    }
+
+    function emptyState(title, message) {
+      const node = createNode("div", "empty");
+      const heading = createNode("h2", "empty-title", title);
+      const body = createNode("p", "empty-message", message);
+      node.append(heading, body);
+      return node;
+    }
+
+    function renderHeader() {
+      if (!results) {
+        els.query.textContent = "No result payload";
+        els.createdAt.textContent = "Unknown";
+        els.expiresAt.textContent = "Unknown";
+        els.pageRange.textContent = "Unavailable";
+        els.resultCount.textContent = "0";
+        els.pageStatus.textContent = "Unavailable";
+        return;
+      }
+
+      const total = numberValue(results.total_count, allResults().length);
+      els.query.textContent = text(results.query, "Query unavailable");
+      els.createdAt.textContent = formatDate(results.created_at);
+      els.expiresAt.textContent = formatDate(results.expires_at);
+      els.pageRange.textContent = pageRangeText();
+      els.resultCount.textContent = String(total);
+      els.pageStatus.textContent = statusText();
+    }
+
+    function renderToolbarState() {
+      const hasPayload = Boolean(results);
+      els.filter.disabled = !hasPayload;
+      els.sort.disabled = !hasPayload;
+      els.copyPageLink.disabled = !hasPayload;
+      els.exportJson.disabled = !hasPayload;
+      els.exportCsv.disabled = !hasPayload;
+      els.printPage.disabled = !hasPayload;
+      els.densityComfortable.disabled = !hasPayload;
+      els.densityDense.disabled = !hasPayload;
+      els.densityComfortable.setAttribute("aria-pressed", String(state.density === "comfortable"));
+      els.densityDense.setAttribute("aria-pressed", String(state.density === "dense"));
+      els.list.classList.toggle("density-dense", state.density === "dense");
+      els.list.classList.toggle("density-comfortable", state.density === "comfortable");
+      els.viewNote.textContent = hasPayload ? (state.density === "dense" ? "Dense view" : "Comfortable view") : "";
+    }
+
+    function renderResults() {
+      if (!results) {
+        els.status.textContent = "No result payload loaded.";
+        els.list.replaceChildren(emptyState("No result payload", "This page was opened without an injected WatchFacts result payload."));
+        return;
+      }
+
+      const sourceItems = allResults();
+      const items = currentResults();
+      if (!sourceItems.length) {
+        els.status.textContent = "0 shown";
+        els.list.replaceChildren(emptyState("No results", "This query returned no WatchFacts listings."));
+        return;
+      }
+
+      if (!items.length) {
+        els.status.textContent = "0 of " + sourceItems.length + " matching";
+        els.list.replaceChildren(emptyState("No matching results", "The current filter does not match any listing on this page."));
+        return;
+      }
+
+      els.status.textContent = state.filter
+        ? String(items.length) + " of " + String(sourceItems.length) + " matching"
+        : resultLabel(items.length) + " shown";
+      els.list.replaceChildren(...items.map(createResultCard));
     }
 
     function render() {
-      if (!results) {
-        els.query.textContent = "No result payload";
-        els.createdAt.textContent = "";
-        els.expiresAt.textContent = "";
-        els.resultCount.textContent = "0 results";
-        els.status.textContent = "This page has no injected WatchFacts result payload.";
-        els.list.replaceChildren(emptyState("No results to display."));
-        return;
-      }
-      els.query.textContent = text(results.query, "Query unavailable");
-      els.createdAt.textContent = "Created: " + text(results.created_at, "unknown");
-      els.expiresAt.textContent = "Expires: " + text(results.expires_at, "unknown");
-      const items = currentResults();
-      els.resultCount.textContent = text(results.result_count, "0") + " results";
-      els.status.textContent = items.length + " shown";
-      els.list.classList.toggle("compact", state.compact);
-      if (!items.length) {
-        els.list.replaceChildren(emptyState("No matching results."));
-        return;
-      }
-      els.list.replaceChildren(...items.map(createResult));
+      renderHeader();
+      renderToolbarState();
+      renderResults();
     }
 
-    function emptyState(message) {
-      const node = document.createElement("div");
-      node.className = "empty";
-      node.textContent = message;
-      return node;
+    function initializeDensity() {
+      const isDesktop = window.matchMedia("(min-width: 761px)").matches;
+      if (results && allResults().length > 10 && isDesktop) {
+        state.density = "dense";
+      }
     }
 
     els.filter.addEventListener("input", event => {
@@ -903,22 +1549,20 @@ _HTML_TEMPLATE = """<!doctype html>
       state.sort = event.target.value;
       render();
     });
-    els.viewComfortable.addEventListener("click", () => {
-      state.compact = false;
-      els.viewComfortable.setAttribute("aria-pressed", "true");
-      els.viewCompact.setAttribute("aria-pressed", "false");
+    els.densityComfortable.addEventListener("click", () => {
+      state.density = "comfortable";
       render();
     });
-    els.viewCompact.addEventListener("click", () => {
-      state.compact = true;
-      els.viewComfortable.setAttribute("aria-pressed", "false");
-      els.viewCompact.setAttribute("aria-pressed", "true");
+    els.densityDense.addEventListener("click", () => {
+      state.density = "dense";
       render();
     });
-    document.getElementById("copyPageLink").addEventListener("click", () => copyText(window.location.href, "Page link"));
-    document.getElementById("exportJson").addEventListener("click", () => download("watchfacts-results.json", "application/json", JSON.stringify(results, null, 2)));
-    document.getElementById("exportCsv").addEventListener("click", exportCsv);
-    document.getElementById("printPage").addEventListener("click", () => window.print());
+    els.copyPageLink.addEventListener("click", () => copyText(window.location.href, "Page link"));
+    els.exportJson.addEventListener("click", exportJson);
+    els.exportCsv.addEventListener("click", exportCsv);
+    els.printPage.addEventListener("click", () => window.print());
+
+    initializeDensity();
     render();
   </script>
 </body>
