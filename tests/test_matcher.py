@@ -819,6 +819,41 @@ def test_extract_relevant_listing_text_stops_before_luggage_separator() -> None:
     )
 
 
+def test_extract_relevant_listing_text_stops_before_reference_after_amount_currency_pair() -> None:
+    listing_text = (
+        "228235A Choco Dial | 5/2026 | 463000 HKD "
+        "228236 Ice Blue Roman | 4/2026 Both Tag | 588000 HKD"
+    )
+
+    assert extract_relevant_listing_text("228235a choco", listing_text) == (
+        "228235A Choco Dial | 5/2026 | 463000 HKD"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_lange_brand_after_price() -> None:
+    listing_text = (
+        "116598SACO only watch 707k HKD ⚡️A.Lange &Söhne ⚡️720.032 "
+        "Accompanied by a post-matching certificate 1.31m HKD "
+        "⚡️109.021 only watch 195k HKD"
+    )
+
+    assert extract_relevant_listing_text("116598saco", listing_text) == (
+        "116598SACO only watch 707k HKD"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_lange_brand_without_separator() -> None:
+    listing_text = (
+        "116598SACO 2015y Full Set HKD905k "
+        "A.Lange &Söhne 405.035 2023y Full set HKD590k "
+        "414.026 only watch HKD336k"
+    )
+
+    assert extract_relevant_listing_text("116598saco", listing_text) == (
+        "116598SACO 2015y Full Set HKD905k"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_compact_used_year_and_price() -> None:
     listing_text = "15410OR 2024used 460K usdt"
 
@@ -1054,6 +1089,28 @@ def test_extract_relevant_listing_text_stops_before_numbered_next_item_after_hkd
 
     assert extract_relevant_listing_text("7200r", listing_text) == (
         "Used PP 7200R 2019 / paper and watch / not original strap HKD156500"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_numbered_item_after_comma_price() -> None:
+    listing_text = (
+        "Used 116598saco / watch only $716,000 "
+        "95 Used 116600 2016 / white card / 9.5 links $88,500"
+    )
+
+    assert extract_relevant_listing_text("116598saco", listing_text) == (
+        "Used 116598saco / watch only $716,000"
+    )
+
+
+def test_extract_relevant_listing_text_stops_before_brand_status_header_after_price() -> None:
+    listing_text = (
+        "Used 77451ST ice blue 2023y full set 461k hkd "
+        "Rolex⚡⚡ ⚡️New 126000 purple N7/2025y 69k HKD"
+    )
+
+    assert extract_relevant_listing_text("77451st ice blue", listing_text) == (
+        "Used 77451ST ice blue 2023y full set 461k hkd"
     )
 
 
