@@ -506,25 +506,27 @@ async def send_search_results(
     page = _get_result_page(context, token)
     if page is not None:
         _prefetch_page_results(context, page, 0)
+    result_page = _generate_result_page(
+        context,
+        query=query,
+        results=results,
+    )
+    result_page_url = result_page.url if result_page is not None else None
     await _maybe_await(
         message.reply_text(
             format_result_summary(
                 len(results),
                 result_limit,
                 similar_count=sum(len(result.similar_results) for result in results),
+                result_page_available=result_page_url is not None,
             ),
             reply_markup=_results_markup(
                 token,
                 min(result_limit, len(results)),
-                label="Xem kết quả",
+                label="Xem trong Telegram" if result_page_url else "Xem kết quả",
+                result_page_url=result_page_url,
             ),
         )
-    )
-    await _send_result_page_link(
-        context,
-        message,
-        query=query,
-        results=results,
     )
 
 
@@ -799,6 +801,7 @@ def format_result_summary(
     result_limit: int,
     *,
     similar_count: int = 0,
+    result_page_available: bool = False,
 ) -> str:
     first_batch_count = min(total_count, result_limit)
     similar_line = (
@@ -811,12 +814,18 @@ def format_result_summary(
         if similar_count
         else ""
     )
+    action_hint = (
+        "👇 Bấm “Mở trang kết quả” để scan dạng card.\n"
+        "💬 Muốn nhận từng kết quả trong Telegram: bấm “Xem trong Telegram”.\n"
+        if result_page_available
+        else "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
+    )
     return (
         "✅ Đã tìm xong\n\n"
         f"📦 Kết quả chính: {total_count}\n"
         f"{similar_line}"
         f"📨 Lượt đầu: {first_batch_count} kết quả\n\n"
-        "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
+        f"{action_hint}"
         f"{similar_hint}"
         "💡 Muốn gọn hơn: thêm màu dial, năm, tình trạng hoặc khoảng giá."
     )
@@ -1749,18 +1758,17 @@ def _store_result_page(
     return token
 
 
-async def _send_result_page_link(
+def _generate_result_page(
     context,
-    message,
     *,
     query: str,
     results: list[SearchResult],
-) -> None:
+):
     config = _result_page_config(context)
     if config is None or not config.enabled:
-        return
+        return None
     try:
-        page = generate_result_page(
+        return generate_result_page(
             query,
             results,
             config=config,
@@ -1772,16 +1780,7 @@ async def _send_result_page_link(
             exc.__class__.__name__,
             len(query),
         )
-        return
-    if page is None:
-        return
-    await _maybe_await(
-        message.reply_text(
-            "🔗 Mở trang kết quả\n"
-            f"{page.url}\n\n"
-            f"⏳ Link hết hạn: {page.expires_at}"
-        )
-    )
+        return None
 
 
 def _get_result_page(context, token: str):
@@ -2039,18 +2038,35 @@ def _build_session_checker(settings: Settings) -> SessionChecker:
     return check
 
 
-def _results_markup(token: str, count: int, *, label: str):
+def _results_markup(
+    token: str,
+    count: int,
+    *,
+    label: str,
+    result_page_url: str | None = None,
+):
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-    return InlineKeyboardMarkup(
-        [
+    rows = []
+    if result_page_url:
+        rows.append(
             [
                 InlineKeyboardButton(
-                    f"{label} {count}",
-                    callback_data=f"{MORE_RESULTS_PREFIX}{token}",
+                    "🔗 Mở trang kết quả",
+                    url=result_page_url,
                 )
             ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                f"{label} {count}",
+                callback_data=f"{MORE_RESULTS_PREFIX}{token}",
+            )
         ]
+    )
+    return InlineKeyboardMarkup(
+        rows
     )
 
 

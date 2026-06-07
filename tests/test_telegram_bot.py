@@ -836,10 +836,19 @@ def test_search_summary_includes_generated_result_page_link_when_enabled(tmp_pat
 
     asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
 
-    assert len(message.replies) == 2
+    assert len(message.replies) == 1
     assert message.replies[0].startswith("✅ Đã tìm xong")
-    assert "Mở trang kết quả" in message.replies[1]
-    assert "https://mcp.example/results/" in message.replies[1]
+    assert message.replies[0] == format_result_summary(
+        1,
+        DEFAULT_TELEGRAM_RESULT_LIMIT,
+        similar_count=0,
+        result_page_available=True,
+    )
+    markup = message.sent_messages[-1].reply_markup
+    assert markup.inline_keyboard[0][0].text == "🔗 Mở trang kết quả"
+    assert markup.inline_keyboard[0][0].url.startswith("https://mcp.example/results/")
+    assert markup.inline_keyboard[1][0].text == "Xem trong Telegram 1"
+    assert markup.inline_keyboard[1][0].callback_data.startswith("more_results:")
     assert len(list(result_page_config.storage_dir.glob("*.html"))) == 1
 
 
@@ -869,6 +878,9 @@ def test_search_summary_ignores_result_page_generator_failure(
     assert message.replies == [
         format_result_summary(1, DEFAULT_TELEGRAM_RESULT_LIMIT, similar_count=0)
     ]
+    markup = message.sent_messages[-1].reply_markup
+    assert markup.inline_keyboard[0][0].text == "Xem kết quả 1"
+    assert markup.inline_keyboard[0][0].url is None
     assert "event=telegram.result_page_failed error_type=OSError" in caplog.text
 
 
