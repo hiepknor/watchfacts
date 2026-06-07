@@ -4,6 +4,7 @@ import asyncio
 import logging
 from types import SimpleNamespace
 
+import app.telegram_bot as telegram_bot
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
 from app.db import Database
 from app.openwa_handoff import (
@@ -1658,7 +1659,8 @@ def test_search_errors_are_logged_without_query_text(caplog) -> None:
     assert "token" not in caplog.text
 
 
-def test_watchfacts_session_error_notifies_owner_in_vietnamese(caplog) -> None:
+def test_watchfacts_session_error_notifies_owner_in_vietnamese(caplog, monkeypatch) -> None:
+    monkeypatch.setattr(telegram_bot.time, "monotonic", lambda: 1.0)
     message = FakeMessage("5712r", user_id=123)
     context = make_context(ExpiredSessionWorkflow(), allowed_user_ids=(123, 456))
 

@@ -1604,8 +1604,11 @@ async def _notify_watchfacts_session_owner(context) -> None:
     application = getattr(context, "application", None)
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     now = time.monotonic()
-    last_sent = float(bot_data.get(WATCHFACTS_SESSION_ALERT_LAST_SENT_KEY, 0.0) or 0.0)
-    if now - last_sent < WATCHFACTS_SESSION_ALERT_COOLDOWN_SECONDS:
+    last_sent_value = bot_data.get(WATCHFACTS_SESSION_ALERT_LAST_SENT_KEY)
+    if (
+        last_sent_value is not None
+        and now - float(last_sent_value) < WATCHFACTS_SESSION_ALERT_COOLDOWN_SECONDS
+    ):
         logger.info("event=telegram.watchfacts_session_alert_skipped reason=cooldown")
         return
 
