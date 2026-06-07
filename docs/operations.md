@@ -32,9 +32,12 @@ This target:
 
 - runs `git pull --ff-only`
 - builds `watchfacts-mcp`
-- runs pytest and compile checks inside the MCP Compose service
+- runs pytest, compile checks, and the default bounded quality audit inside the
+  MCP Compose service
 - force-recreates `watchfacts-mcp`
+- waits for `watchfacts-mcp` health
 - recreates Hermes so it reloads MCP config/schema
+- runs the representative MCP search smoke set
 
 Do not use `SKIP_PULL=1` for normal production deploys. If the server working
 tree is dirty, fix the deploy checkout first rather than layering rsync changes
@@ -113,15 +116,34 @@ Hermes/MCP behavior:
 
 Issue queues:
 
-- `/issues` is the operator queue for user feedback. Treat these as production
-  reports that need triage first.
-- `/suspicious` is the QA queue for auto-detected extraction risks. It defaults
-  to high-severity flags; use `/suspicious all` only when doing a broader audit.
-- `/suspicious_summary` shows the auto-QA backlog grouped by reason and
+- Production issue review should go through Hermes MCP first, not SSH or direct
+  database inspection.
+- Use `list_issues(issue_type="all", status="open", limit=20)` to see the
+  active queue. Use `status="fixed"`, `status="ignored"`, or `status="all"`
+  for review history.
+- Use `get_issue(issue_ref="F15")` or `get_issue(issue_ref="S15")` to inspect
+  one issue. The MCP payload may include bounded `raw_context`, but it must not
+  expose `.env`, browser state, cookies, full HTML, or secrets.
+- Use `suspicious_summary()` to group the auto-QA backlog by reason and
   severity. Convert confirmed patterns into regression tests before changing
   matcher rules.
-- Use `/issues_export` for user-reported regression fixtures and
-  `/suspicious_export` for auto-QA fixture work.
+- Use `update_issue(issue_ref, status, notes)` only after triage. Mark `fixed`
+  after the fix is tested, deployed, and verified. Mark `ignored` only with a
+  note explaining why no code change is needed.
+
+Example Vietnamese Hermes prompts:
+
+```text
+Liệt kê issue WatchFacts open.
+Xem issue F15.
+Phân loại issue này: bad_extraction, wrong_reference, wrong_descriptor, bad_rank, missing_price, stale_cache, hay source_lacks_info?
+Đề xuất regression test cho issue này, chưa sửa code.
+Mark issue F15 fixed với note: commit <sha>, deploy ngày <date>, audit query đã pass.
+Mark issue S8 ignored với note: raw source không có thêm dữ liệu giá.
+```
+
+Hermes should call the MCP tools above. It should not inspect `data/bot.db`
+directly and must not reimplement WatchFacts matching in prompts.
 
 OpenWA chat handoff:
 
@@ -191,8 +213,9 @@ make deploy-hermes-mcp
 pytest and compile checks inside the Compose image, force-recreates the legacy
 bot container, prints Compose status, and shows recent startup logs.
 
-`make deploy-hermes-mcp` does the same for `watchfacts-mcp`, then recreates
-Hermes.
+`make deploy-hermes-mcp` does the same for `watchfacts-mcp`, runs the bounded
+quality audit gate, waits for MCP health, recreates Hermes, then runs the MCP
+smoke set.
 
 Status:
 
@@ -277,6 +300,7 @@ RM65-01 Lebron
 Run the default set locally or inside the production container:
 
 ```bash
+make quality-audit
 python scripts/diagnostics/audit_quality.py --limit 5
 docker compose exec -T bot python scripts/diagnostics/audit_quality.py --limit 5
 ```
@@ -309,20 +333,30 @@ python scripts/fixtures/generate_issue_fixtures.py issues-export.json > tests/te
 
 Checklist:
 
-- Run the audit query set before changing broad rules when production behavior
-  is in doubt.
+- Run `make predeploy-quality-check` before deploy when matcher, extraction,
+  scoring, quality gates, or serialized result shape changes.
 - Convert confirmed issues into regression tests before implementing fixes.
 - Run focused tests, then the full suite.
-- Bump `SEARCH_CACHE_VERSION` when scoring or quality gates can change cached
-  output.
+- Bump `SEARCH_CACHE_VERSION` in `app/search.py` when extraction, scoring,
+  quality gates, ranking, or serialized result shape can change cached output.
 - Deploy with `make deploy-hermes-mcp`.
 - Verify the container is healthy and the production git HEAD matches the
   deployed commit.
-- Rerun the focused production audit after deploy.
+- Rerun the focused production audit after deploy and keep `make mcp-smoke-set`
+  passing.
 - Capture unresolved findings to PMO or docs before ending the work.
 
 Audit reports must not print `.env`, API keys, Telegram tokens, WatchFacts
 cookies, browser state, full page HTML, or unbounded raw listings.
+
+## Production Access Policy
+
+- Use Hermes MCP as the default production review surface for WatchFacts issues.
+- Use `ubuntu@43.153.208.222` for deploy and operational commands only.
+- Do not use `audit@43.153.208.222` as the primary review path.
+- If emergency audit SSH is needed later, create a restricted read-only user
+  that is not in the Docker group and cannot read `.env`,
+  `data/watchfacts_state.json`, or other secrets.
 
 ## Logs
 

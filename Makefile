@@ -7,6 +7,9 @@ LOG_LINES ?= 80
 SKIP_PULL ?= 0
 OPENWA_COMPOSE ?= 0
 SMOKE_QUERY ?= 5712g
+QUALITY_AUDIT_LIMIT ?= 5
+MCP_SMOKE_URL ?= http://127.0.0.1:8765/mcp
+MCP_SMOKE_TIMEOUT_SECONDS ?= 120
 MCP_COMPOSE_SUFFIX ?= -f docker-compose.watchfacts-mcp.yml
 MCP_SERVICE ?= watchfacts-mcp
 export HERMES_DOCKER_NETWORK ?= hermes-agent_default
@@ -20,7 +23,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-all deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke restart-hermes hermes-ps hermes-logs
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-all deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-wait-healthy quality-audit predeploy-quality-check restart-hermes hermes-ps hermes-logs
 
 help:
 	@printf "%s\n" "watchfacts-bot commands"
@@ -32,8 +35,8 @@ help:
 	@printf "%s\n" "  make predeploy-check Run tests and repository checks before deploy"
 	@printf "%s\n" "  make deploy   Alias for deploy-hermes-mcp"
 	@printf "%s\n" "  make deploy-bot Pull, build, recreate bot, show status and startup logs"
-	@printf "%s\n" "  make deploy-mcp Pull, build, test, recreate watchfacts-mcp"
-	@printf "%s\n" "  make deploy-hermes-mcp Deploy watchfacts-mcp, then restart Hermes"
+	@printf "%s\n" "  make deploy-mcp Pull, build, test, audit, recreate watchfacts-mcp"
+	@printf "%s\n" "  make deploy-hermes-mcp Deploy MCP, wait healthy, restart Hermes, smoke"
 	@printf "%s\n" "  make deploy-all Deploy bot and watchfacts-mcp"
 	@printf "%s\n" "  make deploy-bot OPENWA_COMPOSE=1 Deploy legacy bot with OpenWA network override"
 	@printf "%s\n" "  make update   Alias for deploy"
@@ -53,6 +56,9 @@ help:
 	@printf "%s\n" "  make mcp-logs       Follow watchfacts-mcp logs"
 	@printf "%s\n" "  make mcp-ps         Show watchfacts-mcp status"
 	@printf "%s\n" "  make mcp-smoke      Run one authorized HTTPX search smoke check"
+	@printf "%s\n" "  make mcp-smoke-set  Validate MCP search response shape for representative queries"
+	@printf "%s\n" "  make quality-audit  Run the default production quality audit query set"
+	@printf "%s\n" "  make predeploy-quality-check Run local checks plus the default quality audit"
 	@printf "%s\n" "  make restart-hermes Recreate Hermes service after MCP schema/config changes"
 	@printf "%s\n" "  make hermes-ps      Show Hermes service status"
 	@printf "%s\n" "  make hermes-logs    Follow Hermes logs"
@@ -96,7 +102,7 @@ deploy-mcp: verify-env pull mcp-build mcp-predeploy-check
 
 deploy-all: deploy-bot deploy-mcp
 
-deploy-hermes-mcp: deploy-mcp restart-hermes
+deploy-hermes-mcp: deploy-mcp mcp-wait-healthy restart-hermes mcp-smoke-set
 
 update: deploy
 
@@ -133,6 +139,7 @@ mcp-predeploy-check:
 	git diff --check
 	$(MCP_COMPOSE_CMD) run --rm $(MCP_SERVICE) python -m pytest -q
 	$(MCP_COMPOSE_CMD) run --rm $(MCP_SERVICE) python -m compileall app scripts
+	$(MCP_COMPOSE_CMD) run --rm $(MCP_SERVICE) python scripts/diagnostics/audit_quality.py --limit $(QUALITY_AUDIT_LIMIT)
 
 mcp-up:
 	$(MCP_COMPOSE_CMD) up -d --build $(MCP_SERVICE)
@@ -151,6 +158,34 @@ mcp-ps:
 
 mcp-smoke:
 	$(PYTHON) scripts/diagnostics/benchmark_watchfacts_http.py --query "$(SMOKE_QUERY)" --warmup --repeat 1
+
+mcp-smoke-set:
+	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/mcp_smoke.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS)
+
+mcp-wait-healthy:
+	@elapsed=0; \
+	while :; do \
+		status=$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' $(MCP_SERVICE) 2>/dev/null || true); \
+		if [ "$$status" = "healthy" ] || [ "$$status" = "none" ]; then \
+			printf "%s\n" "watchfacts-mcp health status: $$status"; \
+			exit 0; \
+		fi; \
+		if [ "$$status" = "unhealthy" ]; then \
+			printf "%s\n" "watchfacts-mcp health status: unhealthy"; \
+			exit 1; \
+		fi; \
+		if [ "$$elapsed" -ge "$(MCP_SMOKE_TIMEOUT_SECONDS)" ]; then \
+			printf "%s\n" "watchfacts-mcp did not become healthy within $(MCP_SMOKE_TIMEOUT_SECONDS)s"; \
+			exit 1; \
+		fi; \
+		sleep 3; \
+		elapsed=$$((elapsed + 3)); \
+	done
+
+quality-audit:
+	$(PYTHON) scripts/diagnostics/audit_quality.py --limit $(QUALITY_AUDIT_LIMIT)
+
+predeploy-quality-check: check quality-audit
 
 restart-hermes:
 	cd $(HERMES_DIR) && $(HERMES_COMPOSE) up -d --force-recreate --no-deps $(HERMES_SERVICE)

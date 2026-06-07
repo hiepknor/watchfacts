@@ -41,6 +41,8 @@ regress later.
 
 - Production evidence first: do not tune broad rules from one vague report.
 - Every confirmed issue should become a fixture or test before behavior changes.
+- Production issue review should go through Hermes MCP tools first; SSH and
+  direct database reads are deploy/emergency paths, not the normal review path.
 - Audit output must be safe: no `.env`, API keys, Telegram tokens, WatchFacts
   cookies, browser state, or full page HTML.
 - Quality gates should be conservative. Prefer demotion over deletion when a
@@ -159,14 +161,22 @@ Policy:
 
 For every confirmed issue:
 
-1. Capture query, shown text, raw text when available, seller, posted date, and
-   expected behavior.
-2. Add the smallest test that fails for the current bug.
-3. Fix matcher, scoring, extraction, or gate logic.
-4. Run focused tests.
-5. Run full test suite.
-6. Bump search cache version if output ordering or gating changes.
-7. Deploy and rerun the audit query.
+1. Use Hermes MCP `list_issues`, `get_issue`, `suspicious_summary`, and
+   `update_issue` for triage.
+2. Classify the finding as `bad_extraction`, `wrong_reference`,
+   `wrong_descriptor`, `bad_rank`, `missing_price`, `stale_cache`, or
+   `source_lacks_info`.
+3. Capture query, shown text, bounded raw context when available, seller,
+   posted date, and expected behavior.
+4. Add the smallest test that fails for the current bug.
+5. Fix matcher, scoring, extraction, or gate logic.
+6. Run focused tests.
+7. Run full test suite.
+8. Bump search cache version if output ordering, extraction, gating, scoring,
+   or serialized result shape changes.
+9. Deploy and rerun the audit query.
+10. Mark the issue `fixed` only after verified deploy, or `ignored` only with a
+    clear note that explains why no code change is needed.
 
 Fixture sources:
 
@@ -186,6 +196,17 @@ python scripts/fixtures/generate_audit_fixtures.py audit-report.json > tests/tes
 
 By default, the generator emits only non-clean rows. Add `--include-clean` when
 you need to lock an accepted clean shorthand or a known-good ranking example.
+
+Hermes maintainer prompt examples:
+
+```text
+Liệt kê issue WatchFacts open.
+Xem issue F15.
+Phân loại issue này.
+Đề xuất regression test từ issue này, chưa sửa code.
+Mark issue F15 fixed với note commit/deploy/audit.
+Mark issue S8 ignored với note raw source lacks info.
+```
 
 ## Non-Goals
 
@@ -223,12 +244,12 @@ you need to lock an accepted clean shorthand or a known-good ranking example.
 
 ### Phase 10.4: Production Verification Loop
 
-- [ ] Run the 10-query audit before deploy when matcher/scoring changes.
-- [ ] Run full local tests before commit.
-- [ ] Deploy with `make deploy-hermes-mcp`.
-- [ ] Verify container health and production HEAD.
-- [ ] Rerun focused production audit after deploy.
-- [ ] Capture unresolved findings into PMO or docs before stopping.
+- [x] `make quality-audit` runs the default bounded audit set.
+- [x] `make predeploy-quality-check` runs local checks plus audit.
+- [x] MCP predeploy checks run the bounded audit gate.
+- [x] `make deploy-hermes-mcp` waits for MCP health and runs post-deploy MCP smoke.
+- [ ] Rerun focused production audit after deploy for the changed query class.
+- [ ] Capture unresolved findings into PMO or docs before stopping when requested.
 
 ## Acceptance Criteria
 
@@ -236,6 +257,8 @@ you need to lock an accepted clean shorthand or a known-good ranking example.
 - Audit output explains top result quality without reading application code.
 - Confirmed production issues have regression tests before fixes are merged.
 - Cache version is updated when scoring or gate changes affect cached output.
+- Hermes can list, inspect, classify, and update issue status through MCP
+  without SSH or direct SQLite access.
 - Documentation states which shorthand prices are accepted and which material
   terms are not prices.
 - Production deploys remain gated by tests and health checks.

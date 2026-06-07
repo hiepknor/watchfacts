@@ -160,6 +160,7 @@ class IssueRecord:
     report_count: int
     severity: int | None
     issue_status: str
+    review_notes: str | None
 
 
 @dataclass(frozen=True)
@@ -828,10 +829,26 @@ class Database:
         return self.list_open_feedback_issues(limit=limit)
 
     def list_open_feedback_issues(self, *, limit: int = 10) -> list[IssueRecord]:
+        return self.list_feedback_issues(status="open", limit=limit)
+
+    def list_feedback_issues(
+        self,
+        *,
+        status: str = "open",
+        limit: int = 10,
+    ) -> list[IssueRecord]:
+        _validate_issue_status_filter(status)
+        where = ""
+        params: list[object] = []
+        if status != "all":
+            where = "WHERE issue_status = ?"
+            params.append(status)
+        params.append(limit)
+
         with self.connect() as connection:
             _ensure_schema(connection)
             rows = connection.execute(
-                """
+                f"""
                 SELECT
                     id,
                     'feedback' AS issue_type,
@@ -845,13 +862,14 @@ class Database:
                     source_url,
                     report_count,
                     NULL AS severity,
-                    issue_status
+                    issue_status,
+                    review_notes
                 FROM result_feedback
-                WHERE issue_status = 'open'
+                {where}
                 ORDER BY report_count DESC, updated_at DESC, id DESC
                 LIMIT ?
                 """,
-                (limit,),
+                tuple(params),
             ).fetchall()
         return [_issue_record_from_row(row) for row in rows]
 
@@ -861,13 +879,30 @@ class Database:
         limit: int = 10,
         min_severity: int | None = None,
     ) -> list[IssueRecord]:
-        where = "WHERE issue_status = 'open'"
-        params: tuple[object, ...]
+        return self.list_suspicious_issues(
+            status="open",
+            limit=limit,
+            min_severity=min_severity,
+        )
+
+    def list_suspicious_issues(
+        self,
+        *,
+        status: str = "open",
+        limit: int = 10,
+        min_severity: int | None = None,
+    ) -> list[IssueRecord]:
+        _validate_issue_status_filter(status)
+        where_parts: list[str] = []
+        params: list[object] = []
+        if status != "all":
+            where_parts.append("issue_status = ?")
+            params.append(status)
         if min_severity is not None:
-            where += " AND severity >= ?"
-            params = (min_severity, limit)
-        else:
-            params = (limit,)
+            where_parts.append("severity >= ?")
+            params.append(min_severity)
+        where = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        params.append(limit)
 
         with self.connect() as connection:
             _ensure_schema(connection)
@@ -886,13 +921,14 @@ class Database:
                     source_url,
                     1 AS report_count,
                     severity,
-                    issue_status
+                    issue_status,
+                    review_notes
                 FROM suspicious_results
                 {where}
                 ORDER BY severity DESC, id DESC
                 LIMIT ?
                 """,
-                params,
+                tuple(params),
             ).fetchall()
         return [_issue_record_from_row(row) for row in rows]
 
@@ -960,7 +996,8 @@ class Database:
                         source_url,
                         report_count,
                         NULL AS severity,
-                        issue_status
+                        issue_status,
+                        review_notes
                     FROM result_feedback
                     WHERE id = ?
                     """,
@@ -986,7 +1023,8 @@ class Database:
                         source_url,
                         1 AS report_count,
                         severity,
-                        issue_status
+                        issue_status,
+                        review_notes
                     FROM suspicious_results
                     WHERE id = ?
                     """,
@@ -1141,6 +1179,18 @@ def _ensure_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(SCHEMA)
     _add_column_if_missing(
         connection,
+        "result_feedback",
+        "issue_status",
+        "TEXT NOT NULL DEFAULT 'open'",
+    )
+    _add_column_if_missing(
+        connection,
+        "result_feedback",
+        "review_notes",
+        "TEXT",
+    )
+    _add_column_if_missing(
+        connection,
         "suspicious_results",
         "issue_status",
         "TEXT NOT NULL DEFAULT 'open'",
@@ -1270,7 +1320,13 @@ def _issue_record_from_row(row) -> IssueRecord:
         report_count=int(row[10]),
         severity=int(row[11]) if row[11] is not None else None,
         issue_status=str(row[12]),
+        review_notes=str(row[13]) if row[13] is not None else None,
     )
+
+
+def _validate_issue_status_filter(status: str) -> None:
+    if status not in {"open", "fixed", "ignored", "all"}:
+        raise ValueError(f"Unsupported issue status filter: {status}")
 
 
 def _ai_refinement_suggestion_from_row(row) -> AIRefinementSuggestionRecord:

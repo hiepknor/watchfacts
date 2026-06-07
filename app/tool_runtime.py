@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -32,6 +33,16 @@ RESULT_CACHE_TTL_SECONDS = 30 * 60
 VALID_FEEDBACK_REASONS = {"missing_info", "wrong_result", "other"}
 VALID_ISSUE_TYPES = {"all", "feedback", "suspicious"}
 VALID_ISSUE_STATUSES = {"open", "fixed", "ignored"}
+VALID_ISSUE_LIST_STATUSES = VALID_ISSUE_STATUSES | {"all"}
+RAW_CONTEXT_MAX_CHARS = 1200
+SENSITIVE_CONTEXT_RE = re.compile(
+    r"\b(?:cookie|authorization|bearer|api[_-]?key|token|password|secret)\b\s*[:=]\s*\S+",
+    re.IGNORECASE,
+)
+SENSITIVE_CONTEXT_PATH_RE = re.compile(
+    r"(?:data/)?(?:\.env|watchfacts_state\.json)",
+    re.IGNORECASE,
+)
 
 
 class SearchWorkflow(Protocol):
@@ -256,12 +267,14 @@ async def watchfacts_report_issue_payload(
 def watchfacts_list_issues_payload(
     *,
     issue_type: str = "all",
-    limit: int = 10,
+    limit: int = 20,
     min_severity: int | None = None,
+    status: str = "open",
     settings: Settings | None = None,
     database: Database | None = None,
 ) -> dict[str, object]:
     normalized_issue_type = _validate_issue_type(issue_type)
+    normalized_status = _validate_issue_list_status(status)
     _validate_limit(limit)
     if min_severity is not None and min_severity <= 0:
         raise ValueError("min_severity must be a positive integer")
@@ -269,16 +282,24 @@ def watchfacts_list_issues_payload(
     active_settings = settings or load_search_settings()
     issue_database = database or Database(active_settings.db_path)
     if normalized_issue_type == "feedback":
-        issues = issue_database.list_open_feedback_issues(limit=limit)
+        issues = issue_database.list_feedback_issues(
+            status=normalized_status,
+            limit=limit,
+        )
     elif normalized_issue_type == "suspicious":
-        issues = issue_database.list_open_suspicious_issues(
+        issues = issue_database.list_suspicious_issues(
+            status=normalized_status,
             limit=limit,
             min_severity=min_severity,
         )
     else:
         issues = (
-            issue_database.list_open_feedback_issues(limit=limit)
-            + issue_database.list_open_suspicious_issues(
+            issue_database.list_feedback_issues(
+                status=normalized_status,
+                limit=limit,
+            )
+            + issue_database.list_suspicious_issues(
+                status=normalized_status,
                 limit=limit,
                 min_severity=min_severity,
             )
@@ -286,6 +307,7 @@ def watchfacts_list_issues_payload(
 
     return {
         "issue_type": normalized_issue_type,
+        "status": normalized_status,
         "result_count": len(issues),
         "issues": [_issue_payload(issue) for issue in issues],
     }
@@ -295,6 +317,7 @@ def watchfacts_get_issue_payload(
     issue_ref: str,
     *,
     issue_type: str | None = None,
+    include_raw_context: bool = True,
     settings: Settings | None = None,
     database: Database | None = None,
 ) -> dict[str, object]:
@@ -304,7 +327,7 @@ def watchfacts_get_issue_payload(
     issue = issue_database.get_issue(issue_id, issue_type=parsed_type)
     return {
         "found": issue is not None,
-        "issue": _issue_payload(issue),
+        "issue": _issue_payload(issue, include_raw_context=include_raw_context),
     }
 
 
@@ -590,10 +613,14 @@ def _browser_session_status_payload(status: BrowserSessionStatus) -> dict[str, o
     }
 
 
-def _issue_payload(issue: IssueRecord | None) -> dict[str, object] | None:
+def _issue_payload(
+    issue: IssueRecord | None,
+    *,
+    include_raw_context: bool = False,
+) -> dict[str, object] | None:
     if issue is None:
         return None
-    return {
+    payload: dict[str, object] = {
         "id": issue.id,
         "issue_ref": _issue_ref(issue.issue_type, issue.id),
         "type": issue.issue_type,
@@ -601,14 +628,57 @@ def _issue_payload(issue: IssueRecord | None) -> dict[str, object] | None:
         "result_rank": issue.result_rank,
         "reason": issue.reason,
         "listing_text": issue.listing_text,
-        "raw_listing_text": issue.raw_listing_text,
         "seller": issue.seller,
         "posted_date": issue.posted_date,
         "source_url": issue.source_url,
         "report_count": issue.report_count,
         "severity": issue.severity,
         "status": issue.issue_status,
+        "review_notes": issue.review_notes,
     }
+    if include_raw_context:
+        payload["raw_context"] = _issue_raw_context_payload(issue)
+    return payload
+
+
+def _issue_raw_context_payload(issue: IssueRecord) -> dict[str, object] | None:
+    raw_text = _normalize_context_text(issue.raw_listing_text)
+    if not raw_text:
+        return None
+
+    listing_text = _normalize_context_text(issue.listing_text)
+    listing_index = (
+        raw_text.casefold().find(listing_text.casefold()) if listing_text else -1
+    )
+    if len(raw_text) <= RAW_CONTEXT_MAX_CHARS:
+        start = 0
+        end = len(raw_text)
+    elif listing_index >= 0:
+        center = listing_index + max(len(listing_text) // 2, 1)
+        start = max(center - RAW_CONTEXT_MAX_CHARS // 2, 0)
+        end = min(start + RAW_CONTEXT_MAX_CHARS, len(raw_text))
+        start = max(end - RAW_CONTEXT_MAX_CHARS, 0)
+    else:
+        start = 0
+        end = RAW_CONTEXT_MAX_CHARS
+
+    return {
+        "text": _redact_sensitive_context(raw_text[start:end].strip()),
+        "source": "issue.raw_listing_text",
+        "matched_listing_found": listing_index >= 0,
+        "truncated_before": start > 0,
+        "truncated_after": end < len(raw_text),
+        "max_chars": RAW_CONTEXT_MAX_CHARS,
+    }
+
+
+def _normalize_context_text(value: str | None) -> str:
+    return " ".join((value or "").split())
+
+
+def _redact_sensitive_context(value: str) -> str:
+    redacted = SENSITIVE_CONTEXT_RE.sub("[redacted-secret]", value)
+    return SENSITIVE_CONTEXT_PATH_RE.sub("[redacted-path]", redacted)
 
 
 def _issue_ref(issue_type: str, issue_id: int) -> str:
@@ -644,6 +714,13 @@ def _validate_issue_type(issue_type: str) -> str:
     normalized = _require_text(issue_type, "issue_type")
     if normalized not in VALID_ISSUE_TYPES:
         raise ValueError("issue_type must be one of: all, feedback, suspicious")
+    return normalized
+
+
+def _validate_issue_list_status(status: str) -> str:
+    normalized = _require_text(status, "status")
+    if normalized not in VALID_ISSUE_LIST_STATUSES:
+        raise ValueError("status must be one of: open, fixed, ignored, all")
     return normalized
 
 

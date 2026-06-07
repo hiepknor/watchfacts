@@ -395,6 +395,135 @@ def test_watchfacts_issue_queue_payloads_round_trip(tmp_path) -> None:
     assert summary["summary"][0]["severity"] == 3
 
 
+def test_watchfacts_list_issues_payload_filters_by_status(tmp_path) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    database = Database(settings.db_path)
+    fixed_id = database.record_result_feedback(
+        query_text="5712r",
+        result_rank=1,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+    )
+    open_id = database.record_result_feedback(
+        query_text="5205r",
+        result_rank=2,
+        reason="wrong_result",
+        listing_text="5205R green HKD 425000",
+    )
+    database.mark_issue_status(
+        fixed_id,
+        issue_type="feedback",
+        status="fixed",
+        notes="Verified after deploy.",
+    )
+
+    open_payload = watchfacts_list_issues_payload(
+        status="open",
+        settings=settings,
+        database=database,
+    )
+    fixed_payload = watchfacts_list_issues_payload(
+        status="fixed",
+        settings=settings,
+        database=database,
+    )
+    all_payload = watchfacts_list_issues_payload(
+        status="all",
+        settings=settings,
+        database=database,
+    )
+
+    assert [issue["id"] for issue in open_payload["issues"]] == [open_id]
+    assert [issue["id"] for issue in fixed_payload["issues"]] == [fixed_id]
+    assert all_payload["status"] == "all"
+    assert all_payload["result_count"] == 2
+
+
+def test_watchfacts_get_issue_payload_returns_bounded_safe_raw_context(tmp_path) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    database = Database(settings.db_path)
+    listing_text = "5712R 2016/ HKD"
+    raw_listing_text = (
+        "before "
+        + " ".join(f"left{i}" for i in range(120))
+        + f" {listing_text} 830000 "
+        + "cookie=secret-token .env data/watchfacts_state.json "
+        + " ".join(f"right{i}" for i in range(120))
+    )
+    issue_id = database.record_result_feedback(
+        query_text="5712r",
+        result_rank=26,
+        reason="missing_info",
+        listing_text=listing_text,
+        raw_listing_text=raw_listing_text,
+    )
+
+    payload = watchfacts_get_issue_payload(f"F{issue_id}", database=database)
+    issue = payload["issue"]
+
+    assert payload["found"] is True
+    assert "raw_listing_text" not in issue
+    assert issue["raw_context"]["matched_listing_found"] is True
+    assert issue["raw_context"]["truncated_before"] is True
+    assert issue["raw_context"]["truncated_after"] is True
+    assert listing_text in issue["raw_context"]["text"]
+    assert len(issue["raw_context"]["text"]) <= issue["raw_context"]["max_chars"]
+    assert "secret-token" not in issue["raw_context"]["text"]
+    assert ".env" not in issue["raw_context"]["text"]
+    assert "watchfacts_state.json" not in issue["raw_context"]["text"]
+
+
+def test_watchfacts_get_issue_payload_can_omit_raw_context(tmp_path) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    database = Database(settings.db_path)
+    issue_id = database.record_result_feedback(
+        query_text="5712r",
+        result_rank=1,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+        raw_listing_text="5712R 2016/ HKD 830000",
+    )
+
+    payload = watchfacts_get_issue_payload(
+        f"F{issue_id}",
+        include_raw_context=False,
+        database=database,
+    )
+
+    assert "raw_context" not in payload["issue"]
+    assert "raw_listing_text" not in payload["issue"]
+
+
+def test_watchfacts_update_issue_payload_returns_review_notes_and_rejects_bad_status(
+    tmp_path,
+) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    database = Database(settings.db_path)
+    issue_id = database.record_result_feedback(
+        query_text="5712r",
+        result_rank=1,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+    )
+
+    updated = watchfacts_update_issue_payload(
+        f"F{issue_id}",
+        "ignored",
+        notes="Raw source lacks price; no code fix.",
+        database=database,
+    )
+
+    assert updated["updated"] is True
+    assert updated["issue"]["status"] == "ignored"
+    assert updated["issue"]["review_notes"] == "Raw source lacks price; no code fix."
+    with pytest.raises(ValueError, match="status must be one of"):
+        watchfacts_update_issue_payload(
+            f"F{issue_id}",
+            "closed",
+            database=database,
+        )
+
+
 def test_watchfacts_health_payload_reports_dependencies(tmp_path) -> None:
     settings = load_search_settings(env={}, project_root=tmp_path)
 

@@ -5,10 +5,11 @@ import logging
 import sqlite3
 from pathlib import Path
 
+import app.search as search_module
 from app.config import Settings
 from app.db import Database
 from app.scraper import ScrapeResult
-from app.search import WatchFactsSearchWorkflow
+from app.search import SEARCH_CACHE_VERSION, WatchFactsSearchWorkflow
 from app.telegram_bot import SearchResult
 
 
@@ -159,6 +160,16 @@ def test_search_workflow_refetches_after_cache_expiry(tmp_path) -> None:
     asyncio.run(workflow.search("228253a choco"))
 
     assert fetch_count == 2
+
+
+def test_search_cache_key_includes_search_cache_version(tmp_path, monkeypatch) -> None:
+    settings = make_settings(tmp_path)
+
+    first_key = search_module._search_cache_key("5712g", settings)
+    monkeypatch.setattr(search_module, "SEARCH_CACHE_VERSION", f"{SEARCH_CACHE_VERSION}-test")
+    second_key = search_module._search_cache_key("5712g", settings)
+
+    assert first_key != second_key
 
 
 def test_search_workflow_coalesces_concurrent_same_query_fetches(tmp_path) -> None:

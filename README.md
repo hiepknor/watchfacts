@@ -160,8 +160,8 @@ needs the separate OpenWA compose override.
 | `make predeploy-check` | Run pytest plus repository checks |
 | `make deploy` | Alias for `make deploy-hermes-mcp` |
 | `make deploy-bot` | Pull latest code, build, recreate the legacy Telegram bot, and show startup logs |
-| `make deploy-mcp` | Pull latest code, build, test, and recreate `watchfacts-mcp` |
-| `make deploy-hermes-mcp` | Deploy `watchfacts-mcp`, then recreate Hermes so it reloads MCP config/schema |
+| `make deploy-mcp` | Pull latest code, build, test, audit, and recreate `watchfacts-mcp` |
+| `make deploy-hermes-mcp` | Deploy `watchfacts-mcp`, wait for health, recreate Hermes, and run MCP smoke |
 | `make deploy-all` | Deploy both legacy bot and MCP service |
 | `make deploy-bot OPENWA_COMPOSE=1` | Deploy legacy bot with the OpenWA network override |
 | `make pull` | Pull latest git changes unless `SKIP_PULL=1` |
@@ -171,6 +171,9 @@ needs the separate OpenWA compose override.
 | `make mcp-logs` | Follow `watchfacts-mcp` logs |
 | `make mcp-ps` | Show `watchfacts-mcp` status |
 | `make mcp-smoke` | Run one authorized HTTPX WatchFacts search smoke check |
+| `make mcp-smoke-set` | Validate MCP `search` shape for representative queries |
+| `make quality-audit` | Run the default bounded quality audit query set |
+| `make predeploy-quality-check` | Run local checks plus the default quality audit |
 | `make restart-hermes` | Recreate Hermes after MCP schema/config changes |
 | `make hermes-logs` | Follow Hermes logs |
 | `make hermes-ps` | Show Hermes status |
@@ -330,8 +333,8 @@ Tool catalog:
 | `health` | Check WatchFacts session, database, OpenWA, and search readiness |
 | `create_chat_draft` | Create an OpenWA chat draft from a prior `search` result by `result_id` or `rank` |
 | `report_issue` | Record result feedback for owner review |
-| `list_issues` | List open feedback and suspicious QA issues |
-| `get_issue` | Read one feedback or suspicious issue by `F<id>` or `S<id>` |
+| `list_issues` | List feedback and suspicious QA issues by `status=open/fixed/ignored/all` |
+| `get_issue` | Read one feedback or suspicious issue by `F<id>` or `S<id>` with bounded raw context |
 | `update_issue` | Mark an issue `open`, `fixed`, or `ignored` |
 | `suspicious_summary` | Summarize open suspicious QA backlog |
 
@@ -590,6 +593,12 @@ Run a single authorized HTTPX smoke search with the default query `5712g`:
 
 ```bash
 make mcp-smoke
+```
+
+Validate the deployed MCP `search` response shape for representative queries:
+
+```bash
+make mcp-smoke-set
 ```
 
 ## Ignored Files

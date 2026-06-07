@@ -74,6 +74,9 @@ Logs must not include:
 - Expose only explicit WatchFacts tools in Hermes config.
 - Keep MCP tool names and schemas stable so Hermes does not need prompt hacks to call them.
 - Do not expose `.env`, browser state, raw cookies, OpenWA API keys, or Telegram tokens through MCP payloads.
+- Issue review tools may return only bounded, redacted raw context around the
+  stored listing. They must not return full HTML, `.env`,
+  `data/watchfacts_state.json`, cookies, or unbounded raw listings.
 - Do not let Hermes invent seller contact, source links, prices, product images, result ids, or OpenWA links.
 - Use the short-lived `result_id` from `search` for follow-up tools such as `create_chat_draft` and `report_issue`.
 - Use `offset` / `next_offset` for pagination instead of hidden Telegram callback state.

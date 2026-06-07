@@ -70,11 +70,20 @@ def test_issue_tools_call_payloads(monkeypatch) -> None:
         report_calls.append((query, result_id, reason, rank, notes))
         return {"status": "recorded"}
 
-    def fake_list(issue_type="all", limit=10, min_severity=None):
-        return {"issue_type": issue_type, "limit": limit, "min_severity": min_severity}
+    def fake_list(issue_type="all", limit=20, min_severity=None, status="open"):
+        return {
+            "issue_type": issue_type,
+            "limit": limit,
+            "min_severity": min_severity,
+            "status": status,
+        }
 
-    def fake_get(issue_ref, issue_type=None):
-        return {"issue_ref": issue_ref, "issue_type": issue_type}
+    def fake_get(issue_ref, issue_type=None, include_raw_context=True):
+        return {
+            "issue_ref": issue_ref,
+            "issue_type": issue_type,
+            "include_raw_context": include_raw_context,
+        }
 
     def fake_update(issue_ref, status, notes=None, issue_type=None):
         update_calls.append((issue_ref, status, notes, issue_type))
@@ -101,15 +110,24 @@ def test_issue_tools_call_payloads(monkeypatch) -> None:
             notes="bad year",
         )
     )
-    listed = mcp_server.list_issues("suspicious", 7, 3)
-    detail = mcp_server.get_issue("S1")
+    listed = mcp_server.list_issues("suspicious", limit=7, min_severity=3, status="fixed")
+    detail = mcp_server.get_issue("S1", include_raw_context=False)
     updated = mcp_server.update_issue("S1", "ignored", "false positive")
     summary = mcp_server.suspicious_summary(5)
 
     assert report == {"status": "recorded"}
     assert report_calls == [("5712g", "watchfacts:abc", "wrong_result", None, "bad year")]
-    assert listed == {"issue_type": "suspicious", "limit": 7, "min_severity": 3}
-    assert detail == {"issue_ref": "S1", "issue_type": None}
+    assert listed == {
+        "issue_type": "suspicious",
+        "limit": 7,
+        "min_severity": 3,
+        "status": "fixed",
+    }
+    assert detail == {
+        "issue_ref": "S1",
+        "issue_type": None,
+        "include_raw_context": False,
+    }
     assert updated == {"updated": True}
     assert update_calls == [("S1", "ignored", "false positive", None)]
     assert summary == {"limit": 5}

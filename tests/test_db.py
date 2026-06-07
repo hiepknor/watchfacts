@@ -518,6 +518,47 @@ def test_mark_issue_status_closes_feedback_and_suspicious_issues(tmp_path) -> No
     assert database.export_open_suspicious_issues() == []
 
 
+def test_issue_status_filters_include_review_notes(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    fixed_id = database.record_result_feedback(
+        query_text="5712r",
+        result_rank=1,
+        reason="missing_info",
+        listing_text="5712R 2016/ HKD",
+    )
+    ignored_id = database.record_result_feedback(
+        query_text="5205r",
+        result_rank=2,
+        reason="wrong_result",
+        listing_text="5205R wrong dial",
+    )
+    database.mark_issue_status(
+        fixed_id,
+        issue_type="feedback",
+        status="fixed",
+        notes="Fixture passed after deploy.",
+    )
+    database.mark_issue_status(
+        ignored_id,
+        issue_type="feedback",
+        status="ignored",
+        notes="Source lacks enough detail.",
+    )
+
+    fixed = database.list_feedback_issues(status="fixed")
+    ignored = database.list_feedback_issues(status="ignored")
+    all_issues = database.list_feedback_issues(status="all")
+
+    assert [(issue.id, issue.review_notes) for issue in fixed] == [
+        (fixed_id, "Fixture passed after deploy.")
+    ]
+    assert [(issue.id, issue.review_notes) for issue in ignored] == [
+        (ignored_id, "Source lacks enough detail.")
+    ]
+    assert {issue.id for issue in all_issues} == {fixed_id, ignored_id}
+
+
 def test_repeated_feedback_reopens_fixed_issue(tmp_path) -> None:
     db_path = tmp_path / "data" / "bot.db"
     database = Database(db_path)

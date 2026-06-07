@@ -183,10 +183,15 @@ Responsibilities:
   `report_issue`, `list_issues`, `get_issue`, `update_issue`,
   `suspicious_summary`.
 - Use `query`, `limit`, `offset`, and `include_similar` for `search`.
+- Use `issue_type`, `status`, `limit`, and optional `min_severity` for
+  `list_issues`.
+- Use `include_raw_context` for `get_issue` when Hermes needs a bounded,
+  redacted raw snippet for triage.
 - Let follow-up tools accept either the short-lived `result_id` from search or
   absolute `rank` when the user refers to a result number.
 - Return structured JSON-like payloads without Telegram formatting concerns.
-- Avoid leaking raw listings unless a specific safe diagnostic path explicitly requests them.
+- Avoid leaking raw listings unless a specific safe diagnostic path explicitly
+  requests bounded, redacted context.
 
 ### `tool_runtime.py`
 

@@ -109,18 +109,20 @@ async def report_issue(
 
 @app.tool(
     name="list_issues",
-    description="List open WatchFacts feedback and suspicious QA issues.",
+    description="List WatchFacts feedback and suspicious QA issues by status.",
 )
 def list_issues(
     issue_type: str = "all",
-    limit: int = 10,
+    limit: int = 20,
     min_severity: int | None = None,
+    status: str = "open",
 ) -> dict[str, object]:
-    """List open WatchFacts issue queue items."""
+    """List WatchFacts issue queue items."""
     return watchfacts_list_issues_payload(
         issue_type=issue_type,
         limit=limit,
         min_severity=min_severity,
+        status=status,
     )
 
 
@@ -128,11 +130,16 @@ def list_issues(
     name="get_issue",
     description="Get one WatchFacts issue by reference such as F1 or S1.",
 )
-def get_issue(issue_ref: str, issue_type: str | None = None) -> dict[str, object]:
+def get_issue(
+    issue_ref: str,
+    issue_type: str | None = None,
+    include_raw_context: bool = True,
+) -> dict[str, object]:
     """Get one feedback or suspicious issue."""
     return watchfacts_get_issue_payload(
         issue_ref=issue_ref,
         issue_type=issue_type,
+        include_raw_context=include_raw_context,
     )
 
 
