@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Mapping, cast
 
@@ -26,6 +26,9 @@ DEFAULT_WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS = 120
 DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS = 60
 DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH = True
 DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT = "/api/chats/drafts"
+DEFAULT_RESULT_PAGE_TTL_SECONDS = 24 * 60 * 60
+DEFAULT_RESULT_PAGE_MAX_RESULTS = 200
+DEFAULT_RESULT_PAGE_STORAGE_DIR = "data/result_pages"
 HybridAIMode = Literal["off", "shadow", "review", "guarded"]
 DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
 RuntimeMode = Literal["telegram", "search"]
@@ -82,6 +85,12 @@ class Settings:
         DEFAULT_WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS
     )
     watchfacts_http_warmup_on_health: bool = DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH
+    result_page_public_base_url: str = ""
+    result_page_ttl_seconds: int = DEFAULT_RESULT_PAGE_TTL_SECONDS
+    result_page_max_results: int = DEFAULT_RESULT_PAGE_MAX_RESULTS
+    result_page_storage_dir: Path = field(
+        default_factory=lambda: Path(DEFAULT_RESULT_PAGE_STORAGE_DIR)
+    )
 
 
 def parse_bool(value: str, *, name: str) -> bool:
@@ -286,6 +295,33 @@ def load_settings(
 
     data_dir = root / "data"
     logs_dir = root / "logs"
+    result_page_public_base_url = source.get(
+        "RESULT_PAGE_PUBLIC_BASE_URL",
+        "",
+    ).strip().rstrip("/")
+    result_page_ttl_seconds = parse_positive_int(
+        source.get(
+            "RESULT_PAGE_TTL_SECONDS",
+            str(DEFAULT_RESULT_PAGE_TTL_SECONDS),
+        ),
+        name="RESULT_PAGE_TTL_SECONDS",
+    )
+    result_page_max_results = parse_positive_int(
+        source.get(
+            "RESULT_PAGE_MAX_RESULTS",
+            str(DEFAULT_RESULT_PAGE_MAX_RESULTS),
+        ),
+        name="RESULT_PAGE_MAX_RESULTS",
+    )
+    result_page_storage_value = source.get(
+        "RESULT_PAGE_STORAGE_DIR",
+        DEFAULT_RESULT_PAGE_STORAGE_DIR,
+    ).strip()
+    if not result_page_storage_value:
+        raise ConfigError("RESULT_PAGE_STORAGE_DIR must not be empty")
+    result_page_storage_dir = Path(result_page_storage_value)
+    if not result_page_storage_dir.is_absolute():
+        result_page_storage_dir = root / result_page_storage_dir
 
     return Settings(
         telegram_bot_token=token,
@@ -318,6 +354,10 @@ def load_settings(
         openwa_dashboard_url=openwa_dashboard_url,
         openwa_chat_draft_endpoint=openwa_chat_draft_endpoint,
         enable_openwa_chat_handoff=enable_openwa_chat_handoff,
+        result_page_public_base_url=result_page_public_base_url,
+        result_page_ttl_seconds=result_page_ttl_seconds,
+        result_page_max_results=result_page_max_results,
+        result_page_storage_dir=result_page_storage_dir,
         project_root=root,
         data_dir=data_dir,
         logs_dir=logs_dir,

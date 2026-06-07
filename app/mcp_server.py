@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import logging
 
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, PlainTextResponse
+
+from app.config import ConfigError, load_search_settings
+from app.result_pages import ResultPageConfig, read_result_page_html
 from mcp.server.fastmcp import FastMCP
 
 from app.tool_runtime import (
@@ -17,6 +22,20 @@ from app.tool_runtime import (
 
 
 logger = logging.getLogger(__name__)
+RESULT_PAGE_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'none'; "
+        "img-src https: data:; "
+        "script-src 'unsafe-inline'; "
+        "style-src 'unsafe-inline'; "
+        "connect-src 'none'; "
+        "base-uri 'none'; "
+        "form-action 'none'; "
+        "frame-ancestors 'none'"
+    ),
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+}
 
 
 app = FastMCP(
@@ -58,6 +77,30 @@ async def search(
 async def health() -> dict[str, object]:
     """Check whether WatchFacts runtime dependencies are ready."""
     return await watchfacts_health_payload()
+
+
+@app.custom_route("/results/{token}", methods=["GET"], include_in_schema=False)
+async def result_page(request: Request):
+    token = request.path_params.get("token", "")
+    try:
+        settings = load_search_settings()
+    except ConfigError as exc:
+        logger.warning("event=result_page.config_error error_type=%s", exc.__class__.__name__)
+        return PlainTextResponse("Result page unavailable", status_code=404)
+
+    config = ResultPageConfig.from_settings(settings)
+    if not config.enabled:
+        return PlainTextResponse("Result page not found", status_code=404)
+
+    page = read_result_page_html(
+        token,
+        config=config,
+    )
+    if page.status_code == 200 and page.html is not None:
+        return HTMLResponse(page.html, headers=RESULT_PAGE_HEADERS)
+    if page.status_code == 410:
+        return PlainTextResponse("Result page expired", status_code=410)
+    return PlainTextResponse("Result page not found", status_code=404)
 
 
 @app.tool(

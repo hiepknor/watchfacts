@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 pytest.importorskip("mcp.server.fastmcp")
 
+from starlette.testclient import TestClient
+
+from app.config import load_search_settings
 from app import mcp_server
+from app.result_pages import generate_result_page
+from app.search_result import SearchResult
 
 
 def test_search_tool_calls_payload(monkeypatch) -> None:
@@ -131,3 +137,89 @@ def test_issue_tools_call_payloads(monkeypatch) -> None:
     assert updated == {"updated": True}
     assert update_calls == [("S1", "ignored", "false positive", None)]
     assert summary == {"limit": 5}
+
+
+def test_result_page_route_serves_generated_html(monkeypatch, tmp_path) -> None:
+    settings = load_search_settings(
+        env={
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results",
+            "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
+            "RESULT_PAGE_TTL_SECONDS": "60",
+        },
+        project_root=tmp_path,
+    )
+    page = generate_result_page(
+        "5712g",
+        [SearchResult("5712G")],
+        settings=settings,
+        now=datetime.now(timezone.utc),
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+    monkeypatch.setattr(mcp_server, "load_search_settings", lambda: settings)
+
+    response = TestClient(mcp_server.app.streamable_http_app()).get(f"/results/{token}")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+    assert "5712G" in response.text
+
+
+def test_result_page_route_reports_missing_and_expired(monkeypatch, tmp_path) -> None:
+    settings = load_search_settings(
+        env={
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results",
+            "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
+            "RESULT_PAGE_TTL_SECONDS": "1",
+        },
+        project_root=tmp_path,
+    )
+    page = generate_result_page(
+        "5712g",
+        [SearchResult("5712G")],
+        settings=settings,
+        now=datetime.now(timezone.utc) - timedelta(seconds=5),
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+    monkeypatch.setattr(mcp_server, "load_search_settings", lambda: settings)
+    client = TestClient(mcp_server.app.streamable_http_app())
+
+    assert client.get("/results/missing-token").status_code == 404
+    assert client.get(f"/results/{token}").status_code == 410
+
+
+def test_result_page_route_is_disabled_without_public_base_url(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    enabled_settings = load_search_settings(
+        env={
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results",
+            "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
+            "RESULT_PAGE_TTL_SECONDS": "60",
+        },
+        project_root=tmp_path,
+    )
+    page = generate_result_page(
+        "5712g",
+        [SearchResult("5712G")],
+        settings=enabled_settings,
+        now=datetime.now(timezone.utc),
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+    disabled_settings = load_search_settings(
+        env={
+            "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
+            "RESULT_PAGE_TTL_SECONDS": "60",
+        },
+        project_root=tmp_path,
+    )
+    monkeypatch.setattr(mcp_server, "load_search_settings", lambda: disabled_settings)
+
+    response = TestClient(mcp_server.app.streamable_http_app()).get(f"/results/{token}")
+
+    assert response.status_code == 404

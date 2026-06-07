@@ -35,6 +35,7 @@ from app.telegram_bot import (
     WATCHFACTS_SESSION_CHECKER_KEY,
     WATCHFACTS_SESSION_ERROR_MESSAGE,
     WORKFLOW_KEY,
+    RESULT_PAGE_CONFIG_KEY,
     RESULT_REFINER_KEY,
     SearchResult,
     _build_result_refiner,
@@ -72,6 +73,7 @@ from app.telegram_bot import (
     settings_command,
     start_command,
 )
+from app.result_pages import ResultPageConfig
 
 
 def make_settings(tmp_path, *, hybrid_ai_mode: str = "shadow") -> Settings:
@@ -221,6 +223,7 @@ def make_context(
     allowed_user_ids: tuple[int, ...] = (),
     openwa_config: OpenWAHandoffConfig | None = None,
     openwa_client=None,
+    result_page_config: ResultPageConfig | None = None,
     watchfacts_url: str = "https://watchfacts.example/simon-match-making",
 ):
     bot_data = {PROCESSING_MIN_SECONDS_KEY: 0}
@@ -241,6 +244,8 @@ def make_context(
         bot_data[OPENWA_HANDOFF_CONFIG_KEY] = openwa_config
     if openwa_client is not None:
         bot_data[OPENWA_CHAT_DRAFT_CLIENT_KEY] = openwa_client
+    if result_page_config is not None:
+        bot_data[RESULT_PAGE_CONFIG_KEY] = result_page_config
     bot = FakeBot()
     return SimpleNamespace(bot=bot, application=SimpleNamespace(bot=bot, bot_data=bot_data))
 
@@ -815,6 +820,56 @@ def test_cancel_command_handles_empty_result_pages() -> None:
     asyncio.run(cancel_command(SimpleNamespace(message=message), make_context()))
 
     assert message.replies == [CANCEL_EMPTY_MESSAGE]
+
+
+def test_search_summary_includes_generated_result_page_link_when_enabled(tmp_path) -> None:
+    message = FakeMessage("5712g")
+    workflow = FakeWorkflow([SearchResult("5712G Used")])
+    result_page_config = ResultPageConfig(
+        public_base_url="https://mcp.example/results",
+        ttl_seconds=60,
+        max_results=10,
+        storage_dir=tmp_path / "pages",
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+    )
+    context = make_context(workflow, result_page_config=result_page_config)
+
+    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert len(message.replies) == 2
+    assert message.replies[0].startswith("✅ Đã tìm xong")
+    assert "Mở trang kết quả" in message.replies[1]
+    assert "https://mcp.example/results/" in message.replies[1]
+    assert len(list(result_page_config.storage_dir.glob("*.html"))) == 1
+
+
+def test_search_summary_ignores_result_page_generator_failure(
+    tmp_path,
+    monkeypatch,
+    caplog,
+) -> None:
+    def fail_generate(*args, **kwargs):
+        raise OSError("disk full")
+
+    message = FakeMessage("5712g")
+    workflow = FakeWorkflow([SearchResult("5712G Used")])
+    result_page_config = ResultPageConfig(
+        public_base_url="https://mcp.example/results",
+        ttl_seconds=60,
+        max_results=10,
+        storage_dir=tmp_path / "pages",
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+    )
+    context = make_context(workflow, result_page_config=result_page_config)
+    monkeypatch.setattr(telegram_bot, "generate_result_page", fail_generate)
+
+    with caplog.at_level(logging.WARNING, logger="app.telegram_bot"):
+        asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
+
+    assert message.replies == [
+        format_result_summary(1, DEFAULT_TELEGRAM_RESULT_LIMIT, similar_count=0)
+    ]
+    assert "event=telegram.result_page_failed error_type=OSError" in caplog.text
 
 
 def test_empty_messages_are_rejected() -> None:

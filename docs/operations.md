@@ -9,8 +9,11 @@
 4. Create browser state with `python scripts/ops/login.py`.
 5. For Hermes/MCP production, configure Hermes to call
    `http://watchfacts-mcp:8765/mcp`.
-6. Run `make deploy-hermes-mcp`.
-7. Inspect startup with `make mcp-logs` or `make hermes-logs` if needed.
+6. To enable generated result pages, set `RESULT_PAGE_PUBLIC_BASE_URL` to the
+   public `/results` base URL and expose only that public route; keep `/mcp`
+   reachable only by Hermes.
+7. Run `make deploy-hermes-mcp`.
+8. Inspect startup with `make mcp-logs` or `make hermes-logs` if needed.
 
 The bot expects `data/watchfacts_state.json` to exist before the first real search.
 Deploy targets also check for `.env` and browser state before they pull/build.

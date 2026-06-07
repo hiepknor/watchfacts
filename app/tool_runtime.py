@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-import json
+import logging
 import re
 import time
 import urllib.parse
@@ -15,9 +14,10 @@ from app.openwa_handoff import (
     OpenWAHandoffConfig,
     create_openwa_chat_draft,
 )
+from app.result_pages import ResultPageConfig, generate_result_page
 from app.scraper import BrowserSessionStatus, check_watchfacts_session
 from app.search import WatchFactsSearchWorkflow
-from app.search_result import SearchResult, search_result_to_dict
+from app.search_result import SearchResult, search_result_to_dict, source_result_id
 from app.watchfacts_http import (
     WatchFactsHttpClientStatus,
     warm_watchfacts_http_client,
@@ -43,6 +43,7 @@ SENSITIVE_CONTEXT_PATH_RE = re.compile(
     r"(?:data/)?(?:\.env|watchfacts_state\.json)",
     re.IGNORECASE,
 )
+logger = logging.getLogger(__name__)
 
 
 class SearchWorkflow(Protocol):
@@ -80,16 +81,15 @@ async def watchfacts_search_payload(
     _validate_limit(limit)
     _validate_offset(offset)
 
-    active_workflow = workflow or WatchFactsSearchWorkflow(
-        settings or load_search_settings()
-    )
+    active_settings = settings or (load_search_settings() if workflow is None else None)
+    active_workflow = workflow or WatchFactsSearchWorkflow(active_settings)
     results = await active_workflow.search(normalized_query)
     _store_results(normalized_query, results)
     visible_results = results[offset : offset + limit] if limit is not None else results[offset:]
     next_offset = offset + len(visible_results)
     has_more = next_offset < len(results)
 
-    return {
+    payload: dict[str, object] = {
         "query": normalized_query,
         "total_count": len(results),
         "offset": offset,
@@ -110,6 +110,27 @@ async def watchfacts_search_payload(
             for rank, result in enumerate(visible_results, start=offset + 1)
         ],
     }
+    if active_settings is not None:
+        try:
+            result_page = generate_result_page(
+                normalized_query,
+                results,
+                config=ResultPageConfig.from_settings(active_settings),
+                offset=offset,
+                limit=limit,
+                total_count=len(results),
+                next_offset=next_offset if has_more else None,
+            )
+        except Exception as exc:
+            logger.warning(
+                "event=watchfacts.result_page_failed error_type=%s query_length=%d",
+                exc.__class__.__name__,
+                len(normalized_query),
+            )
+        else:
+            if result_page is not None:
+                payload["result_page"] = result_page.to_payload()
+    return payload
 
 
 async def watchfacts_health_payload(
@@ -514,17 +535,7 @@ def _prune_result_cache(now: float) -> None:
 
 
 def _source_result_id(query: str, rank: int, result: SearchResult) -> str:
-    payload = {
-        "query": query,
-        "rank": rank,
-        "listingText": result.listing_text,
-        "rawListingText": result.raw_listing_text,
-        "sourceUrl": result.source_url,
-    }
-    digest = hashlib.sha256(
-        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()
-    return f"watchfacts:{digest[:24]}"
+    return source_result_id(query, rank, result)
 
 
 def _build_openwa_chat_draft_payload(

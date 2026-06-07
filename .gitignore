@@ -7,5 +7,6 @@ __pycache__/
 
 data/watchfacts_state.json
 data/bot.db
+data/result_pages/
 logs/
 models/

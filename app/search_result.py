@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from typing import Any
 
 
@@ -14,6 +16,20 @@ class SearchResult:
     similar_results: tuple["SearchResult", ...] = ()
     raw_listing_text: str | None = None
     seller_phone: str | None = None
+
+
+def source_result_id(query: str, rank: int, result: SearchResult) -> str:
+    payload = {
+        "query": query,
+        "rank": rank,
+        "listingText": result.listing_text,
+        "rawListingText": result.raw_listing_text,
+        "sourceUrl": result.source_url,
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return f"watchfacts:{digest[:24]}"
 
 
 def search_result_to_dict(

@@ -26,6 +26,7 @@ from app.openwa_handoff import (
     OpenWAHandoffResponseError,
     create_openwa_chat_draft,
 )
+from app.result_pages import ResultPageConfig, generate_result_page
 from app.scraper import BrowserSessionError, BrowserSessionStatus
 from app.search_result import SearchResult
 
@@ -122,6 +123,7 @@ HYBRID_AI_MODE_KEY = "hybrid_ai_mode"
 OPENAI_MODEL_KEY = "openai_model"
 WATCHFACTS_URL_KEY = "watchfacts_url"
 RESULT_PAGES_KEY = "result_pages"
+RESULT_PAGE_CONFIG_KEY = "result_page_config"
 RESULT_REFINER_KEY = "result_refiner"
 ISSUE_DATABASE_KEY = "issue_database"
 FEEDBACK_CONTEXTS_KEY = "feedback_contexts"
@@ -517,6 +519,12 @@ async def send_search_results(
                 label="Xem kết quả",
             ),
         )
+    )
+    await _send_result_page_link(
+        context,
+        message,
+        query=query,
+        results=results,
     )
 
 
@@ -1146,6 +1154,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.bot_data[HYBRID_AI_MODE_KEY] = settings.hybrid_ai_mode
     application.bot_data[OPENAI_MODEL_KEY] = settings.openai_model
     application.bot_data[WATCHFACTS_URL_KEY] = settings.watchfacts_url
+    application.bot_data[RESULT_PAGE_CONFIG_KEY] = ResultPageConfig.from_settings(settings)
     openwa_config = OpenWAHandoffConfig.from_settings(settings)
     application.bot_data[OPENWA_HANDOFF_CONFIG_KEY] = openwa_config
     if openwa_config.is_ready:
@@ -1295,6 +1304,13 @@ def _watchfacts_url(context) -> str:
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     value = bot_data.get(WATCHFACTS_URL_KEY)
     return str(value).strip() if value else DEFAULT_WATCHFACTS_URL
+
+
+def _result_page_config(context) -> ResultPageConfig | None:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(RESULT_PAGE_CONFIG_KEY)
+    return value if isinstance(value, ResultPageConfig) else None
 
 
 def _openwa_handoff_ready(context) -> bool:
@@ -1731,6 +1747,41 @@ def _store_result_page(
         "refined_results": {},
     }
     return token
+
+
+async def _send_result_page_link(
+    context,
+    message,
+    *,
+    query: str,
+    results: list[SearchResult],
+) -> None:
+    config = _result_page_config(context)
+    if config is None or not config.enabled:
+        return
+    try:
+        page = generate_result_page(
+            query,
+            results,
+            config=config,
+            total_count=len(results),
+        )
+    except Exception as exc:
+        logger.warning(
+            "event=telegram.result_page_failed error_type=%s query_length=%d",
+            exc.__class__.__name__,
+            len(query),
+        )
+        return
+    if page is None:
+        return
+    await _maybe_await(
+        message.reply_text(
+            "🔗 Mở trang kết quả\n"
+            f"{page.url}\n\n"
+            f"⏳ Link hết hạn: {page.expires_at}"
+        )
+    )
 
 
 def _get_result_page(context, token: str):

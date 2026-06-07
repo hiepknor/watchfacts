@@ -83,6 +83,10 @@ Expected environment:
 | `WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS` | No | `120` | HTTPX read timeout cap for search POSTs (usually longer than generic read timeout) |
 | `WATCHFACTS_HTTP_FAILURE_COOLDOWN_SECONDS` | No | `60` | Time to skip HTTPX after a failed HTTPX attempt |
 | `WATCHFACTS_HTTP_WARMUP_ON_HEALTH` | No | `true` | Allow MCP health to prefetch and cache the WatchFacts search form |
+| `RESULT_PAGE_PUBLIC_BASE_URL` | No | None | Public base URL for generated result pages; feature stays disabled when empty |
+| `RESULT_PAGE_TTL_SECONDS` | No | `86400` | Lifetime for generated result page files |
+| `RESULT_PAGE_MAX_RESULTS` | No | `200` | Maximum ranked results embedded in one generated result page |
+| `RESULT_PAGE_STORAGE_DIR` | No | `data/result_pages` | Directory for generated static result page HTML files |
 | `HYBRID_AI_MODE` | No | `off` | Controlled AI mode: `off`, `shadow`, `review`, or `guarded`; only `guarded` can alter search output |
 | `OPENAI_API_KEY` | Required when AI mode is not `off` | None | OpenAI API key; never logged or shown in Telegram |
 | `OPENAI_MODEL` | No | Cost-conscious current model | Model used for structured refinement suggestions |
@@ -108,6 +112,7 @@ Configuration rules:
 - Use `SEARCH_MAX_CONCURRENT_SEARCHES` to serialize or bound Hermes/MCP WatchFacts browser searches.
 - Keep `WATCHFACTS_HTTP_CLIENT_ENABLED=true` for normal Telegram/MCP search; disabling it disables query search instead of falling back to Playwright.
 - Use `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to reduce repeated WatchFacts form GETs while still refreshing on CSRF/auth failures.
+- Set `RESULT_PAGE_PUBLIC_BASE_URL` only when the MCP service is reachable through a public reverse proxy path for `/results/`; leave it empty to preserve legacy responses without page links.
 - Reuse the process-level HTTPX client for connection pooling; reload cookies and clear form cache when `data/watchfacts_state.json` changes.
 - Cap HTTPX read time so slow HTTPX attempts fail fast without launching Playwright.
 - Expose only safe HTTPX status metadata in `health`: enabled flag, form-cache freshness, error type, coarse timings, HTTP version, cooldown state, and timestamps.

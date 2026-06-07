@@ -152,6 +152,66 @@ def test_watchfacts_search_payload_supports_offset_pagination() -> None:
     assert payload["results"][0]["listing_text"] == "5712G second"
 
 
+def test_watchfacts_search_payload_adds_result_page_when_enabled(tmp_path) -> None:
+    settings = load_search_settings(
+        env={
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results",
+            "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
+            "RESULT_PAGE_TTL_SECONDS": "60",
+            "RESULT_PAGE_MAX_RESULTS": "2",
+        },
+        project_root=tmp_path,
+    )
+    workflow = FakeWorkflow(
+        [
+            SearchResult(
+                listing_text="5712G Used",
+                raw_listing_text="raw context should not render",
+            ),
+            SearchResult("5712G second"),
+            SearchResult("5712G third bounded out"),
+        ]
+    )
+
+    payload = asyncio.run(
+        watchfacts_search_payload(
+            "5712g",
+            workflow=workflow,
+            settings=settings,
+            limit=1,
+        )
+    )
+
+    assert payload["result_count"] == 1
+    assert payload["result_page"] == {
+        "url": payload["result_page"]["url"],
+        "expires_at": payload["result_page"]["expires_at"],
+        "result_count": 2,
+    }
+    assert payload["result_page"]["url"].startswith("https://mcp.example/results/")
+    html_files = list(settings.result_page_storage_dir.glob("*.html"))
+    assert len(html_files) == 1
+    html = html_files[0].read_text(encoding="utf-8")
+    assert "5712G Used" in html
+    assert "5712G second" in html
+    assert "5712G third bounded out" not in html
+    assert "raw context should not render" not in html
+
+
+def test_watchfacts_search_payload_omits_result_page_when_disabled(tmp_path) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+
+    payload = asyncio.run(
+        watchfacts_search_payload(
+            "5712g",
+            workflow=FakeWorkflow([SearchResult("5712G")]),
+            settings=settings,
+        )
+    )
+
+    assert "result_page" not in payload
+
+
 def test_watchfacts_search_payload_rejects_empty_query() -> None:
     with pytest.raises(ValueError, match="query must not be empty"):
         asyncio.run(watchfacts_search_payload(" ", workflow=FakeWorkflow([])))
