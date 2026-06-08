@@ -40,6 +40,14 @@ jobs:
           set -eu
           ZERO_SHA="0000000000000000000000000000000000000000"
           if [ "$EVENT_NAME" = "pull_request" ]; then
+            if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "$ZERO_SHA" ]; then
+              BASE_SHA="$(git merge-base HEAD origin/${{ github.base_ref }})"
+            fi
+
+            if ! git rev-parse "${BASE_SHA}^{commit}" >/dev/null 2>&1; then
+              git fetch --depth=1 origin "${BASE_SHA}"
+            fi
+
             git diff --check "${BASE_SHA}...HEAD"
           elif [ "$BEFORE_SHA" != "$ZERO_SHA" ]; then
             git diff --check "${BEFORE_SHA}..HEAD"
@@ -54,4 +62,12 @@ jobs:
         run: python -m compileall app scripts
 
       - name: Validate Docker Compose config
-        run: docker compose -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml config >/dev/null
+        shell: bash
+        run: |
+          set -eu
+          if command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE_BIN="docker-compose"
+          else
+            COMPOSE_BIN="docker compose"
+          fi
+          $COMPOSE_BIN -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml config >/dev/null
