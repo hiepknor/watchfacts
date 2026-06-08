@@ -675,8 +675,8 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .result-card {
-      --title-lines: 4;
-      --title-line-height: 1.34;
+      --title-box: 5.05rem;
+      --meta-box: 1.05rem;
       min-width: 0;
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -779,7 +779,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .listing-display-card {
-      grid-template-rows: auto auto auto;
+      grid-template-rows: var(--title-box) var(--meta-box) var(--meta-box);
     }
 
     .listing-display-card .listing-line {
@@ -818,21 +818,20 @@ _HTML_TEMPLATE = """<!doctype html>
     .listing-line-title .listing-value {
       display: -webkit-box;
       -webkit-line-clamp: 4;
-      -webkit-line-clamp: var(--title-lines);
       -webkit-box-orient: vertical;
       overflow: hidden;
-      height: auto;
+      height: var(--title-box);
       color: var(--text);
       font-size: 0.92rem;
       font-weight: 760;
-      line-height: var(--title-line-height);
+      line-height: 1.34;
       letter-spacing: 0;
       overflow-wrap: anywhere;
       text-overflow: ellipsis;
     }
 
     .listing-line-meta {
-      min-height: 1.05rem;
+      height: var(--meta-box);
       color: var(--muted);
       font-size: 0.76rem;
       line-height: 1.25;
@@ -1193,8 +1192,8 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .results.density-dense .result-card {
-      --title-lines: 5;
-      --title-line-height: 1.26;
+      --title-box: 5.3rem;
+      --meta-box: 1rem;
       grid-template-columns: minmax(0, 1fr);
       padding: 0;
     }
@@ -1468,10 +1467,10 @@ _HTML_TEMPLATE = """<!doctype html>
         gap: 0.6rem;
       }
 
-      .result-card,
-      .results.density-dense .result-card {
-        --title-lines: 4;
-        --title-line-height: 1.22;
+    .result-card,
+    .results.density-dense .result-card {
+        --title-box: 4.2rem;
+        --meta-box: 1rem;
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas:
           "media"
@@ -1479,9 +1478,9 @@ _HTML_TEMPLATE = """<!doctype html>
         padding: 0;
       }
 
-      .results.density-dense .result-card {
-        --title-lines: 4;
-        --title-line-height: 1.2;
+    .results.density-dense .result-card {
+        --title-box: 4.8rem;
+        --meta-box: 1rem;
       }
 
       .result-media,
@@ -1680,17 +1679,29 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     @media (min-width: 741px) and (max-width: 820px) {
-      .results,
-      .results.density-dense {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .toolbar-inner {
+        grid-template-columns: minmax(0, 1fr) minmax(8rem, 10rem);
+        grid-template-areas:
+          "search search"
+          "sort actions";
+
       }
 
-      .toolbar-inner {
+      .results,
+      .results.density-dense {
         grid-template-columns: 1fr;
-        grid-template-areas:
-          "search"
-          "sort"
-          "actions";
+      }
+
+      .result-card,
+      .results.density-dense .result-card {
+        --title-box: 4.8rem;
+        --meta-box: 1rem;
+      }
+
+      .listing-line-title .listing-value,
+      .results.density-dense .listing-line-title .listing-value {
+        -webkit-line-clamp: 4;
+        height: var(--title-box);
       }
 
       .search-control { grid-area: search; }
@@ -2054,6 +2065,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     function listingDisplayText(item) {
+      if (!item) return "";
       const density = state.density === "dense" ? "dense" : "comfortable";
       const preview = item && item.listing_text_preview;
       if (preview && typeof preview === "object") {
@@ -2103,14 +2115,22 @@ _HTML_TEMPLATE = """<!doctype html>
       return raw;
     }
 
-    function formattedListingFields(item, compact = true) {
+    function compactListingItem(item) {
+      const compactText = listingDisplayText(item);
+      if (!compactText) return item;
+      const currentText = copyField(item && item.listing_text, "No listing text");
+      if (compactText === currentText) return item;
+      return Object.assign({}, item || {}, { listing_text: compactText });
+    }
+
+    function formattedListingFields(item) {
       return [
         {
           label: "Listing",
           icon: "🏷️",
           copyPrefix: "🏷️  ",
           className: "listing-line-title",
-          value: compact ? listingDisplayText(item) : copyField(item.listing_text, "No listing text")
+          value: copyField(item && item.listing_text, "No listing text")
         },
         {
           label: "Seller",
@@ -2130,13 +2150,15 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     function formatListingCopy(item) {
-      return formattedListingFields(item, false).map((field) => field.copyPrefix + field.value).join("\\n");
+      return formattedListingFields(item).map((field) => field.copyPrefix + field.value).join("\\n");
     }
 
-    function createFormattedListingDisplay(item, className = "", titleTag = "h2", compact = true) {
+    function createFormattedListingDisplay(item, className = "", titleTag = "h2") {
+      const compactClass = className && (className.includes("listing-display-card") || className.includes("listing-display-similar"));
+      const sourceItem = compactClass ? compactListingItem(item) : item;
       const displayClass = ["listing-display", className].filter(Boolean).join(" ");
       const display = createNode("div", displayClass);
-      for (const field of formattedListingFields(item, compact)) {
+      for (const field of formattedListingFields(sourceItem)) {
         const tagName = field.className.includes("listing-line-title") ? titleTag : "p";
         const row = document.createElement(tagName);
         row.className = "listing-line " + field.className + (tagName === "h2" ? " listing-title" : "");
@@ -2268,7 +2290,7 @@ _HTML_TEMPLATE = """<!doctype html>
     function createResultDetailsContent(item) {
       const details = createNode("section", "result-details");
       const listingSection = createNode("section", "modal-section modal-listing-section");
-      listingSection.appendChild(createFormattedListingDisplay(item, "listing-display-detail", "div", false));
+      listingSection.appendChild(createFormattedListingDisplay(item, "listing-display-detail", "div"));
       details.appendChild(listingSection);
 
       const metaSection = createNode("section", "modal-section modal-meta-section");
