@@ -26,18 +26,18 @@ from app.tool_runtime import (
 
 
 logger = logging.getLogger(__name__)
-    RESULT_PAGE_HEADERS = {
-        "Content-Security-Policy": (
-            "default-src 'none'; "
-            "img-src https: data:; "
-            "script-src 'unsafe-inline' https://static.cloudflareinsights.com; "
-            "script-src-elem 'unsafe-inline' https://static.cloudflareinsights.com; "
-            "style-src 'unsafe-inline'; "
-            "connect-src 'none' https://static.cloudflareinsights.com; "
-            "base-uri 'none'; "
-            "form-action 'none'; "
-            "frame-ancestors 'none'"
-        ),
+RESULT_PAGE_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'none'; "
+        "img-src https: data:; "
+        "script-src 'unsafe-inline' https://static.cloudflareinsights.com; "
+        "script-src-elem 'unsafe-inline' https://static.cloudflareinsights.com; "
+        "style-src 'unsafe-inline'; "
+        "connect-src 'none' https://static.cloudflareinsights.com; "
+        "base-uri 'none'; "
+        "form-action 'none'; "
+        "frame-ancestors 'none'"
+    ),
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
 }
