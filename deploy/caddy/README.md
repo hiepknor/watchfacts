@@ -52,6 +52,14 @@ Kỳ vọng:
     - block 120 giây khi vượt ngưỡng
   - Có thể nâng lên Caddy rate-limit plugin sau này.
 
+  Kiểm tra nhanh build Caddy hiện tại:
+
+  ```bash
+  caddy list-modules | grep -E 'http.handlers.ratelimit|rate_limit'
+  ```
+
+  Nếu không thấy module, giữ nguyên cơ chế app-level limit.
+
 - Script `reload-caddy-safe.sh`:
   - Backup cấu hình trước khi reload vào `/etc/caddy/caddyfile-backups/`
   - Validate cấu hình trước khi reload

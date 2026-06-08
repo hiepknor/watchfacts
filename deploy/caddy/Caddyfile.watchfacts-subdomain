@@ -1,6 +1,14 @@
 watchfacts.onio.cc {
     @watchfacts_results path /results/*
 
+    # Caddy on this host does not include built-in rate limiting.
+    # Keep app-level throttling in app/mcp_server.py:
+    # - 60 requests / 60s / IP
+    # - 120s block window
+    #
+    # If a future Caddy build includes the rate_limit module, wrap the
+    # result proxy with an additional rate_limit block here.
+
     log @watchfacts_results {
         output stdout
         format json {
