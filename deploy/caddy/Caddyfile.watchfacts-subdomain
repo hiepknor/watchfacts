@@ -1,0 +1,25 @@
+watchfacts.onio.cc {
+    # Reverse-proxy only the generated result pages.
+    # MCP API (/mcp) should remain internal and must not be exposed publicly.
+    handle /results/* {
+        reverse_proxy 127.0.0.1:8765
+    }
+
+    # Optional explicit /mcp block in case someone tries to access it publicly.
+    handle /mcp* {
+        respond "Not Found" 404
+    }
+
+    # All other paths return 404.
+    handle {
+        respond "Not Found" 404
+    }
+
+    # Security headers for result pages.
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    }
+}

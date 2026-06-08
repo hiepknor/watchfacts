@@ -12,6 +12,8 @@
 6. To enable generated result pages, set `RESULT_PAGE_PUBLIC_BASE_URL` to the
    public `/results` base URL and expose only that public route; keep `/mcp`
    reachable only by Hermes.
+   - Example for dedicated subdomain: `https://watchfacts.onio.cc/results`.
+   - Reverse proxy should route only `/results/*` and keep `/mcp` private.
 7. Run `make deploy-hermes-mcp`.
 8. Inspect startup with `make mcp-logs` or `make hermes-logs` if needed.
 
