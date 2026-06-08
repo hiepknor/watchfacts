@@ -2,10 +2,7 @@ watchfacts.onio.cc {
     @watchfacts_results path /results/*
 
     handle /results/health {
-        respond '{"status":"ok","service":"watchfacts-result-pages"}' 200 {
-            content_type application/json
-            flush_interval -1
-        }
+        respond '{"status":"ok","service":"watchfacts-result-pages"}' 200
     }
 
     # Caddy on this host does not include built-in rate limiting.
