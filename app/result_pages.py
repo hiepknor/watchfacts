@@ -817,6 +817,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
     .listing-line-title .listing-value {
       display: -webkit-box;
+      -webkit-line-clamp: 4;
       -webkit-line-clamp: var(--title-lines);
       -webkit-box-orient: vertical;
       overflow: hidden;
