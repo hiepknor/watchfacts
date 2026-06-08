@@ -1,6 +1,13 @@
 watchfacts.onio.cc {
     @watchfacts_results path /results/*
 
+    handle /results/health {
+        respond '{"status":"ok","service":"watchfacts-result-pages"}' 200 {
+            content_type application/json
+            flush_interval -1
+        }
+    }
+
     # Caddy on this host does not include built-in rate limiting.
     # Keep app-level throttling in app/mcp_server.py:
     # - 60 requests / 60s / IP
@@ -19,7 +26,10 @@ watchfacts.onio.cc {
     # Reverse-proxy only the generated result pages.
     # MCP API (/mcp) should remain internal and must not be exposed publicly.
     handle @watchfacts_results {
-        reverse_proxy 127.0.0.1:8765
+        reverse_proxy 127.0.0.1:8765 {
+            header_up X-Request-ID {http.request.id}
+        }
+    }
     }
 
     # Optional explicit /mcp block in case someone tries to access it publicly.
@@ -34,6 +44,7 @@ watchfacts.onio.cc {
 
     # Security headers for result pages.
     header {
+        X-Request-ID {http.request.id}
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "no-referrer"

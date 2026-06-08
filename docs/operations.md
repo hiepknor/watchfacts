@@ -13,13 +13,16 @@
    public `/results` base URL and expose only that public route; keep `/mcp`
    reachable only by Hermes.
    - Example for dedicated subdomain: `https://watchfacts.onio.cc/results`.
-   - Reverse proxy should route only `/results/*` and keep `/mcp` private.
-   - Log riêng route `/results/*` nếu host Caddy hỗ trợ (`/var/log/caddy/watchfacts-results.log`).
-   - Tạm thời áp dụng rate limit ở ứng dụng (`app/mcp_server.py`) cho `result page`, tối đa 60 req/60 giây/IP, block 120 giây khi vượt ngưỡng.
-   - Nên duy trì plan nâng cấp sau khi có subdomain riêng:
+  - Reverse proxy should route only `/results/*` and keep `/mcp` private.
+  - Log riêng route `/results/*` nếu host Caddy hỗ trợ (`/var/log/caddy/watchfacts-results.log`).
+  - Tạm thời áp dụng rate limit ở ứng dụng (`app/mcp_server.py`) cho `result page`, tối đa 60 req/60 giây/IP, block 120 giây khi vượt ngưỡng.
+  - Nên duy trì plan nâng cấp sau khi có subdomain riêng:
      - thêm health route cho proxy (ví dụ `/results/health`) ngoài app
      - gom log Caddy + app theo `request_id` cho troubleshooting nhanh
      - theo dõi 429/404/410 của result page theo IP
+  - Nếu có subdomain riêng, kiểm tra nhanh:
+    - `curl -I https://watchfacts.onio.cc/results/health` phải trả 200
+    - `curl https://watchfacts.onio.cc/mcp` phải vẫn là 404
 
 7. Run `make deploy-hermes-mcp`.
 8. Inspect startup with `make mcp-logs` or `make hermes-logs` if needed.
