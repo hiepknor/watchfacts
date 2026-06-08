@@ -378,6 +378,11 @@ SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES = canonicalize_descriptor_tokens_as_se
         "cho",
     )
 )
+SERVER_FILTERED_ALIAS_EXPANSION_DESCRIPTORS = canonicalize_descriptor_tokens_as_set(
+    (
+        "panda",
+    )
+)
 
 
 def _filter_server_filtered_listings(
@@ -407,6 +412,8 @@ def _server_filtered_query_requires_local_matching(
     if not descriptor_tokens:
         return False
     descriptor_set = set(descriptor_tokens)
+    if descriptor_set & SERVER_FILTERED_ALIAS_EXPANSION_DESCRIPTORS:
+        return False
     if not descriptor_set - query_colors:
         return bool(descriptor_set & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES)
     return bool(descriptor_set - query_colors)
