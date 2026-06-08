@@ -130,7 +130,6 @@ def listing_matches(query: str, listing_text: str) -> bool:
         return False
     listing_token_list = normalized_listing.split()
     listing_tokens = set(listing_token_list)
-    compact_listing = _compact_text(normalized_listing)
 
     if not all(
         _descriptor_exists_in_listing(token, listing_token_list)
@@ -139,7 +138,7 @@ def listing_matches(query: str, listing_text: str) -> bool:
         return False
 
     if not all(
-        _reference_term_exists(reference_term, listing_token_list, compact_listing)
+        _reference_term_exists(reference_term, listing_token_list)
         for reference_term in reference_terms
     ):
         return False
@@ -397,13 +396,8 @@ def _descriptor_segment_end(
 def _reference_term_exists(
     reference_term: list[str],
     listing_tokens: list[str],
-    compact_listing: str,
 ) -> bool:
-    if _find_reference_term_index(reference_term, listing_tokens) is not None:
-        return True
-    if len(reference_term) == 1:
-        return _compact_text(reference_term[0]) in compact_listing
-    return _compact_text("".join(reference_term)) in compact_listing
+    return _find_reference_term_index(reference_term, listing_tokens) is not None
 
 
 def _reference_has_local_descriptors(
@@ -412,13 +406,11 @@ def _reference_has_local_descriptors(
     listing_tokens: list[str],
 ) -> bool:
     term_length = len(reference_term)
-    found_reference = False
     for index in range(len(listing_tokens) - term_length + 1):
         match_length = _reference_match_length_at(reference_term, listing_tokens, index)
         if match_length is None:
             continue
 
-        found_reference = True
         local_tokens = set(
             _local_descriptor_tokens(
                 listing_tokens,
@@ -427,16 +419,6 @@ def _reference_has_local_descriptors(
         )
         if _descriptors_match_local_tokens(descriptor_tokens, local_tokens):
             return True
-
-    if found_reference:
-        return False
-
-    compact_reference = _compact_text("".join(reference_term))
-    if compact_reference in _compact_text("".join(listing_tokens)):
-        return all(
-            _descriptor_exists_in_listing(descriptor, listing_tokens)
-            for descriptor in descriptor_tokens
-        )
 
     return False
 
@@ -544,6 +526,8 @@ def _reference_token_matches(query_token: str, listing_token: str) -> bool:
     if listing_token == query_token:
         return True
     if listing_token == f"rm{query_token}":
+        return True
+    if _compact_text(listing_token) == _compact_text(query_token):
         return True
     return (
         listing_token.startswith(f"{query_token}-")

@@ -45,6 +45,13 @@ def test_listing_matches_reference_tokens_across_punctuation() -> None:
     assert listing_matches("228253a choco", "Rolex 228-253A dial CHOCO full set")
 
 
+def test_listing_matches_reference_needs_local_proximity_before_descriptor_match() -> None:
+    assert not listing_matches(
+        "228349rbr mete",
+        "AP 228 349 r br 100k mete n2 / 2026",
+    )
+
+
 def test_listing_matches_decimal_price_as_single_token() -> None:
     assert listing_matches("25.5k", "116500 blk2023 glass scratch 25.5k")
     assert not listing_matches("25.5k", "116500 Black Used USD25,460")

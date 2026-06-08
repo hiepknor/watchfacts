@@ -37,22 +37,34 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          set -eu
+          set -euo pipefail
           ZERO_SHA="0000000000000000000000000000000000000000"
+          TARGET_SHA="${GITHUB_SHA:-HEAD}"
+
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "$ZERO_SHA" ]; then
-              BASE_SHA="$(git merge-base HEAD origin/${{ github.base_ref }})"
+            if [ "${BASE_SHA:-}" = "$ZERO_SHA" ] || [ -z "${BASE_SHA:-}" ]; then
+              BASE_SHA="origin/${{ github.base_ref }}"
+            fi
+
+            if [ "${BASE_SHA:-}" != "origin/${{ github.base_ref }}" ]; then
+              BASE_SHA="$(git merge-base HEAD "${BASE_SHA}")"
             fi
 
             if ! git rev-parse "${BASE_SHA}^{commit}" >/dev/null 2>&1; then
-              git fetch --depth=1 origin "${BASE_SHA}"
+              git fetch --depth=1 origin "${BASE_SHA}" || true
             fi
 
-            git diff --check "${BASE_SHA}...HEAD"
-          elif [ "$BEFORE_SHA" != "$ZERO_SHA" ]; then
-            git diff --check "${BEFORE_SHA}..HEAD"
+            git diff --check "${BASE_SHA}...${TARGET_SHA}"
+          elif [ "${BEFORE_SHA:-$ZERO_SHA}" != "$ZERO_SHA" ] \
+            && git rev-parse "${BEFORE_SHA:-$ZERO_SHA}^{commit}" >/dev/null 2>&1; then
+            git diff --check "${BEFORE_SHA}..${TARGET_SHA}"
           else
-            git diff-tree --check --no-commit-id -r HEAD
+            PARENT_SHA="$(git rev-parse --verify --quiet "${TARGET_SHA}^" || true)"
+            if [ -n "$PARENT_SHA" ]; then
+              git diff --check "${PARENT_SHA}..${TARGET_SHA}"
+            else
+              git diff-tree --check --no-commit-id -r "${TARGET_SHA}"
+            fi
           fi
 
       - name: Run tests
