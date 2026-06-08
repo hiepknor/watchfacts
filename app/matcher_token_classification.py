@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from app.matcher_normalization import TOKEN_RE, normalize_text
+from app.matcher_aliases import canonicalize_descriptor_token
 
 
 CURRENCY_PREFIX_CHARS = {"$", "€", "£", "¥", "💲"}
@@ -14,7 +15,10 @@ def parse_query_terms(query: str) -> tuple[list[list[str]], list[str]]:
     reference_terms: list[list[str]] = []
     descriptor_tokens: list[str] = []
     for match in QUERY_TERM_RE.finditer(query):
-        parts = normalize_text(match.group(0)).split()
+        parts = [
+            canonicalize_descriptor_token(part)
+            for part in normalize_text(match.group(0)).split()
+        ]
         if not parts:
             continue
         if any(looks_like_reference_token(part) for part in parts) and not all(

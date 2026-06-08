@@ -9,6 +9,7 @@ from app.matcher_normalization import (
     normalize_text,
     tokenize_query,
 )
+from app.matcher_aliases import canonicalize_descriptor_token as _canonicalize_descriptor_token
 from app.matcher_rulebook import ExtractionTrace, QueryIntent
 from app.matcher_token_classification import (
     CURRENCY_PREFIX_CHARS,
@@ -459,11 +460,13 @@ def _descriptor_exists_in_listing(descriptor: str, listing_tokens: Iterable[str]
 
 
 def _descriptor_token_matches(descriptor: str, listing_token: str) -> bool:
-    if descriptor == listing_token:
+    normalized_descriptor = _canonicalize_descriptor_token(descriptor)
+    normalized_listing_token = _canonicalize_descriptor_token(listing_token)
+    if normalized_descriptor == normalized_listing_token:
         return True
-    if not _looks_like_year_token(descriptor):
+    if not _looks_like_year_token(normalized_descriptor):
         return False
-    return _date_or_condition_token_contains_year(listing_token, descriptor)
+    return _date_or_condition_token_contains_year(listing_token, normalized_descriptor)
 
 
 def _date_or_condition_token_contains_year(token: str, year: str) -> bool:

@@ -36,6 +36,11 @@ def test_listing_matches_requires_all_query_tokens() -> None:
     assert not listing_matches("228253a choco", "Rolex 228253A silver dial full set")
 
 
+def test_listing_matches_alias_query_cho_to_choco() -> None:
+    assert listing_matches("228235a cho", "Rolex 228235A choco N2 467000hkd full set")
+    assert listing_matches("228235a choco", "Rolex 228235A cho N2 467000hkd full set")
+
+
 def test_listing_matches_reference_tokens_across_punctuation() -> None:
     assert listing_matches("228253a choco", "Rolex 228-253A dial CHOCO full set")
 

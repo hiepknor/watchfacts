@@ -13,6 +13,7 @@ from app.db import Database
 from app.dedupe import unique_latest_by_text, unique_latest_listings
 from app.ai_refiner import evaluate_refinement_suggestion
 from app.issues import detect_suspicious_result
+from app.matcher_aliases import canonicalize_descriptor_tokens_as_set
 from app.matcher import (
     extract_relevant_listing_text,
     filter_matching_listings,
@@ -355,6 +356,7 @@ COLOR_DESCRIPTOR_GROUP = {
     "blue",
     "champ",
     "champagne",
+    "cho",
     "choco",
     "chocolate",
     "gray",
@@ -365,6 +367,9 @@ COLOR_DESCRIPTOR_GROUP = {
     "silver",
     "white",
 }
+CANONICAL_COLOR_DESCRIPTOR_GROUP = canonicalize_descriptor_tokens_as_set(
+    COLOR_DESCRIPTOR_GROUP,
+)
 
 
 def _filter_server_filtered_listings(
@@ -383,17 +388,10 @@ def _filter_server_filtered_listings(
 
 
 def _color_descriptors(value: str) -> set[str]:
-    tokens = set(normalize_text(value).split())
-    colors = tokens & COLOR_DESCRIPTOR_GROUP
-    if "chocolate" in colors:
-        colors.add("choco")
-    if "choco" in colors:
-        colors.add("chocolate")
-    if "gray" in colors:
-        colors.add("grey")
-    if "grey" in colors:
-        colors.add("gray")
-    return colors
+    return (
+        canonicalize_descriptor_tokens_as_set(normalize_text(value).split())
+        & CANONICAL_COLOR_DESCRIPTOR_GROUP
+    )
 
 
 def _has_conflicting_color_descriptor(query_colors: set[str], listing_text: str) -> bool:
