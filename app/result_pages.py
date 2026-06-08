@@ -1680,16 +1680,30 @@ _HTML_TEMPLATE = """<!doctype html>
 
     @media (min-width: 741px) and (max-width: 820px) {
       .toolbar-inner {
-        grid-template-columns: minmax(0, 1fr) minmax(8rem, 10rem);
+        grid-template-columns: 1fr;
         grid-template-areas:
-          "search search"
-          "sort actions";
+          "search"
+          "sort"
+          "actions";
+      }
 
+      .search-control,
+      .sort-control,
+      .toolbar-actions {
+        min-width: 0;
+      }
+
+      .toolbar-actions {
+        width: 100%;
+        justify-content: flex-start;
+        align-items: stretch;
+        flex-wrap: wrap;
+        overflow: visible;
       }
 
       .results,
       .results.density-dense {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .result-card,
