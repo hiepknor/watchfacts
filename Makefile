@@ -23,7 +23,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-all deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-wait-healthy quality-audit predeploy-quality-check restart-hermes hermes-ps hermes-logs
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-wait-healthy quality-audit predeploy-quality-check restart-hermes hermes-ps hermes-logs
 
 help:
 	@printf "%s\n" "watchfacts-bot commands"
@@ -33,11 +33,11 @@ help:
 	@printf "%s\n" "  make pull     Pull latest git changes unless SKIP_PULL=1"
 	@printf "%s\n" "  make build    Build Docker image"
 	@printf "%s\n" "  make predeploy-check Run tests and repository checks before deploy"
-	@printf "%s\n" "  make deploy   Alias for deploy-hermes-mcp"
-	@printf "%s\n" "  make deploy-bot Pull, build, recreate bot, show status and startup logs"
-	@printf "%s\n" "  make deploy-mcp Pull, build, test, audit, recreate watchfacts-mcp"
+	@printf "%s\n" "  make deploy   Alias for deploy-bot-mcp"
 	@printf "%s\n" "  make deploy-hermes-mcp Deploy MCP, wait healthy, restart Hermes, smoke"
-	@printf "%s\n" "  make deploy-all Deploy bot and watchfacts-mcp"
+	@printf "%s\n" "  make deploy-bot Deploy bot only"
+	@printf "%s\n" "  make deploy-mcp Deploy watchfacts-mcp only (build, prechecks, recreate)"
+	@printf "%s\n" "  make deploy-bot-mcp Deploy bot and watchfacts-mcp (no Hermes restart)"
 	@printf "%s\n" "  make deploy-bot OPENWA_COMPOSE=1 Deploy legacy bot with OpenWA network override"
 	@printf "%s\n" "  make update   Alias for deploy"
 	@printf "%s\n" "  make up       Start bot with Docker Compose"
@@ -88,7 +88,7 @@ predeploy-check:
 	$(COMPOSE) run --rm $(SERVICE) python -m pytest -q
 	$(COMPOSE) run --rm $(SERVICE) python -m compileall app scripts
 
-deploy: deploy-hermes-mcp
+deploy: deploy-bot-mcp
 
 deploy-bot: verify-env pull build predeploy-check
 	$(COMPOSE) up -d --force-recreate $(SERVICE)
@@ -100,7 +100,7 @@ deploy-mcp: verify-env pull mcp-build mcp-predeploy-check
 	$(MCP_COMPOSE_CMD) ps
 	$(MCP_COMPOSE_CMD) logs --tail=$(LOG_LINES) $(MCP_SERVICE)
 
-deploy-all: deploy-bot deploy-mcp
+deploy-bot-mcp: deploy-bot deploy-mcp
 
 deploy-hermes-mcp: deploy-mcp mcp-wait-healthy restart-hermes mcp-smoke-set
 

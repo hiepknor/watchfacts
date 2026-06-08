@@ -610,6 +610,7 @@ _HTML_TEMPLATE = """<!doctype html>
       flex-wrap: wrap;
       justify-content: flex-end;
       align-items: center;
+      min-height: 2.35rem;
     }
 
     .density-toggle {
@@ -618,6 +619,8 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 7px;
       overflow: hidden;
       background: var(--surface);
+      min-width: 11rem;
+      flex: 0 1 auto;
     }
 
     .density-toggle button {
@@ -625,6 +628,8 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 0;
       min-height: 2.25rem;
       padding: 0.42rem 0.6rem;
+      min-width: 5.5rem;
+      white-space: nowrap;
     }
 
     .density-toggle button + button {
@@ -640,6 +645,10 @@ _HTML_TEMPLATE = """<!doctype html>
 
     .tool-button {
       min-width: 0;
+      min-height: 2.25rem;
+      flex: 0 1 auto;
+      padding: 0.42rem 0.6rem;
+      white-space: nowrap;
     }
 
     main {
@@ -675,8 +684,6 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .result-card {
-      --title-box: 5.05rem;
-      --meta-box: 1.05rem;
       min-width: 0;
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -779,7 +786,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .listing-display-card {
-      grid-template-rows: var(--title-box) var(--meta-box) var(--meta-box);
+      grid-template-rows: auto auto auto;
     }
 
     .listing-display-card .listing-line {
@@ -820,7 +827,6 @@ _HTML_TEMPLATE = """<!doctype html>
       -webkit-line-clamp: 4;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      height: var(--title-box);
       color: var(--text);
       font-size: 0.92rem;
       font-weight: 760;
@@ -831,7 +837,6 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .listing-line-meta {
-      height: var(--meta-box);
       color: var(--muted);
       font-size: 0.76rem;
       line-height: 1.25;
@@ -1192,8 +1197,6 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .results.density-dense .result-card {
-      --title-box: 5.3rem;
-      --meta-box: 1rem;
       grid-template-columns: minmax(0, 1fr);
       padding: 0;
     }
@@ -1217,6 +1220,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .results.density-dense .listing-line-title .listing-value {
       font-size: 0.84rem;
       line-height: 1.26;
+      -webkit-line-clamp: 4;
     }
 
     .results.density-dense .listing-line-meta {
@@ -1469,8 +1473,6 @@ _HTML_TEMPLATE = """<!doctype html>
 
     .result-card,
     .results.density-dense .result-card {
-        --title-box: 4.2rem;
-        --meta-box: 1rem;
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas:
           "media"
@@ -1479,8 +1481,7 @@ _HTML_TEMPLATE = """<!doctype html>
       }
 
     .results.density-dense .result-card {
-        --title-box: 4.8rem;
-        --meta-box: 1rem;
+        padding: 0;
       }
 
       .result-media,
@@ -1699,6 +1700,19 @@ _HTML_TEMPLATE = """<!doctype html>
         align-items: stretch;
         flex-wrap: wrap;
         overflow: visible;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.4rem;
+      }
+
+      .toolbar-actions .density-toggle {
+        grid-column: span 2;
+      }
+
+      .toolbar-actions .density-toggle,
+      .toolbar-actions .tool-button {
+        min-width: 0;
+        width: 100%;
       }
 
       .results,
@@ -1708,14 +1722,13 @@ _HTML_TEMPLATE = """<!doctype html>
 
       .result-card,
       .results.density-dense .result-card {
-        --title-box: 4.8rem;
-        --meta-box: 1rem;
+        grid-template-columns: minmax(0, 1fr);
       }
 
       .listing-line-title .listing-value,
       .results.density-dense .listing-line-title .listing-value {
         -webkit-line-clamp: 4;
-        height: var(--title-box);
+        line-height: 1.36;
       }
 
       .search-control { grid-area: search; }
