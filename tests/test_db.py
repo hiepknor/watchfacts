@@ -3,7 +3,10 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from app.config import load_search_settings
 from app.db import Database
+from app.search import _search_cache_key
+from app.search_result import SearchResult, source_result_id
 
 
 @dataclass(frozen=True)
@@ -372,6 +375,60 @@ def test_search_cache_round_trips_fresh_payload_and_expires(tmp_path) -> None:
         )
 
     assert database.get_fresh_search_cache("cache-key") is None
+
+
+def test_result_reference_cache_round_trips_fresh_by_id_and_rank_and_expires(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    database = Database(db_path)
+    results = (
+        SearchResult("5712G Used 2015 - 76k usdt", source_url="/listing/1"),
+        SearchResult("5712G Used 2015 - 65k usdt", source_url="/listing/2"),
+    )
+    cache_key = _search_cache_key("5712g", settings)
+
+    database.record_search_result_references(
+        cache_key=cache_key,
+        query_text="5712g",
+        results=results,
+        ttl_seconds=120,
+    )
+    result_id_1 = source_result_id("5712g", 1, results[0])
+    by_id = database.get_fresh_search_result_reference_by_id(
+        cache_key=cache_key,
+        result_id=result_id_1,
+    )
+    by_rank = database.get_fresh_search_result_reference_by_rank(
+        cache_key=cache_key,
+        result_rank=1,
+    )
+
+    assert by_id is not None
+    assert by_id == (1, results[0])
+    assert by_rank is not None
+    assert by_rank == (result_id_1, results[0])
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "UPDATE result_reference_cache SET expires_at = '2000-01-01T00:00:00+00:00'"
+        )
+
+    assert (
+        database.get_fresh_search_result_reference_by_id(
+            cache_key=cache_key,
+            result_id=result_id_1,
+        )
+        is None
+    )
+    assert (
+        database.get_fresh_search_result_reference_by_rank(
+            cache_key=cache_key,
+            result_rank=1,
+        )
+        is None
+    )
 
 
 def test_result_feedback_records_and_dedupes_reports(tmp_path) -> None:

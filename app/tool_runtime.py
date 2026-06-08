@@ -7,7 +7,11 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Protocol
 
-from app.config import Settings, load_search_settings
+from app.config import (
+    DEFAULT_SEARCH_CACHE_TTL_SECONDS,
+    Settings,
+    load_search_settings,
+)
 from app.db import Database, IssueRecord
 from app.openwa_handoff import (
     OpenWAChatDraftResponse,
@@ -29,7 +33,7 @@ OPENWA_MAX_SOURCE_URL_LENGTH = 2048
 OPENWA_MAX_QUERY_TEXT_LENGTH = 500
 OPENWA_MAX_SELLER_NAME_LENGTH = 255
 OPENWA_MAX_PRODUCT_TITLE_LENGTH = 255
-RESULT_CACHE_TTL_SECONDS = 30 * 60
+RESULT_CACHE_TTL_SECONDS = DEFAULT_SEARCH_CACHE_TTL_SECONDS
 VALID_FEEDBACK_REASONS = {"missing_info", "wrong_result", "other"}
 VALID_ISSUE_TYPES = {"all", "feedback", "suspicious"}
 VALID_ISSUE_STATUSES = {"open", "fixed", "ignored"}
