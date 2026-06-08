@@ -31,7 +31,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v5"
+SEARCH_CACHE_VERSION = "search-v6"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -383,6 +383,11 @@ SERVER_FILTERED_ALIAS_EXPANSION_DESCRIPTORS = canonicalize_descriptor_tokens_as_
         "panda",
     )
 )
+SERVER_FILTERED_MATCH_POLICY_COARSE_NO_DESCRIPTOR = "coarse_no_descriptor"
+SERVER_FILTERED_MATCH_POLICY_COARSE_PASS_THROUGH_ALIAS = "coarse_pass_through_alias"
+SERVER_FILTERED_MATCH_POLICY_COARSE_COLOR_ONLY = "coarse_color_only"
+SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR = "strict_non_color_descriptor"
+SERVER_FILTERED_MATCH_POLICY_STRICT_COLOR_ALIAS = "strict_color_alias"
 
 
 def _filter_server_filtered_listings(
@@ -408,15 +413,33 @@ def _server_filtered_query_requires_local_matching(
     query: str,
     query_colors: set[str],
 ) -> bool:
+    return (
+        _server_filtered_query_matching_policy(query, query_colors)
+        in {
+            SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR,
+            SERVER_FILTERED_MATCH_POLICY_STRICT_COLOR_ALIAS,
+        }
+    )
+
+
+def _server_filtered_query_matching_policy(
+    query: str,
+    query_colors: set[str],
+) -> str:
     _, descriptor_tokens = parse_query_terms(query)
     if not descriptor_tokens:
-        return False
+        return SERVER_FILTERED_MATCH_POLICY_COARSE_NO_DESCRIPTOR
+
     descriptor_set = set(descriptor_tokens)
     if descriptor_set & SERVER_FILTERED_ALIAS_EXPANSION_DESCRIPTORS:
-        return False
+        return SERVER_FILTERED_MATCH_POLICY_COARSE_PASS_THROUGH_ALIAS
+
     if not descriptor_set - query_colors:
-        return bool(descriptor_set & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES)
-    return bool(descriptor_set - query_colors)
+        if descriptor_set & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES:
+            return SERVER_FILTERED_MATCH_POLICY_STRICT_COLOR_ALIAS
+        return SERVER_FILTERED_MATCH_POLICY_COARSE_COLOR_ONLY
+
+    return SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR
 
 
 def _color_descriptors(value: str) -> set[str]:

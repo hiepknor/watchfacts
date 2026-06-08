@@ -423,6 +423,108 @@ def test_search_workflow_refilters_server_filtered_non_color_variant_descriptors
     ]
 
 
+def test_server_filtered_query_matching_policy() -> None:
+    assert (
+        search_module._server_filtered_query_matching_policy(
+            "228349rbr mete",
+            search_module._color_descriptors("228349rbr mete"),
+        )
+        == "strict_non_color_descriptor"
+    )
+    assert (
+        search_module._server_filtered_query_requires_local_matching(
+            "228349rbr mete",
+            search_module._color_descriptors("228349rbr mete"),
+        )
+        is True
+    )
+
+    assert (
+        search_module._server_filtered_query_matching_policy(
+            "228235A choco",
+            search_module._color_descriptors("228235A choco"),
+        )
+        == "strict_color_alias"
+    )
+    assert (
+        search_module._server_filtered_query_requires_local_matching(
+            "228235A choco",
+            search_module._color_descriptors("228235A choco"),
+        )
+        is True
+    )
+
+    assert (
+        search_module._server_filtered_query_matching_policy(
+            "116500 panda",
+            search_module._color_descriptors("116500 panda"),
+        )
+        == "coarse_pass_through_alias"
+    )
+    assert (
+        search_module._server_filtered_query_requires_local_matching(
+            "116500 panda",
+            search_module._color_descriptors("116500 panda"),
+        )
+        is False
+    )
+
+    assert (
+        search_module._server_filtered_query_matching_policy(
+            "126500ln white",
+            search_module._color_descriptors("126500ln white"),
+        )
+        == "coarse_color_only"
+    )
+    assert (
+        search_module._server_filtered_query_requires_local_matching(
+            "126500ln white",
+            search_module._color_descriptors("126500ln white"),
+        )
+        is False
+    )
+
+
+def test_search_workflow_refilters_server_filtered_alias_plus_noncolor_descriptor(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "116500 panda 30.5k",
+          "companyName": "Dealer A",
+          "number": 2
+        },
+        {
+          "title": "116500 mete 31.5k",
+          "companyName": "Dealer B",
+          "number": 3
+        },
+        {
+          "title": "116500 white dial 31.5k",
+          "companyName": "Dealer C",
+          "number": 4
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("116500 panda mete"))
+
+    assert [result.listing_text for result in results] == [
+        "116500 mete 31.5k"
+    ]
+
+
 def test_search_workflow_demotes_missing_price_result_when_priced_results_exist(
     tmp_path,
 ) -> None:
