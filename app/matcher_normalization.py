@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from app.matcher_aliases import canonicalize_descriptor_token
 
 
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:[./-][a-z0-9]+)*", re.IGNORECASE)
@@ -20,7 +21,12 @@ def normalize_text(value: str | None) -> str:
 
 
 def tokenize_query(query: str) -> list[str]:
-    return normalize_text(query).split()
+    tokens: list[str] = []
+    for token in normalize_text(query).split():
+        canonical = canonicalize_descriptor_token(token)
+        if canonical:
+            tokens.append(canonical)
+    return tokens
 
 
 def compact_text(value: str) -> str:

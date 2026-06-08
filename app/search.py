@@ -19,6 +19,7 @@ from app.matcher import (
     extract_relevant_listing_text,
     filter_matching_listings,
     is_non_sale_request,
+    listing_matches,
     normalize_text,
 )
 from app.parser import ListingCandidate, parse_listings

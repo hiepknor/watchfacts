@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from app.matcher_normalization import normalize_text
+import unicodedata
+
+
+def _normalize_alias_token(token: str) -> str:
+    if not token:
+        return ""
+
+    normalized = unicodedata.normalize("NFKD", token).casefold()
+    return "".join(
+        char for char in normalized if not unicodedata.category(char).startswith("M")
+    )
 
 
 # Centralized descriptor alias map (shared by query parsing and listing matching).
@@ -20,7 +30,7 @@ _DESCRIPTOR_CANONICAL_MAP = {
 
 
 def canonicalize_descriptor_token(token: str) -> str:
-    normalized = normalize_text(token)
+    normalized = _normalize_alias_token(token)
     if not normalized:
         return ""
     return _DESCRIPTOR_CANONICAL_MAP.get(normalized, normalized)

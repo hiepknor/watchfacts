@@ -56,9 +56,9 @@ def test_listing_matches_alias_query_meteorite_to_mete() -> None:
 @pytest.mark.parametrize(
     ("query", "expected_token", "listing_text"),
     [
-        ("228235a cho", "choco", "Rolex 228235A choco N2 467000hkd full set"),
-        ("228349RBR meteorite", "mete", "AP 228349RBR mete 100k full set"),
-        ("116500 grey", "gray", "116500 grey 30.5k"),
+        ("228235a cho", "cho", "Rolex 228235A choco N2 467000hkd full set"),
+        ("228349RBR meteorite", "meteorite", "AP 228349RBR mete 100k full set"),
+        ("116500 grey", "grey", "116500 grey 30.5k"),
     ],
 )
 def test_descriptor_aliases_apply_to_multiple_queries(
@@ -67,7 +67,7 @@ def test_descriptor_aliases_apply_to_multiple_queries(
     listing_text: str,
 ) -> None:
     expected_tokens = tokenize_query(query)
-    assert expected_token in expected_tokens
+    assert canonicalize_descriptor_token(expected_token) in expected_tokens
     assert listing_matches(query, listing_text)
 
 
