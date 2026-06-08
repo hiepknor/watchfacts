@@ -26,7 +26,8 @@ RESULT_PAGE_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'none'; "
         "img-src https: data:; "
-        "script-src 'unsafe-inline'; "
+        "script-src 'unsafe-inline' https://static.cloudflareinsights.com; "
+        "script-src-elem 'unsafe-inline' https://static.cloudflareinsights.com; "
         "style-src 'unsafe-inline'; "
         "connect-src 'none'; "
         "base-uri 'none'; "
