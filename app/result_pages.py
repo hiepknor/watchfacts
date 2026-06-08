@@ -2130,7 +2130,7 @@ _HTML_TEMPLATE = """<!doctype html>
           icon: "🏷️",
           copyPrefix: "🏷️  ",
           className: "listing-line-title",
-          value: copyField(item && item.listing_text, "No listing text")
+          value: copyField(item.listing_text, "No listing text")
         },
         {
           label: "Seller",
