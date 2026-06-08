@@ -20,6 +20,7 @@ Hermes.
 | [Production Quality Audit Spec](production-quality-audit.md) | Production query audit loop, issue classification, ambiguous price policy, and deploy verification |
 | [Implementation Plan](implementation-plan.md) | Ordered implementation phases and verifiable tasks |
 | [Roadmap](roadmap.md) | Milestones from foundation to production hardening |
+| [Post-Subdomain Upgrade Plan](post-subdomain-upgrade-plan.md) | Recommended upgrade sequence after moving result templates to dedicated public subdomain |
 | [Operations Guide](operations.md) | Local, Docker, login/session, data, logs, and deployment operations |
 | [Security And Compliance](security-compliance.md) | Secrets, browser session state, WatchFacts access boundaries, and safe handling rules |
 | [Contributing](contributing.md) | Development workflow, testing expectations, commits, and review rules |
