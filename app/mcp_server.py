@@ -4,10 +4,10 @@ import logging
 import threading
 import time
 from collections import defaultdict, deque
+from typing import Deque
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, PlainTextResponse
-from collections.abc import Deque
 
 from app.config import ConfigError, load_search_settings
 from app.result_pages import ResultPageConfig, read_result_page_html
