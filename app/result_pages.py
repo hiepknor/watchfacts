@@ -826,17 +826,22 @@ _HTML_TEMPLATE = """<!doctype html>
 
     .result-actions {
       min-width: 0;
+      width: 100%;
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 0.3rem;
-      align-items: center;
+      align-items: stretch;
       margin-top: 0.05rem;
       align-self: end;
     }
 
     .result-actions-primary {
       min-width: 0;
-      display: contents;
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      align-items: stretch;
     }
 
     .action-button, .source-link, .details-toggle {
@@ -861,7 +866,8 @@ _HTML_TEMPLATE = """<!doctype html>
 
     .result-actions-primary .action-button,
     .result-actions-primary .source-link {
-      width: 100%;
+      width: auto;
+      flex: 0 1 auto;
     }
 
     .details-toggle {
@@ -1363,6 +1369,21 @@ _HTML_TEMPLATE = """<!doctype html>
       .search-control { grid-area: search; }
       .sort-control { grid-area: sort; }
       .toolbar-actions { grid-area: actions; }
+
+      .results.density-dense .result-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .results.density-dense .result-actions-primary .action-button,
+      .results.density-dense .result-actions-primary .source-link,
+      .results.density-dense .result-actions .details-toggle {
+        width: 100%;
+        flex: 1 1 0;
+      }
+
+      .results.density-dense .result-actions-primary {
+        width: 100%;
+      }
     }
 
     @media (max-width: 760px) {
@@ -1389,6 +1410,23 @@ _HTML_TEMPLATE = """<!doctype html>
       .toolbar-actions {
         justify-content: flex-end;
         gap: 0.3rem;
+      }
+
+      .results.density-dense .result-actions {
+        grid-template-columns: 1fr;
+        gap: 0.28rem;
+      }
+
+      .results.density-dense .result-actions-primary {
+        width: 100%;
+        gap: 0.25rem;
+      }
+
+      .results.density-dense .result-actions-primary .action-button,
+      .results.density-dense .result-actions-primary .source-link,
+      .results.density-dense .result-actions .details-toggle {
+        width: 100%;
+        flex: 1 1 0;
       }
 
       .density-toggle button, .tool-button {
@@ -1433,16 +1471,20 @@ _HTML_TEMPLATE = """<!doctype html>
 
       .result-actions {
         width: 100%;
-        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-columns: 1fr;
+        align-items: stretch;
       }
 
       .result-actions-primary {
-        display: contents;
+        width: 100%;
+        gap: 0.25rem;
       }
 
       .result-actions-primary .action-button,
-      .result-actions-primary .source-link {
-        width: auto;
+      .result-actions-primary .source-link,
+      .result-actions .details-toggle {
+        width: 100%;
+        flex: 1 1 0;
       }
 
       .copy-label::after {
