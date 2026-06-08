@@ -612,9 +612,11 @@ _HTML_TEMPLATE = """<!doctype html>
       border-left: 1px solid var(--border);
     }
 
-    .density-toggle button[aria-pressed="true"] {
+    .density-toggle button[aria-pressed="true"],
+    .density-toggle button.is-active {
       background: var(--accent);
       color: #ffffff;
+      font-weight: 760;
     }
 
     .tool-button {
@@ -1170,7 +1172,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .results.density-dense .result-card {
-      --title-box: 3.2rem;
+      --title-box: 4.2rem;
       --meta-box: 1rem;
       grid-template-columns: minmax(0, 1fr);
       padding: 0;
@@ -1193,9 +1195,9 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .results.density-dense .listing-line-title .listing-value {
-      -webkit-line-clamp: 3;
       font-size: 0.84rem;
       line-height: 1.26;
+      -webkit-line-clamp: 4;
     }
 
     .results.density-dense .listing-line-meta {
@@ -1466,7 +1468,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
       .listing-line-title .listing-value,
       .results.density-dense .listing-line-title .listing-value {
-        -webkit-line-clamp: 3;
+        -webkit-line-clamp: 4;
       }
 
       .result-actions {
@@ -2405,6 +2407,8 @@ _HTML_TEMPLATE = """<!doctype html>
       els.densityDense.disabled = !hasPayload;
       els.densityComfortable.setAttribute("aria-pressed", String(state.density === "comfortable"));
       els.densityDense.setAttribute("aria-pressed", String(state.density === "dense"));
+      els.densityComfortable.classList.toggle("is-active", state.density === "comfortable");
+      els.densityDense.classList.toggle("is-active", state.density === "dense");
       els.list.classList.toggle("density-dense", state.density === "dense");
       els.list.classList.toggle("density-comfortable", state.density === "comfortable");
       els.viewNote.textContent = hasPayload ? (state.density === "dense" ? "Dense view" : "Comfortable view") : "";
