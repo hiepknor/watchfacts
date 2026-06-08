@@ -656,7 +656,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .result-card {
-      --title-box: 4.95rem;
+      --title-box: 5.05rem;
       --meta-box: 1.05rem;
       min-width: 0;
       display: grid;
@@ -1172,7 +1172,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .results.density-dense .result-card {
-      --title-box: 4.2rem;
+      --title-box: 5.3rem;
       --meta-box: 1rem;
       grid-template-columns: minmax(0, 1fr);
       padding: 0;
@@ -1197,7 +1197,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .results.density-dense .listing-line-title .listing-value {
       font-size: 0.84rem;
       line-height: 1.26;
-      -webkit-line-clamp: 4;
+      -webkit-line-clamp: 5;
     }
 
     .results.density-dense .listing-line-meta {
@@ -1450,13 +1450,17 @@ _HTML_TEMPLATE = """<!doctype html>
 
       .result-card,
       .results.density-dense .result-card {
-        --title-box: 3.7rem;
+        --title-box: 4.2rem;
         --meta-box: 1rem;
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas:
           "media"
           "body";
         padding: 0;
+      }
+
+      .results.density-dense .result-card {
+        --title-box: 4.8rem;
       }
 
       .result-media,
