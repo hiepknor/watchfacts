@@ -10,6 +10,8 @@ def test_ci_whitespace_check_uses_commit_ranges() -> None:
     ].split("      - name: Run tests", 1)[0]
 
     assert "fetch-depth: 0" in workflow
-    assert 'git diff --check "${BASE_SHA}...HEAD"' in whitespace_step
-    assert 'git diff --check "${BEFORE_SHA}..HEAD"' in whitespace_step
-    assert "git diff-tree --check --no-commit-id -r HEAD" in whitespace_step
+    assert 'TARGET_SHA="${GITHUB_SHA:-HEAD}"' in whitespace_step
+    assert 'git diff --check "${BASE_SHA}...${TARGET_SHA}"' in whitespace_step
+    assert 'git diff --check "${BEFORE_SHA}..${TARGET_SHA}"' in whitespace_step
+    assert 'git diff --check "${PARENT_SHA}..${TARGET_SHA}"' in whitespace_step
+    assert "git diff-tree --check --no-commit-id -r \"${TARGET_SHA}\"" in whitespace_step
