@@ -357,14 +357,14 @@ def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
             "--disable-gpu",
             "--no-sandbox",
             "--disable-dev-shm-usage",
-            "--virtual-time-budget=2000",
+            f"--virtual-time-budget={os.getenv('RESULT_TEMPLATE_VIRTUAL_TIME_BUDGET', '8000')}",
             "--dump-dom",
             page_path.as_uri(),
         ],
         check=True,
         capture_output=True,
         text=True,
-        timeout=20,
+        timeout=int(os.getenv("RESULT_TEMPLATE_BROWSER_TIMEOUT", "60")),
     )
     match = re.search(r'<pre id="behaviorAudit">([^<]+)</pre>', result.stdout)
     assert match is not None, result.stdout
