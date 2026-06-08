@@ -26,7 +26,7 @@ endif
 .PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-wait-healthy quality-audit predeploy-quality-check restart-hermes hermes-ps hermes-logs
 
 help:
-	@printf "%s\n" "watchfacts-bot commands"
+	@printf "%s\n" "watchfacts commands"
 	@printf "%s\n" ""
 	@printf "%s\n" "  make init     Create local runtime directories and .env from .env.example when missing"
 	@printf "%s\n" "  make verify-env Check server runtime files before deploy"

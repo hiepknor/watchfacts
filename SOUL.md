@@ -56,7 +56,7 @@ Other tools:
 Production repo path:
 
 ```text
-/opt/watchfacts-bot
+/opt/watchfacts
 ```
 
 Standard deploy:

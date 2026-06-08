@@ -18,7 +18,7 @@ Implementation:
 sudo bash deploy/caddy/reload-caddy-safe.sh /etc/caddy/Caddyfile
 ```
 
-3. In `watchfacts-bot` `.env`, set:
+3. In `watchfacts` `.env`, set:
 
 ```env
 RESULT_PAGE_PUBLIC_BASE_URL=https://watchfacts.onio.cc/results

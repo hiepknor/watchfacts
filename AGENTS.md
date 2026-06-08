@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Project-level instructions for AI coding agents working on `watchfacts-bot`.
+Project-level instructions for AI coding agents working on `watchfacts`.
 
 ## Project Summary
 
-`watchfacts-bot` is a Python WatchFacts search runtime with a Hermes MCP bridge,
+`watchfacts` is a Python WatchFacts search runtime with a Hermes MCP bridge,
 OpenWA handoff support, and a legacy Telegram bot.
 
 Expected behavior:
@@ -241,7 +241,7 @@ Keep commits atomic. Do not commit `.skills/` unless the user explicitly asks to
 
 ## PMO Continuity
 
-PMO continuity for this workspace is project-scoped as `watchfacts-bot`.
+PMO continuity for this workspace is project-scoped as `watchfacts`.
 
 Use PMO only for explicit capture and continuity metadata. Do not auto-ingest source code into PMO memory.
 

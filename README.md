@@ -65,8 +65,8 @@ production integration target is Hermes over MCP.
 ## Quick Start
 
 ```bash
-git clone https://github.com/hiepknor/watchfacts-bot.git
-cd watchfacts-bot
+git clone https://github.com/hiepknor/watchfacts.git
+cd watchfacts
 
 python3 -m venv .venv
 source .venv/bin/activate
@@ -196,7 +196,7 @@ needs the separate OpenWA compose override.
 ## Project Structure
 
 ```text
-watchfacts-bot/
+watchfacts/
 ├── app/
 │   ├── main.py
 │   ├── telegram_bot.py

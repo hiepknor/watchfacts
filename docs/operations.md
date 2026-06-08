@@ -36,14 +36,14 @@ Deploy targets also check for `.env` and browser state before they pull/build.
 
 ## Production Server Standard
 
-The production server should keep `/opt/watchfacts-bot` as a clean git checkout
+The production server should keep `/opt/watchfacts` as a clean git checkout
 tracking `origin/master`. Deploy should run as user `ubuntu`, not `sudo`, so
 git-owned files do not become root-owned.
 
 Standard deploy (recommended):
 
 ```bash
-cd /opt/watchfacts-bot
+cd /opt/watchfacts
 make deploy
 ```
 
