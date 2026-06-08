@@ -44,8 +44,7 @@ Kỳ vọng:
 
 ### Ghi chú vận hành
 
-- Log request riêng cho `/results/*` được ghi tại:
-  - `/var/log/caddy/watchfacts-results.log`
+- Log request riêng cho `/results/*` được gửi ra `stdout` của Caddy (xuất ra `journalctl -u caddy`) với logger match `@watchfacts_results`.
 
 - Cảnh báo: bản Caddy hiện tại trong server chưa cài thêm `rate_limit` module mặc định.
   - Rate limit đang áp dụng trong app ở `app/mcp_server.py`:
