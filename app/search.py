@@ -371,6 +371,13 @@ COLOR_DESCRIPTOR_GROUP = {
 CANONICAL_COLOR_DESCRIPTOR_GROUP = canonicalize_descriptor_tokens_as_set(
     COLOR_DESCRIPTOR_GROUP,
 )
+SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES = canonicalize_descriptor_tokens_as_set(
+    (
+        "choco",
+        "chocolate",
+        "cho",
+    )
+)
 
 
 def _filter_server_filtered_listings(
@@ -400,8 +407,8 @@ def _server_filtered_query_requires_local_matching(
     if not descriptor_tokens:
         return False
     if query_colors and set(descriptor_tokens).issubset(query_colors):
-        return False
-    return True
+        return bool(set(descriptor_tokens) & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES)
+    return bool(set(descriptor_tokens) & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES)
 
 
 def _color_descriptors(value: str) -> set[str]:
