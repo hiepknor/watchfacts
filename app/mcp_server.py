@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
+from collections import defaultdict, deque
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, PlainTextResponse
+from collections.abc import Deque
 
 from app.config import ConfigError, load_search_settings
 from app.result_pages import ResultPageConfig, read_result_page_html
@@ -37,6 +41,15 @@ RESULT_PAGE_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
 }
+
+RESULT_PAGE_RATE_LIMIT_ENABLED = True
+RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS = 60
+RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS = 60
+RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS = 120
+
+_RESULT_PAGE_RATE_LIMIT_LOCK = threading.Lock()
+_RESULT_PAGE_RATE_LIMIT_TIMESTAMPS: dict[str, Deque[float]] = defaultdict(deque)
+_RESULT_PAGE_RATE_LIMIT_BLOCKED: dict[str, float] = {}
 
 
 app = FastMCP(
@@ -82,6 +95,10 @@ async def health() -> dict[str, object]:
 
 @app.custom_route("/results/{token}", methods=["GET"], include_in_schema=False)
 async def result_page(request: Request):
+    client_ip = _extract_client_ip(request)
+    if _is_rate_limited(client_ip):
+        return PlainTextResponse("Too Many Requests", status_code=429, headers={"Retry-After": "120"})
+
     token = request.path_params.get("token", "")
     try:
         settings = load_search_settings()
@@ -102,6 +119,38 @@ async def result_page(request: Request):
     if page.status_code == 410:
         return PlainTextResponse("Result page expired", status_code=410)
     return PlainTextResponse("Result page not found", status_code=404)
+
+
+def _extract_client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _is_rate_limited(client_ip: str) -> bool:
+    if not RESULT_PAGE_RATE_LIMIT_ENABLED:
+        return False
+
+    now = time.time()
+    with _RESULT_PAGE_RATE_LIMIT_LOCK:
+        blocked_until = _RESULT_PAGE_RATE_LIMIT_BLOCKED.get(client_ip)
+        if blocked_until is not None and now < blocked_until:
+            return True
+
+        timestamps = _RESULT_PAGE_RATE_LIMIT_TIMESTAMPS[client_ip]
+        cutoff = now - RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS
+        while timestamps and timestamps[0] < cutoff:
+            timestamps.popleft()
+
+        if len(timestamps) >= RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS:
+            _RESULT_PAGE_RATE_LIMIT_BLOCKED[client_ip] = now + RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS
+            return True
+
+        timestamps.append(now)
+        return False
 
 
 @app.tool(

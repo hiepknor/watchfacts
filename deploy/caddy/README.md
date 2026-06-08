@@ -15,7 +15,7 @@ Mục đích:
 2. Reload Caddy:
 
 ```bash
-sudo systemctl reload caddy
+sudo bash deploy/caddy/reload-caddy-safe.sh /etc/caddy/Caddyfile
 ```
 
 3. Trong `.env` của `watchfacts-bot` set:
@@ -41,3 +41,19 @@ Kỳ vọng:
 
 - `/results/{token}` trả về template HTML hợp lệ.
 - `/mcp` trả về 404 (đảm bảo không public).
+
+### Ghi chú vận hành
+
+- Log request riêng cho `/results/*` được ghi tại:
+  - `/var/log/caddy/watchfacts-results.log`
+
+- Cảnh báo: bản Caddy hiện tại trong server chưa cài thêm `rate_limit` module mặc định.
+  - Rate limit đang áp dụng trong app ở `app/mcp_server.py`:
+    - tối đa 60 request/60 giây cho mỗi IP
+    - block 120 giây khi vượt ngưỡng
+  - Có thể nâng lên Caddy rate-limit plugin sau này.
+
+- Script `reload-caddy-safe.sh`:
+  - Backup cấu hình trước khi reload vào `/etc/caddy/caddyfile-backups/`
+  - Validate cấu hình trước khi reload
+  - Tự rollback về file backup nếu reload không thành công

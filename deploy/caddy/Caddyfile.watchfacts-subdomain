@@ -1,7 +1,20 @@
 watchfacts.onio.cc {
+    @watchfacts_results path /results/*
+
+    log @watchfacts_results {
+        output file /var/log/caddy/watchfacts-results.log {
+            roll_size 20MB
+            roll_keep 7
+            roll_keep_for 168h
+        }
+        format json {
+            time_format "iso8601"
+        }
+    }
+
     # Reverse-proxy only the generated result pages.
     # MCP API (/mcp) should remain internal and must not be exposed publicly.
-    handle /results/* {
+    handle @watchfacts_results {
         reverse_proxy 127.0.0.1:8765
     }
 

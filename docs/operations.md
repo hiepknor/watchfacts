@@ -14,6 +14,8 @@
    reachable only by Hermes.
    - Example for dedicated subdomain: `https://watchfacts.onio.cc/results`.
    - Reverse proxy should route only `/results/*` and keep `/mcp` private.
+   - Log riêng route `/results/*` nếu host Caddy hỗ trợ (`/var/log/caddy/watchfacts-results.log`).
+   - Tạm thời áp dụng rate limit ở ứng dụng (`app/mcp_server.py`) cho `result page`, tối đa 60 req/60 giây/IP, block 120 giây khi vượt ngưỡng.
 7. Run `make deploy-hermes-mcp`.
 8. Inspect startup with `make mcp-logs` or `make hermes-logs` if needed.
 
