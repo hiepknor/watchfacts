@@ -29,6 +29,10 @@ DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT = "/api/chats/drafts"
 DEFAULT_RESULT_PAGE_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_RESULT_PAGE_MAX_RESULTS = 200
 DEFAULT_RESULT_PAGE_STORAGE_DIR = "data/result_pages"
+DEFAULT_RESULT_PAGE_RATE_LIMIT_ENABLED = True
+DEFAULT_RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS = 60
+DEFAULT_RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS = 60
+DEFAULT_RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS = 120
 HybridAIMode = Literal["off", "shadow", "review", "guarded"]
 DEFAULT_HYBRID_AI_MODE: HybridAIMode = "off"
 RuntimeMode = Literal["telegram", "search"]
@@ -90,6 +94,16 @@ class Settings:
     result_page_max_results: int = DEFAULT_RESULT_PAGE_MAX_RESULTS
     result_page_storage_dir: Path = field(
         default_factory=lambda: Path(DEFAULT_RESULT_PAGE_STORAGE_DIR)
+    )
+    result_page_rate_limit_enabled: bool = DEFAULT_RESULT_PAGE_RATE_LIMIT_ENABLED
+    result_page_rate_limit_max_requests: int = (
+        DEFAULT_RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS
+    )
+    result_page_rate_limit_window_seconds: int = (
+        DEFAULT_RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS
+    )
+    result_page_rate_limit_block_seconds: int = (
+        DEFAULT_RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS
     )
 
 
@@ -323,6 +337,35 @@ def load_settings(
     if not result_page_storage_dir.is_absolute():
         result_page_storage_dir = root / result_page_storage_dir
 
+    result_page_rate_limit_enabled = parse_bool(
+        source.get(
+            "RESULT_PAGE_RATE_LIMIT_ENABLED",
+            str(DEFAULT_RESULT_PAGE_RATE_LIMIT_ENABLED).lower(),
+        ),
+        name="RESULT_PAGE_RATE_LIMIT_ENABLED",
+    )
+    result_page_rate_limit_max_requests = parse_positive_int(
+        source.get(
+            "RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS",
+            str(DEFAULT_RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS),
+        ),
+        name="RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS",
+    )
+    result_page_rate_limit_window_seconds = parse_positive_int(
+        source.get(
+            "RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS",
+            str(DEFAULT_RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS),
+        ),
+        name="RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS",
+    )
+    result_page_rate_limit_block_seconds = parse_positive_int(
+        source.get(
+            "RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS",
+            str(DEFAULT_RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS),
+        ),
+        name="RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS",
+    )
+
     return Settings(
         telegram_bot_token=token,
         telegram_allowed_user_ids=telegram_allowed_user_ids,
@@ -358,6 +401,10 @@ def load_settings(
         result_page_ttl_seconds=result_page_ttl_seconds,
         result_page_max_results=result_page_max_results,
         result_page_storage_dir=result_page_storage_dir,
+        result_page_rate_limit_enabled=result_page_rate_limit_enabled,
+        result_page_rate_limit_max_requests=result_page_rate_limit_max_requests,
+        result_page_rate_limit_window_seconds=result_page_rate_limit_window_seconds,
+        result_page_rate_limit_block_seconds=result_page_rate_limit_block_seconds,
         project_root=root,
         data_dir=data_dir,
         logs_dir=logs_dir,

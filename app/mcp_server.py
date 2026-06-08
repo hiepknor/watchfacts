@@ -9,7 +9,7 @@ from typing import Deque
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, PlainTextResponse
 
-from app.config import ConfigError, load_search_settings
+from app.config import ConfigError, Settings, load_search_settings
 from app.result_pages import ResultPageConfig, read_result_page_html
 from mcp.server.fastmcp import FastMCP
 
@@ -41,11 +41,6 @@ RESULT_PAGE_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
 }
-
-RESULT_PAGE_RATE_LIMIT_ENABLED = True
-RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS = 60
-RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS = 60
-RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS = 120
 
 _RESULT_PAGE_RATE_LIMIT_LOCK = threading.Lock()
 _RESULT_PAGE_RATE_LIMIT_TIMESTAMPS: dict[str, Deque[float]] = defaultdict(deque)
@@ -96,18 +91,36 @@ async def health() -> dict[str, object]:
 @app.custom_route("/results/{token}", methods=["GET"], include_in_schema=False)
 async def result_page(request: Request):
     client_ip = _extract_client_ip(request)
-    if _is_rate_limited(client_ip):
-        return PlainTextResponse("Too Many Requests", status_code=429, headers={"Retry-After": "120"})
-
-    token = request.path_params.get("token", "")
     try:
         settings = load_search_settings()
     except ConfigError as exc:
-        logger.warning("event=result_page.config_error error_type=%s", exc.__class__.__name__)
+        logger.warning(
+            "event=result_page.config_error error_type=%s", exc.__class__.__name__
+        )
         return PlainTextResponse("Result page unavailable", status_code=404)
+
+    token = request.path_params.get("token", "")
+
+    if _is_rate_limited(client_ip, settings):
+        logger.warning(
+            "event=result_page.rate_limited ip=%s token=%s retry_after=%s",
+            client_ip,
+            token,
+            settings.result_page_rate_limit_block_seconds,
+        )
+        return PlainTextResponse(
+            "Too Many Requests",
+            status_code=429,
+            headers={"Retry-After": str(settings.result_page_rate_limit_block_seconds)},
+        )
 
     config = ResultPageConfig.from_settings(settings)
     if not config.enabled:
+        logger.warning(
+            "event=result_page.disabled token=%s ip=%s",
+            token,
+            client_ip,
+        )
         return PlainTextResponse("Result page not found", status_code=404)
 
     page = read_result_page_html(
@@ -117,7 +130,18 @@ async def result_page(request: Request):
     if page.status_code == 200 and page.html is not None:
         return HTMLResponse(page.html, headers=RESULT_PAGE_HEADERS)
     if page.status_code == 410:
+        logger.warning(
+            "event=result_page.expired token=%s ip=%s",
+            token,
+            client_ip,
+        )
         return PlainTextResponse("Result page expired", status_code=410)
+
+    logger.warning(
+        "event=result_page.not_found token=%s ip=%s",
+        token,
+        client_ip,
+    )
     return PlainTextResponse("Result page not found", status_code=404)
 
 
@@ -130,8 +154,8 @@ def _extract_client_ip(request: Request) -> str:
     return "unknown"
 
 
-def _is_rate_limited(client_ip: str) -> bool:
-    if not RESULT_PAGE_RATE_LIMIT_ENABLED:
+def _is_rate_limited(client_ip: str, settings: Settings) -> bool:
+    if not settings.result_page_rate_limit_enabled:
         return False
 
     now = time.time()
@@ -141,12 +165,14 @@ def _is_rate_limited(client_ip: str) -> bool:
             return True
 
         timestamps = _RESULT_PAGE_RATE_LIMIT_TIMESTAMPS[client_ip]
-        cutoff = now - RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS
+        cutoff = now - settings.result_page_rate_limit_window_seconds
         while timestamps and timestamps[0] < cutoff:
             timestamps.popleft()
 
-        if len(timestamps) >= RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS:
-            _RESULT_PAGE_RATE_LIMIT_BLOCKED[client_ip] = now + RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS
+        if len(timestamps) >= settings.result_page_rate_limit_max_requests:
+            _RESULT_PAGE_RATE_LIMIT_BLOCKED[client_ip] = (
+                now + settings.result_page_rate_limit_block_seconds
+            )
             return True
 
         timestamps.append(now)

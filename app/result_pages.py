@@ -2449,10 +2449,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     function initializeDensity() {
-      const isDesktop = window.matchMedia("(min-width: 761px)").matches;
-      if (results && allResults().length > 10 && isDesktop) {
-        state.density = "dense";
-      }
+      state.density = "comfortable";
     }
 
     els.filter.addEventListener("input", event => {
