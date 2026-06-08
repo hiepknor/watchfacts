@@ -1,57 +1,77 @@
 # Upgrade Plan after Dedicated Subdomain (watchfacts.onio.cc)
 
-## Nhận diện nhanh hiện trạng
+## Quick Current-State Checklist
 
-- Cơ sở đã ổn: MCP/private + result page public đã tách qua subdomain.
-- Route an toàn đã đúng: `/results/*` mới public, `/mcp*` trả 404.
-- Giới hạn truy cập tần suất hiện đang chạy ở app layer (`app/mcp_server.py`), còn Caddy chưa có module rate-limit trong build hiện tại.
-- Có cơ chế smoke/deploy cơ bản với `make deploy-hermes-mcp` và rollback Caddy an toàn.
+- The split is in place: private MCP plus public result page has been moved to a
+  dedicated subdomain.
+- Security route behavior is correct: only `/results/*` is public, `/mcp*` returns
+  404.
+- Frequency limiting currently runs at app layer (`app/mcp_server.py`), and the
+  current Caddy build still lacks a rate-limit module.
+- A basic smoke/deploy loop exists via `make deploy-hermes-mcp` with safe Caddy
+  rollback.
 
-## Mục tiêu nâng cấp (ưu tiên cao -> thấp)
+## Upgrade Priorities (high to low)
 
-1. Độ an toàn biên (must-have)
+1. Edge Security (must-have)
 
-- Bổ sung health endpoint riêng cho reverse proxy: `GET /results/health` luôn 200 + payload nhẹ.
-- Chuẩn hóa cấu hình logging: gom log Caddy + app theo cùng timezone/json schema; thêm `X-Request-ID` từ Caddy tới app nếu cần trace.
-- Rà thêm CSP toàn trang kết quả cho các nguồn tĩnh thực tế đang dùng, tránh lỗi console lặp lại.
+- Add a dedicated reverse-proxy health endpoint: `GET /results/health` must always
+  return 200 with a light payload.
+- Standardize logging: align Caddy + app logs by timezone and JSON schema; add
+  `X-Request-ID` from Caddy to app if traceability is needed.
+- Audit result-page CSP for all real static sources used, preventing repeated
+  console errors.
 
-2. Bảo vệ và chống abuse (high)
+2. Abuse Protection (high)
 
-- Giữ rate limit app layer hiện tại; tách cấu hình bằng env (`RESULT_PAGE_RATE_LIMIT_ENABLED`, `RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS`, `RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS`, `RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS`) để điều chỉnh runtime không sửa code.
-- Ưu tiên bật rate-limit ở Cloudflare/WAF nếu được quản lý bên ngoài Caddy.
-- Nếu cần rate-limit tại Caddy thật sự, build/deploy Caddy bản có `http.handlers.rate_limit` rồi đặt trên match `@watchfacts_results`.
+- Keep the current app-layer rate limit; externalize settings via env
+  (`RESULT_PAGE_RATE_LIMIT_ENABLED`, `RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS`,
+  `RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS`,
+  `RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS`) so runtime tuning does not require code
+  changes.
+- Prefer enabling rate limiting at Cloudflare/WAF when managed outside Caddy.
+- If Caddy-side rate limiting is required, build/deploy a Caddy with
+  `http.handlers.rate_limit` and apply it on `@watchfacts_results`.
 
-3. Độ ổn định runtime (high)
+3. Runtime Stability (high)
 
-- Tối ưu deploy loop: `mcp_server` chỉ expose cần thiết, kiểm tra health/portability, và cảnh báo tự động khi `watchfacts_state.json` hết hạn.
-- Thiết lập policy quay vòng `data/result_pages` định kỳ thay vì chỉ khi gọi đọc/xóa lẻ.
-- Kiểm soát tài nguyên container (CPU/memory limits) cho `watchfacts-mcp` nếu chưa có.
+- Optimize deploy loop: expose only required endpoints in `mcp_server`, check health
+  and portability, and auto-alert when `watchfacts_state.json` is near expiry.
+- Add periodic cleanup policy for `data/result_pages` instead of only on ad-hoc read/delete.
+- Set container resource limits (CPU/memory) for `watchfacts-mcp` if missing.
 
-4. Chất lượng kết quả (medium)
+4. Result Quality (medium)
 
-- Tiếp tục harden loop: benchmark hard-case, issue loop, và regression fixtures sau mỗi lần chỉnh matcher.
-- Bổ sung KPI theo query class (alias, variant, mô tả, thương hiệu) để track drift sau update.
-- Theo dõi tỷ lệ 404/410 của result page theo IP để tách lỗi do hết hạn với lỗi parse.
+- Continue hardening loop: benchmark hard cases, issue loop, and regression fixtures
+  after every matcher change.
+- Add KPI tracking by query class (alias, variant, description, brand) to detect
+  drift after updates.
+- Monitor result page `404/410` rates by IP to distinguish expired-state errors from
+  parse failures.
 
-5. Mở rộng sản phẩm (medium)
+5. Product Expansion (medium)
 
-- Tách docs vận hành cho subdomain theo 3 môi trường (local/dev/staging/prod).
-- Chuẩn hóa incident playbook cho 3 lỗi trọng yếu:
-  - rate burst 429 tại app
-  - Caddy reload fail
-  - template/result page render lỗi
-- Thêm checklist post-deploy kiểm tra nhanh `/results` và `/mcp` sau mỗi thay đổi proxy.
+- Split subdomain operations docs into local/dev/staging/prod variants.
+- Standardize incident playbooks for three high-impact failures:
+  - app-side rate burst 429
+  - Caddy reload failure
+  - template/result page rendering failure
+- Add a post-deploy checklist to quickly validate `/results` and `/mcp` after each
+  proxy change.
 
-## Lộ trình triển khai gợi ý
+## Suggested Rollout Plan
 
-Phase 1 (1-2 ngày):
-- `Caddy health route`, chuẩn hóa CSP, tài liệu runbook health.
+Phase 1 (1-2 days):
+- Add `Caddy health route`, standardize CSP, and publish health runbook.
 
-Phase 2 (3-5 ngày):
-- Đưa tham số rate-limit lên env, bổ sung theo dõi abuse metrics nhẹ (count + retry-after).
+Phase 2 (3-5 days):
+- Move rate-limit controls to env variables, add lightweight abuse metrics (count +
+  retry-after).
 
-Phase 3 (1-2 tuần):
-- Nâng lớp giám sát log/alert (Caddy+app), resource limit + job cleanup result pages.
+Phase 3 (1-2 weeks):
+- Add Caddy+app observability layers (alerts/logging), container resource limits,
+  and result-page job cleanup.
 
-Phase 4 (không khẩn cấp):
-- Cài Caddy có rate-limit plugin hoặc chuyển policy rate-limit vào edge (Cloudflare).
+Phase 4 (non-urgent):
+- Upgrade to Caddy with rate-limit plugin, or move rate-limit policy to edge
+  (Cloudflare).

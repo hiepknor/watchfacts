@@ -356,12 +356,12 @@ Description: Add one-tap feedback controls to sent search results.
 
 Acceptance:
 
-- [x] Result messages include feedback callbacks for `Thiếu thông tin` and `Sai kết quả`.
+- [x] Result messages include feedback callbacks for `Missing info` and `Wrong result`.
 - [x] Callback data stays within Telegram limits.
 - [x] Feedback is tied to the exact result shown to the user.
 - [x] Unauthorized users cannot submit feedback.
 - [x] Duplicate feedback on the same issue updates report count instead of creating noisy rows.
-- [x] User acknowledgement is visual Vietnamese and does not expose internal data.
+- [x] User acknowledgement is visual and does not expose internal data.
 - [x] Feedback storage failures are logged safely and do not break result delivery.
 
 Verify:
@@ -382,7 +382,7 @@ Description: Add owner-only commands for reviewing and exporting issue cases.
 
 Acceptance:
 
-- [x] `/issues` lists open user feedback; `/suspicious` lists auto-QA flags with concise Vietnamese formatting.
+- [x] `/issues` lists open user feedback; `/suspicious` lists auto-QA flags with concise operator formatting.
 - [x] `/issue F<id>` and `/issue S<id>` show one issue with query, shown text, raw text when available, seller, date, source URL, and report count.
 - [x] `/issues_export` and `/suspicious_export` return deterministic JSON suitable for regression fixtures.
 - [x] Future status commands can mark issues `fixed` or `ignored`.
@@ -1116,5 +1116,5 @@ Acceptance:
 - [x] Payload returns `has_more` and `next_offset`.
 - [x] Result ranks remain absolute across pages.
 - [x] Product images are passed through as `image_url` when available.
-- [x] Hermes instructions tell the agent to use `next_offset` for "xem thêm"
+- [x] Hermes instructions tell the agent to use `next_offset` for "load more"
   and not invent image links.

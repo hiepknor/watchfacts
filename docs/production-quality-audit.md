@@ -14,7 +14,7 @@ behavior.
 
 - Production runs with `HYBRID_AI_MODE=guarded`.
 - Telegram keeps summary-first behavior: users receive a result count first and
-  press "Xem ket qua" / "Xem them" before result messages are sent.
+  press "Show results" / "Load more" before result messages are sent.
 - Ranking is quality-first:
   - clean results first
   - missing-price results after clean results
@@ -200,12 +200,12 @@ you need to lock an accepted clean shorthand or a known-good ranking example.
 Hermes maintainer prompt examples:
 
 ```text
-Liệt kê issue WatchFacts open.
-Xem issue F15.
-Phân loại issue này.
-Đề xuất regression test từ issue này, chưa sửa code.
-Mark issue F15 fixed với note commit/deploy/audit.
-Mark issue S8 ignored với note raw source lacks info.
+List open WatchFacts issues.
+View issue F15.
+Classify this issue.
+Propose a regression test from this issue, no code change yet.
+Mark issue F15 fixed with notes: commit/deploy/audit.
+Mark issue S8 ignored with note raw source lacks info.
 ```
 
 ## Non-Goals

@@ -14,15 +14,19 @@
    reachable only by Hermes.
    - Example for dedicated subdomain: `https://watchfacts.onio.cc/results`.
   - Reverse proxy should route only `/results/*` and keep `/mcp` private.
-  - Log riêng route `/results/*` nếu host Caddy hỗ trợ (`/var/log/caddy/watchfacts-results.log`).
-  - Tạm thời áp dụng rate limit ở ứng dụng (`app/mcp_server.py`) cho `result page`, tối đa 60 req/60 giây/IP, block 120 giây khi vượt ngưỡng.
-  - Nên duy trì plan nâng cấp sau khi có subdomain riêng:
-     - thêm health route cho proxy (ví dụ `/results/health`) ngoài app
-     - gom log Caddy + app theo `request_id` cho troubleshooting nhanh
-     - theo dõi 429/404/410 của result page theo IP
-  - Nếu có subdomain riêng, kiểm tra nhanh:
-    - `curl -I https://watchfacts.onio.cc/results/health` phải trả 200
-    - `curl https://watchfacts.onio.cc/mcp` phải vẫn là 404
+  - Log the `/results/*` route separately when the Caddy host supports it (for
+    example `/var/log/caddy/watchfacts-results.log`).
+  - Temporarily apply rate limiting at the app layer (`app/mcp_server.py`) for
+    result-page requests: max 60 requests/60 seconds/IP, block for 120 seconds
+    when threshold is exceeded.
+  - Keep the post-subdomain upgrade plan in place:
+    - add a dedicated proxy health route (for example `/results/health`) outside
+      the app
+    - consolidate Caddy + app logs by `request_id` for faster troubleshooting
+    - monitor `429/404/410` result-page responses by IP
+  - If using a dedicated subdomain, validate quickly:
+    - `curl -I https://watchfacts.onio.cc/results/health` should return 200
+    - `curl https://watchfacts.onio.cc/mcp` should still be 404
 
 7. Run `make deploy-hermes-mcp`.
 8. Inspect startup with `make mcp-logs` or `make hermes-logs` if needed.
@@ -114,7 +118,7 @@ Access control:
 Telegram behavior:
 
 - The bot sends a summary first, not the full result list.
-- Use the "Xem kết quả" and "Xem thêm" buttons to send result batches.
+- Use the "Show results" and "Load more" buttons to send result batches.
 - When another query is already running, the bot tells the user their query is
   waiting and then runs it automatically when a search slot is free.
 - Photo captions are limited to Telegram's caption size; long text fallback messages are also truncated safely.
@@ -123,9 +127,10 @@ Telegram behavior:
 Hermes/MCP behavior:
 
 - Initial search should call `search(query=<full user text>, limit=5, offset=0, include_similar=true)`.
-- "Xem thêm" should call `search` again with the same query and previous `next_offset`.
+- "Load more" should call `search` again with the same query and previous
+  `next_offset`.
 - Use the short-lived `result_id` for `create_chat_draft` and issue reporting
-  when available. If the user says "kết quả 20", pass `rank=20`.
+  when available. If the user says "result 20", pass `rank=20`.
 - Use `image_url` as the product image when present.
 - Do not invent seller contact, result ids, source links, prices, image links, or OpenWA links.
 
@@ -146,15 +151,16 @@ Issue queues:
   after the fix is tested, deployed, and verified. Mark `ignored` only with a
   note explaining why no code change is needed.
 
-Example Vietnamese Hermes prompts:
+Example Hermes prompts:
 
 ```text
-Liệt kê issue WatchFacts open.
-Xem issue F15.
-Phân loại issue này: bad_extraction, wrong_reference, wrong_descriptor, bad_rank, missing_price, stale_cache, hay source_lacks_info?
-Đề xuất regression test cho issue này, chưa sửa code.
-Mark issue F15 fixed với note: commit <sha>, deploy ngày <date>, audit query đã pass.
-Mark issue S8 ignored với note: raw source không có thêm dữ liệu giá.
+List open WatchFacts issues.
+View issue F15.
+Classify this issue: bad_extraction, wrong_reference, wrong_descriptor, bad_rank,
+missing_price, stale_cache, or source_lacks_info?
+Propose a regression test for this issue, no code change yet.
+Mark issue F15 fixed with notes: commit <sha>, deploy date <date>, audit query passed.
+Mark issue S8 ignored with notes: raw source has no additional price data.
 ```
 
 Hermes should call the MCP tools above. It should not inspect `data/bot.db`

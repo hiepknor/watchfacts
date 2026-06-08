@@ -49,14 +49,14 @@ Every sent result should optionally include inline feedback controls:
 
 | Button | Meaning | Stored reason |
 | --- | --- | --- |
-| `✅ Đúng` | Result looks correct | `correct` |
-| `⚠️ Thiếu thông tin` | Listing was relevant but extracted text missed details | `missing_info` |
-| `❌ Sai kết quả` | Listing does not match the query | `wrong_result` |
+| `✅ Correct` | Result looks correct | `correct` |
+| `⚠️ Missing info` | Listing was relevant but extracted text missed details | `missing_info` |
+| `❌ Wrong result` | Listing does not match the query | `wrong_result` |
 
 Initial implementation can show only the negative buttons to reduce Telegram noise:
 
-- `⚠️ Thiếu thông tin`
-- `❌ Sai kết quả`
+- `⚠️ Missing info`
+- `❌ Wrong result`
 
 When a button is clicked:
 
@@ -69,15 +69,15 @@ When a button is clicked:
 Recommended acknowledgement messages:
 
 ```text
-📝 Đã ghi nhận
+📝 Recorded
 
-Mình đã lưu case này để owner review sau.
+Saved for owner review.
 ```
 
 ```text
-🔁 Case này đã được ghi nhận trước đó
+🔁 This case has already been recorded
 
-Mình đã cập nhật lượt report.
+Report count has been updated.
 ```
 
 ### 2. Issue Store In SQLite
@@ -165,17 +165,17 @@ Implemented command set:
 - `/ai_ignore <id>`
 - `/ai_suggestions_export`
 
-Owner command output should be Vietnamese and visual:
+Owner command output should be visual and clear:
 
 ```text
-🧾 Issue cần review
+🧾 Issue to review
 
-#42 ⚠️ Thiếu thông tin
+#42 ⚠️ Missing info
 🔎 Query: 5712r
-🏷️ Bot gửi: 5712R 2016/ HKD
+🏷️ Sent listing: 5712R 2016/ HKD
 👤 Seller: AM.Timepiece TONY
 🔗 Source: /flash-sales/9927122
-📊 Report: 3 lượt
+📊 Report count: 3
 ```
 
 The export format should be deterministic and test-friendly:
@@ -223,8 +223,8 @@ Suspicious flags should:
 Example summary addition for owner chats:
 
 ```text
-🧪 Bot đã tự đánh dấu 4 kết quả cần review.
-Gõ /suspicious để xem.
+🧪 Bot has auto-flagged 4 results for review.
+Run /suspicious to view them.
 ```
 
 ### 5. Regression And Benchmark Loop

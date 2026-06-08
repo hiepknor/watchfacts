@@ -25,7 +25,7 @@ production integration target is Hermes over MCP.
 - Structured MCP tools for search, health, chat draft handoff, issue review, and suspicious QA
 - Offset-based MCP pagination with stable result ranks and short-lived `result_id` handles
 - Product image propagation via `image_url`
-- Summary-first Telegram pagination with "Xem kết quả" / "Xem thêm"
+- Summary-first Telegram pagination with "Show results" / "Load more"
 - Telegram message length guards for long listings
 - WatchFacts session health check and owner alert when login state expires
 - One-tap result feedback and owner issue review commands
@@ -319,10 +319,10 @@ mcp_servers:
 
 `search(query, limit=5, offset=0, include_similar=true)` returns ranked results,
 `has_more`, and `next_offset`. Hermes should reuse the original query and pass
-`offset=next_offset` for "xem thêm" follow-ups. Search results include a
+`offset=next_offset` for "load more" follow-ups. Search results include a
 short-lived `result_id` cache handle and absolute `rank` for later
 handoff/feedback. Follow-up tools accept `result_id` when available, or `rank`
-when the user says "kết quả 20".
+when the user says "result 20".
 Results include `image_url` for product photos when WatchFacts provides one.
 
 Tool catalog:
@@ -469,7 +469,8 @@ Example response:
 📅 20/04/2026
 ```
 
-The bot sends a result summary first. Press "Xem kết quả" to receive the first result batch, then use "Xem thêm" for the next batches.
+The bot sends a result summary first. Press "Show results" to receive the first
+result batch, then use "Load more" for the next batches.
 
 ## Search And Matching Logic
 

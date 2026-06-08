@@ -6,7 +6,7 @@ Maintain a self-hosted WatchFacts search runtime that lets an authorized user
 search WatchFacts trading listings through Hermes, for example:
 
 ```text
-@onioaibot tìm WatchFacts 5712G 2015 full set
+@onioaibot search WatchFacts 5712G 2015 full set
 ```
 
 Hermes calls the WatchFacts MCP tools. The runtime uses an authenticated browser
@@ -56,7 +56,7 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 11. Runtime stores query/cache/dedupe/issue data in SQLite.
 12. MCP payload returns ranked results with `result_id`, `rank`, `image_url`, `has_more`, and `next_offset`.
 13. Hermes answers in Vietnamese and preserves the short-lived `result_id` for contact/feedback follow-ups.
-14. For "xem thêm", Hermes calls the same query with `offset=next_offset`.
+14. For "load more", Hermes calls the same query with `offset=next_offset`.
 
 ## Functional Requirements
 

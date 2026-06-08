@@ -29,14 +29,14 @@ search(query, limit=5, offset=0, include_similar=true)
 Pagination:
 
 - First page uses `offset=0`.
-- Follow-up "xem thêm" uses the prior payload's `next_offset`.
+- Follow-up "load more" requests use the prior payload's `next_offset`.
 - Result `rank` is absolute across pages.
 
 Important result fields:
 
 - `result_id`: stable handle for follow-up tools.
 - `rank`: absolute result number; follow-up tools can use this when the user
-  says "kết quả 20".
+  says "result 20".
 - `image_url`: product image from WatchFacts when available.
 - `source_url`: WatchFacts source link or stable listing source.
 - `seller`, `posted_date`, `listing_text`: core answer fields.

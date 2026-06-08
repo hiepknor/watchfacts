@@ -1,16 +1,16 @@
-## Watchfacts Caddy deploy (subdomain)
+## Watchfacts Caddy Deploy (Subdomain)
 
-Mục đích:
+Purpose:
 
-- Expose chỉ route `/results/*` của MCP server cho public (Result Page).
-- Giữ `/mcp` ở chế độ internal để Hermes gọi trực tiếp qua Docker network.
+- Expose only the MCP server `/results/*` route publicly (Result Page).
+- Keep `/mcp` internal so Hermes can call it directly through the Docker network.
 
-Áp dụng:
+Implementation:
 
-1. Copy `Caddyfile.watchfacts-subdomain` vào Caddy host config:
+1. Copy `Caddyfile.watchfacts-subdomain` into the Caddy host config:
 
-   - `deploy/caddy/Caddyfile.watchfacts-subdomain`
-   - hoặc paste trực tiếp vào `/etc/caddy/Caddyfile` nếu đây là file cấu hình chung.
+  - `deploy/caddy/Caddyfile.watchfacts-subdomain`
+  - or paste directly into `/etc/caddy/Caddyfile` if this is a shared config file.
 
 2. Reload Caddy:
 
@@ -18,49 +18,51 @@ Mục đích:
 sudo bash deploy/caddy/reload-caddy-safe.sh /etc/caddy/Caddyfile
 ```
 
-3. Trong `.env` của `watchfacts-bot` set:
+3. In `watchfacts-bot` `.env`, set:
 
 ```env
 RESULT_PAGE_PUBLIC_BASE_URL=https://watchfacts.onio.cc/results
 ```
 
-4. Deploy như thường lệ:
+4. Deploy as usual:
 
 ```bash
 make deploy-hermes-mcp
 ```
 
-Kiểm tra nhanh:
+Quick checks:
 
 ```bash
 curl -I https://watchfacts.onio.cc/results/health-check
 curl -I https://watchfacts.onio.cc/mcp
 ```
 
-Kỳ vọng:
+Expected:
 
-- `/results/{token}` trả về template HTML hợp lệ.
-- `/mcp` trả về 404 (đảm bảo không public).
+- `/results/{token}` returns a valid HTML template.
+- `/mcp` returns 404 (ensuring it is not public).
 
-### Ghi chú vận hành
+### Operations Notes
 
-- Log request riêng cho `/results/*` được gửi ra `stdout` của Caddy (xuất ra `journalctl -u caddy`) với logger match `@watchfacts_results`.
+- Requests for `/results/*` are logged separately through Caddy `stdout` (visible
+  via `journalctl -u caddy`) using logger match `@watchfacts_results`.
 
-- Cảnh báo: bản Caddy hiện tại trong server chưa cài thêm `rate_limit` module mặc định.
-  - Rate limit đang áp dụng trong app ở `app/mcp_server.py`:
-    - tối đa 60 request/60 giây cho mỗi IP
-    - block 120 giây khi vượt ngưỡng
-  - Có thể nâng lên Caddy rate-limit plugin sau này.
+- Warning: the current Caddy build on the server does not include the
+  `rate_limit` module by default.
+  - Application-level rate limiting is currently applied in `app/mcp_server.py`:
+    - max 60 request/60 seconds per IP
+    - 120-second block when threshold is exceeded
+  - A Caddy rate-limit plugin can be enabled later.
 
-  Kiểm tra nhanh build Caddy hiện tại:
+  Verify the current Caddy build:
 
   ```bash
   caddy list-modules | grep -E 'http.handlers.ratelimit|rate_limit'
   ```
 
-  Nếu không thấy module, giữ nguyên cơ chế app-level limit.
+  If the module is not present, keep the app-level limit in place.
 
-- Script `reload-caddy-safe.sh`:
-  - Backup cấu hình trước khi reload vào `/etc/caddy/caddyfile-backups/`
-  - Validate cấu hình trước khi reload
-  - Tự rollback về file backup nếu reload không thành công
+- `reload-caddy-safe.sh` script:
+  - Backup current config to `/etc/caddy/caddyfile-backups/` before reload
+  - Validate config before reload
+  - Automatically rollback to the backup file if reload fails

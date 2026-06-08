@@ -55,7 +55,8 @@ The main risks are:
 - AI suggestions remain optional and guarded; they may add a signal but must not
   override local eligibility and safety gates.
 - Production output must keep the summary-first Telegram flow. Users should see
-  the summary first, then press "Xem ket qua" / "Xem them" for result batches.
+  the summary first, then press "Show results" / "Load more" for result
+  batches.
 
 ## Functional Scope
 
