@@ -28,7 +28,7 @@
     - `curl -I https://watchfacts.onio.cc/results/health` should return 200
     - `curl https://watchfacts.onio.cc/mcp` should still be 404
 
-7. Run `make deploy-hermes-mcp`.
+7. Run `make deploy` (standard deploy: bot + MCP service, no Hermes restart).
 8. Inspect startup with `make mcp-logs` or `make hermes-logs` if needed.
 
 The bot expects `data/watchfacts_state.json` to exist before the first real search.
@@ -40,20 +40,31 @@ The production server should keep `/opt/watchfacts-bot` as a clean git checkout
 tracking `origin/master`. Deploy should run as user `ubuntu`, not `sudo`, so
 git-owned files do not become root-owned.
 
-Standard deploy:
+Standard deploy (recommended):
 
 ```bash
 cd /opt/watchfacts-bot
-make deploy-hermes-mcp
+make deploy
 ```
 
 This target:
 
 - runs `git pull --ff-only`
-- builds `watchfacts-mcp`
+- builds and force-recreates legacy bot and `watchfacts-mcp`
 - runs pytest, compile checks, and the default bounded quality audit inside the
   MCP Compose service
-- force-recreates `watchfacts-mcp`
+- waits for `watchfacts-mcp` health
+
+Use `make deploy-hermes-mcp` when MCP schema/config changes require a Hermes reload.
+
+```bash
+make deploy-hermes-mcp
+```
+
+`make deploy-hermes-mcp`:
+
+- deploys `watchfacts-mcp`
+- runs the MCP bounded quality audit gate
 - waits for `watchfacts-mcp` health
 - recreates Hermes so it reloads MCP config/schema
 - runs the representative MCP search smoke set
@@ -168,8 +179,7 @@ directly and must not reimplement WatchFacts matching in prompts.
 
 OpenWA chat handoff:
 
-- For Hermes/MCP production, set OpenWA values in `.env` and deploy with
-  `make deploy-hermes-mcp`.
+- For Hermes/MCP production, set OpenWA values in `.env` and deploy with `make deploy`.
 - Use `OPENWA_BASE_URL=http://openwa-api:2785` for server-to-server API calls
   and the public dashboard URL, for example `https://openwa.onio.cc`, for
   `OPENWA_DASHBOARD_URL`.
@@ -360,7 +370,8 @@ Checklist:
 - Run focused tests, then the full suite.
 - Bump `SEARCH_CACHE_VERSION` in `app/search.py` when extraction, scoring,
   quality gates, ranking, or serialized result shape can change cached output.
-- Deploy with `make deploy-hermes-mcp`.
+- Deploy with `make deploy` (standard production deploy), then use
+  `make deploy-hermes-mcp` only if Hermes must be restarted for schema/config changes.
 - Verify the container is healthy and the production git HEAD matches the
   deployed commit.
 - Rerun the focused production audit after deploy and keep `make mcp-smoke-set`

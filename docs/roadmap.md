@@ -338,7 +338,7 @@ Deliverables:
 - [x] MCP tools for search, health, OpenWA draft handoff, feedback, issue
   review, and suspicious QA summary.
 - [x] Pagination contract with `offset`, `has_more`, and `next_offset`.
-- [x] Makefile deploy target `make deploy-hermes-mcp`.
+- [x] Makefile deploy target `make deploy` (alias for `make deploy-bot-mcp`).
 - [x] Server deploy path that does not require `sudo` or `SKIP_PULL`.
 
 Exit criteria:
@@ -346,8 +346,10 @@ Exit criteria:
 - [x] Hermes can list WatchFacts MCP tools.
 - [x] Hermes can call `search` with `query`, `limit`, `offset`, and
   `include_similar`.
+- [x] `make deploy` pulls, builds, tests, recreates bot and MCP services, and is used
+  for standard production releases.
 - [x] `make deploy-hermes-mcp` pulls, builds, tests, recreates MCP, and restarts
-  Hermes.
+  Hermes when MCP schema/config changes require Hermes reload.
 - [x] Search results include enough structured fields for Hermes to answer in
   Vietnamese and perform follow-up handoff/feedback.
 
@@ -362,7 +364,7 @@ Required before changing defaults:
 
 - Confirm no production user still depends on direct `app.main` Telegram bot.
 - Move remaining owner review flows to Hermes MCP tools or another operator UI.
-- Change `make deploy` default from `deploy-bot` to `deploy-hermes-mcp`.
+- Change `make deploy` default from `deploy-bot` to `deploy-bot-mcp`.
 - Deprecate or remove `TELEGRAM_BOT_TOKEN` from default server setup.
 - Keep regression tests for the shared runtime independent of Telegram.
 

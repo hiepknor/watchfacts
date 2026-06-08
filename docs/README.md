@@ -51,7 +51,7 @@ Agents should read documents selectively:
 - For production query audits or quality gate changes: read `production-quality-audit.md`, `result-quality-scoring.md`, and `operations.md`.
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.
 - For OpenAI controlled refinement: read `roadmap.md` Milestone 7, `implementation-plan.md` Phase 7, `technical-spec.md`, `security-compliance.md`, and ADR-005.
-- For deploys: use `make deploy-hermes-mcp` on the server unless the task is explicitly about the legacy Telegram bot.
+- For deploys: use `make deploy` on the server unless the task is explicitly about the legacy Telegram bot or requires a Hermes/MCP config/schema reload.
 - For commits: follow `AGENTS.md` and the workflow in `contributing.md`.
 
 Do not load every document into context by default. Load the smallest set that applies to the task.

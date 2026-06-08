@@ -55,9 +55,11 @@ Cloudflare, or anti-bot systems.
   queues, and AI refinement suggestions without requiring an external database.
 - The scraper respects the authenticated-browser boundary and fails clearly when
   browser state is missing or expired.
-- `make deploy-hermes-mcp` encodes the intended production deployment path:
-  pull, build, run checks in the MCP service, recreate `watchfacts-mcp`, then
-  restart Hermes so it reloads tool schema/config.
+- Default `make deploy` encodes the intended production deployment path:
+  pull, build, run checks, recreate legacy bot and `watchfacts-mcp`.
+- `make deploy-hermes-mcp` is used for MCP schema/config changes when Hermes
+  restart is required; it pulls/builds/recreates MCP, then restarts Hermes so it
+  reloads tool schema/config.
 
 ## Risks And Follow-Ups
 

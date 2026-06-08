@@ -247,7 +247,9 @@ Mark issue S8 ignored with note raw source lacks info.
 - [x] `make quality-audit` runs the default bounded audit set.
 - [x] `make predeploy-quality-check` runs local checks plus audit.
 - [x] MCP predeploy checks run the bounded audit gate.
-- [x] `make deploy-hermes-mcp` waits for MCP health and runs post-deploy MCP smoke.
+- [x] Standard `make deploy` performs the normal production release, while
+  `make deploy-hermes-mcp` waits for MCP health and runs post-deploy MCP smoke when
+  Hermes schema/config reload is needed.
 - [ ] Rerun focused production audit after deploy for the changed query class.
 - [ ] Capture unresolved findings into PMO or docs before stopping when requested.
 

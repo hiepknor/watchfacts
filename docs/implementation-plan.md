@@ -14,7 +14,7 @@ Current baseline:
 - Shared WatchFacts search logic lives outside Telegram in `app.tool_runtime`.
 - Hermes uses `app.mcp_server` through the `watchfacts-mcp` Docker service.
 - Legacy Telegram bot still exists, but new business workflows should use MCP.
-- Production deploy path is `make deploy-hermes-mcp`.
+- Production deploy path is `make deploy` (alias for `make deploy-bot-mcp`), while `make deploy-hermes-mcp` is reserved for Hermes schema/config reload needs.
 - Server deploy should not require `sudo` or `SKIP_PULL`.
 
 ## Phase 0: Foundation
@@ -28,7 +28,7 @@ Acceptance:
 - [x] `Dockerfile` exists and installs Python dependencies plus Playwright Chromium.
 - [x] `docker-compose.yml` mounts `data/` and `logs/`.
 - [x] `Makefile` wraps common commands.
-- [x] `Makefile` includes `deploy-mcp`, `deploy-hermes-mcp`, and Hermes restart targets.
+- [x] `Makefile` includes `deploy-mcp`, `deploy-bot-mcp`, `deploy-hermes-mcp`, and Hermes restart targets.
 - [x] `.env.example`, `.gitignore`, and `.dockerignore` exist.
 
 Verify:
@@ -1098,7 +1098,7 @@ Acceptance:
 - [x] Compose override joins the Hermes Docker network through
   `HERMES_DOCKER_NETWORK`.
 - [x] Hermes config points to `http://watchfacts-mcp:8765/mcp`.
-- [x] `make deploy-hermes-mcp` deploys MCP and recreates Hermes.
+- [x] `make deploy-hermes-mcp` deploys MCP and recreates Hermes when schema/config changes require a Hermes restart.
 
 Likely files:
 

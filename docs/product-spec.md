@@ -92,7 +92,8 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 - Reuse `data/watchfacts_state.json` for authenticated browser state.
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
 - Support Docker deployment of `watchfacts-mcp` on the same server/network as Hermes.
-- Support Makefile deployment with `make deploy-hermes-mcp` for MCP + Hermes restart.
+- Support Makefile deployment with `make deploy` for standard bot+MCP release and
+  `make deploy-hermes-mcp` for MCP schema/config changes requiring Hermes restart.
 - Limit Telegram photo captions and text messages to platform-safe lengths.
 - Notify the owner in Vietnamese when WatchFacts browser session state is missing or expired.
 - Support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
@@ -145,6 +146,7 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 | Run login locally | `python scripts/ops/login.py` |
 | Deploy legacy Telegram bot | `make deploy-bot` |
 | Deploy WatchFacts MCP | `make deploy-mcp` |
+| Deploy legacy Telegram bot + MCP | `make deploy-bot-mcp` |
 | Deploy WatchFacts MCP and restart Hermes | `make deploy-hermes-mcp` |
 | Restart Hermes | `make restart-hermes` |
 
@@ -184,7 +186,7 @@ at the start of the message or reply to a bot message.
 - Reported or suspicious result issues can be reviewed and converted into regression tests after the continuous-improvement milestone is implemented.
 - OpenAI-assisted suggestions, when enabled, are schema-validated, safely logged, and never required for search availability.
 - Docker image builds successfully.
-- `make init`, `make build`, `make check`, and `make deploy-hermes-mcp` work on the production server.
+- `make init`, `make build`, `make check`, and `make deploy` work on the production server.
 - `.env`, `data/watchfacts_state.json`, `data/bot.db`, and `logs/` stay out of git.
 
 ## Open Questions

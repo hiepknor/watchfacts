@@ -354,6 +354,8 @@ _HTML_TEMPLATE = """<!doctype html>
       --listing-strong: #0a4f49;
       --listing-soft: #e8f4f2;
       --listing-border: #b8d9d4;
+      --title-box: minmax(0, 1fr);
+      --meta-box: auto;
       --warning: #8a5a00;
       --danger: #b42318;
       --shadow: 0 1px 2px rgba(17, 24, 23, 0.06);
@@ -754,6 +756,7 @@ _HTML_TEMPLATE = """<!doctype html>
       min-width: 0;
       display: grid;
       grid-template-rows: minmax(0, 1fr) auto;
+      grid-template-rows: var(--title-box) var(--meta-box);
       gap: 0.55rem;
       align-content: stretch;
       padding: 0.65rem 0.7rem 0.7rem;
