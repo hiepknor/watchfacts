@@ -406,9 +406,10 @@ def _server_filtered_query_requires_local_matching(
     _, descriptor_tokens = parse_query_terms(query)
     if not descriptor_tokens:
         return False
-    if query_colors and set(descriptor_tokens).issubset(query_colors):
-        return bool(set(descriptor_tokens) & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES)
-    return bool(set(descriptor_tokens) & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES)
+    descriptor_set = set(descriptor_tokens)
+    if not descriptor_set - query_colors:
+        return bool(descriptor_set & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES)
+    return bool(descriptor_set - query_colors)
 
 
 def _color_descriptors(value: str) -> set[str]:

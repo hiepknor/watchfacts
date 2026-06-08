@@ -383,6 +383,46 @@ def test_search_workflow_refilters_server_filtered_non_color_descriptor_queries(
     ]
 
 
+def test_search_workflow_refilters_server_filtered_non_color_variant_descriptors(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "228349RBR Blue OMBRE ROM 2025 Used HKD 525K",
+          "companyName": "Seller",
+          "number": 111
+        },
+        {
+          "title": "228349RBR A METE 2024 $610000",
+          "companyName": "Member 1000",
+          "number": 222
+        },
+        {
+          "title": "228349 pave N12 720000",
+          "companyName": "Other",
+          "number": 333
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("228349rbr mete"))
+
+    assert [result.listing_text for result in results] == [
+        "228349RBR A METE 2024 $610000"
+    ]
+
+
 def test_search_workflow_demotes_missing_price_result_when_priced_results_exist(
     tmp_path,
 ) -> None:
