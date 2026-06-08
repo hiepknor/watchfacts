@@ -406,7 +406,36 @@ def _filter_server_filtered_listings(
     if not _server_filtered_query_requires_local_matching(query, query_colors):
         return filtered
 
-    return filter_matching_listings(query, filtered)
+    matching_query = _server_filtered_matching_query(query, query_colors)
+    return filter_matching_listings(matching_query, filtered)
+
+
+def _server_filtered_matching_query(
+    query: str,
+    query_colors: set[str],
+) -> str:
+    policy = _server_filtered_query_matching_policy(query, query_colors)
+    if policy not in {
+        SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR,
+        SERVER_FILTERED_MATCH_POLICY_STRICT_COLOR_ALIAS,
+    }:
+        return query
+
+    reference_terms, descriptor_tokens = parse_query_terms(query)
+    effective_descriptors = [
+        token
+        for token in descriptor_tokens
+        if token not in SERVER_FILTERED_ALIAS_EXPANSION_DESCRIPTORS
+    ]
+    if len(effective_descriptors) == len(descriptor_tokens):
+        return query
+
+    reference_text = " ".join(" ".join(reference_term) for reference_term in reference_terms)
+    if effective_descriptors:
+        if reference_text:
+            return f"{reference_text} {' '.join(effective_descriptors)}"
+        return " ".join(effective_descriptors)
+    return reference_text
 
 
 def _server_filtered_query_requires_local_matching(
@@ -431,15 +460,30 @@ def _server_filtered_query_matching_policy(
         return SERVER_FILTERED_MATCH_POLICY_COARSE_NO_DESCRIPTOR
 
     descriptor_set = set(descriptor_tokens)
+    descriptor_set_without_alias = (
+        descriptor_set
+        - SERVER_FILTERED_ALIAS_EXPANSION_DESCRIPTORS
+    )
+
+    if descriptor_set_without_alias - query_colors:
+        return SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR
+
+    if descriptor_set_without_alias and not descriptor_set_without_alias - query_colors:
+        if descriptor_set_without_alias & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES:
+            return SERVER_FILTERED_MATCH_POLICY_STRICT_COLOR_ALIAS
+        if descriptor_set_without_alias:
+            return SERVER_FILTERED_MATCH_POLICY_COARSE_COLOR_ONLY
+
     if descriptor_set & SERVER_FILTERED_ALIAS_EXPANSION_DESCRIPTORS:
         return SERVER_FILTERED_MATCH_POLICY_COARSE_PASS_THROUGH_ALIAS
 
-    if not descriptor_set - query_colors:
+    if not (descriptor_set & query_colors):
+        return SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR
+
+    if descriptor_set:
         if descriptor_set & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES:
             return SERVER_FILTERED_MATCH_POLICY_STRICT_COLOR_ALIAS
-        return SERVER_FILTERED_MATCH_POLICY_COARSE_COLOR_ONLY
-
-    return SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR
+    return SERVER_FILTERED_MATCH_POLICY_COARSE_COLOR_ONLY
 
 
 def _color_descriptors(value: str) -> set[str]:
