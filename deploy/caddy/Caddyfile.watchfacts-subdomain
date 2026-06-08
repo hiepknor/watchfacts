@@ -23,9 +23,7 @@ watchfacts.onio.cc {
     # Reverse-proxy only the generated result pages.
     # MCP API (/mcp) should remain internal and must not be exposed publicly.
     handle @watchfacts_results {
-        reverse_proxy 127.0.0.1:8765 {
-            header_up X-Request-ID {http.request.id}
-        }
+        reverse_proxy 127.0.0.1:8765
     }
 
     # Optional explicit /mcp block in case someone tries to access it publicly.
@@ -40,7 +38,6 @@ watchfacts.onio.cc {
 
     # Security headers for result pages.
     header {
-        X-Request-ID {http.request.id}
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "no-referrer"
