@@ -10,6 +10,7 @@ from typing import Iterable, Protocol
 
 from app.dedupe import dedupe_key
 from app.matcher import normalize_text
+from app.search_result import SearchResult, search_result_to_dict, source_result_id
 
 
 SCHEMA = """
@@ -99,6 +100,20 @@ CREATE TABLE IF NOT EXISTS search_cache (
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
     last_used_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS result_reference_cache (
+    search_cache_key TEXT NOT NULL,
+    result_id TEXT NOT NULL,
+    query_text TEXT NOT NULL,
+    normalized_query TEXT NOT NULL,
+    result_rank INTEGER NOT NULL,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_used_at TEXT NOT NULL,
+    PRIMARY KEY (search_cache_key, result_rank),
+    UNIQUE (search_cache_key, result_id)
 );
 
 CREATE TABLE IF NOT EXISTS ai_refinement_suggestions (
@@ -270,6 +285,145 @@ class Database:
                 (now, cache_key),
             )
             return str(row[0])
+
+    def get_fresh_search_result_reference_by_id(
+        self,
+        *,
+        cache_key: str,
+        result_id: str,
+    ) -> tuple[int, SearchResult] | None:
+        now = _utc_now()
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            row = connection.execute(
+                """
+                SELECT result_rank, result_json
+                FROM result_reference_cache
+                WHERE search_cache_key = ? AND result_id = ? AND expires_at > ?
+                ORDER BY last_used_at DESC
+                LIMIT 1
+                """,
+                (cache_key, result_id, now),
+            ).fetchone()
+            if row is None:
+                return None
+            result_rank = int(row[0])
+            result = _search_result_from_payload(str(row[1]))
+            if result is None:
+                return None
+            connection.execute(
+                """
+                UPDATE result_reference_cache
+                SET last_used_at = ?
+                WHERE search_cache_key = ? AND result_id = ?
+                """,
+                (now, cache_key, result_id),
+            )
+            return result_rank, result
+
+    def get_fresh_search_result_reference_by_rank(
+        self,
+        *,
+        cache_key: str,
+        result_rank: int,
+    ) -> tuple[str, SearchResult] | None:
+        now = _utc_now()
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            row = connection.execute(
+                """
+                SELECT result_id, result_json
+                FROM result_reference_cache
+                WHERE search_cache_key = ? AND result_rank = ? AND expires_at > ?
+                LIMIT 1
+                """,
+                (cache_key, result_rank, now),
+            ).fetchone()
+            if row is None:
+                return None
+            result_id = str(row[0])
+            result = _search_result_from_payload(str(row[1]))
+            if result is None:
+                return None
+            connection.execute(
+                """
+                UPDATE result_reference_cache
+                SET last_used_at = ?
+                WHERE search_cache_key = ? AND result_id = ?
+                """,
+                (now, cache_key, result_id),
+            )
+            return result_id, result
+
+    def record_search_result_references(
+        self,
+        *,
+        cache_key: str,
+        query_text: str,
+        results: Iterable[SearchResult],
+        ttl_seconds: int,
+    ) -> None:
+        now = datetime.now(UTC)
+        created_at = now.isoformat(timespec="seconds")
+        expires_at_text = (now + timedelta(seconds=ttl_seconds)).isoformat(
+            timespec="seconds"
+        )
+        normalized_query = normalize_text(query_text)
+        result_list = list(results)
+
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            connection.execute(
+                """
+                DELETE FROM result_reference_cache
+                WHERE search_cache_key = ? OR expires_at <= ?
+                """,
+                (cache_key, created_at),
+            )
+            for rank, result in enumerate(result_list, start=1):
+                result_id = _result_id_from_payload(query_text, rank, result)
+                connection.execute(
+                    """
+                    INSERT INTO result_reference_cache (
+                        search_cache_key,
+                        result_id,
+                        query_text,
+                        normalized_query,
+                        result_rank,
+                        result_json,
+                        created_at,
+                        expires_at,
+                        last_used_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(search_cache_key, result_rank) DO UPDATE SET
+                        result_id = excluded.result_id,
+                        query_text = excluded.query_text,
+                        normalized_query = excluded.normalized_query,
+                        result_json = excluded.result_json,
+                        created_at = excluded.created_at,
+                        expires_at = excluded.expires_at,
+                        last_used_at = excluded.last_used_at
+                    """,
+                    (
+                        cache_key,
+                        result_id,
+                        query_text,
+                        normalized_query,
+                        rank,
+                        json.dumps(
+                            search_result_to_dict(
+                                result,
+                                include_similar=True,
+                                include_raw=True,
+                            ),
+                            separators=(",", ":"),
+                        ),
+                        created_at,
+                        expires_at_text,
+                        created_at,
+                    ),
+                )
 
     def record_search_cache(
         self,
@@ -742,26 +896,45 @@ class Database:
                     notes,
                 ),
             )
-            row = connection.execute(
-                """
-                SELECT id
-                FROM result_feedback
-                WHERE normalized_query = ?
-                  AND result_rank = ?
-                  AND reason = ?
-                  AND telegram_user_id IS ?
-                  AND listing_text = ?
-                """,
-                (
-                    normalized_query,
-                    result_rank,
-                    reason,
-                    telegram_user_id,
-                    listing_text,
-                ),
-            ).fetchone()
-        if row is None:
-            raise RuntimeError("Failed to load feedback issue after upsert")
+            if telegram_user_id is None:
+                row = connection.execute(
+                    """
+                    SELECT id
+                    FROM result_feedback
+                    WHERE normalized_query = ?
+                      AND result_rank = ?
+                      AND reason = ?
+                      AND telegram_user_id IS NULL
+                      AND listing_text = ?
+                    """,
+                    (
+                        normalized_query,
+                        result_rank,
+                        reason,
+                        listing_text,
+                    ),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    """
+                    SELECT id
+                    FROM result_feedback
+                    WHERE normalized_query = ?
+                      AND result_rank = ?
+                      AND reason = ?
+                      AND telegram_user_id = ?
+                      AND listing_text = ?
+                    """,
+                    (
+                        normalized_query,
+                        result_rank,
+                        reason,
+                        telegram_user_id,
+                        listing_text,
+                    ),
+                ).fetchone()
+            if row is None:
+                raise RuntimeError("Failed to load feedback issue after upsert")
         return int(row[0])
 
     def record_suspicious_result(
@@ -1030,7 +1203,11 @@ class Database:
                     """,
                     (issue_id,),
                 ).fetchone()
-        return _issue_record_from_row(suspicious) if suspicious is not None else None
+            return (
+                _issue_record_from_row(suspicious)
+                if suspicious is not None
+                else None
+            )
 
     def mark_issue_status(
         self,
@@ -1169,6 +1346,60 @@ def _upsert_listing(
     if row is None:
         raise RuntimeError("Failed to load listing after upsert")
     return int(row[0])
+
+
+def _search_result_from_payload(payload: str) -> SearchResult | None:
+    try:
+        raw = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    return _search_result_from_dict(raw)
+
+
+def _search_result_from_dict(item: object) -> SearchResult | None:
+    if not isinstance(item, dict):
+        return None
+    if not isinstance((listing_text := item.get("listing_text")), str):
+        return None
+    similar = item.get("similar_results")
+    if not isinstance(similar, list):
+        return None
+
+    similar_results: list[SearchResult] = []
+    for value in similar:
+        result = _search_result_from_dict(value)
+        if result is None:
+            return None
+        similar_results.append(result)
+
+    return SearchResult(
+        listing_text=listing_text,
+        seller=item.get("seller") if isinstance(item.get("seller"), str) else None,
+        posted_date=(
+            item.get("posted_date") if isinstance(item.get("posted_date"), str) else None
+        ),
+        image_url=(
+            item.get("image_url") if isinstance(item.get("image_url"), str) else None
+        ),
+        source_url=(
+            item.get("source_url") if isinstance(item.get("source_url"), str) else None
+        ),
+        similar_results=tuple(similar_results),
+        raw_listing_text=(
+            item.get("raw_listing_text")
+            if isinstance(item.get("raw_listing_text"), str)
+            else None
+        ),
+        seller_phone=(
+            item.get("seller_phone")
+            if isinstance(item.get("seller_phone"), str)
+            else None
+        ),
+    )
+
+
+def _result_id_from_payload(query: str, rank: int, result: SearchResult) -> str:
+    return source_result_id(query, rank, result)
 
 
 def _utc_now() -> str:
