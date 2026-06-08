@@ -17,6 +17,10 @@ TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
 MAX_TEXT_CHARS = 4000
 MAX_SHORT_TEXT_CHARS = 512
 MAX_URL_CHARS = 2048
+MAX_LISTING_PREVIEW_CHARS = {
+    "comfortable": 220,
+    "dense": 150,
+}
 SENSITIVE_TEXT_RE = re.compile(
     r"\b(?:cookie|authorization|bearer|api[_-]?key|token|password|secret)\b\s*[:=]\s*\S+",
     re.IGNORECASE,
@@ -192,11 +196,16 @@ def _result_payload(
     config: ResultPageConfig,
 ) -> dict[str, Any]:
     result_id = source_result_id(query, rank, result)
+    listing_text = _clean_text(result.listing_text, MAX_TEXT_CHARS)
     return {
         "rank": rank,
         "result_id": result_id,
         "source_result_id": result_id,
-        "listing_text": _clean_text(result.listing_text, MAX_TEXT_CHARS),
+        "listing_text": listing_text,
+        "listing_text_preview": {
+            density: _listing_preview_text(listing_text, density)
+            for density in ("comfortable", "dense")
+        },
         "seller": _clean_optional_text(result.seller),
         "posted_date": _clean_optional_text(result.posted_date),
         "image_url": _normalize_url(result.image_url, config.watchfacts_url),
@@ -214,14 +223,24 @@ def _similar_result_payload(
     *,
     config: ResultPageConfig,
 ) -> dict[str, Any]:
+    listing_text = _clean_text(result.listing_text, MAX_TEXT_CHARS)
     return {
-        "listing_text": _clean_text(result.listing_text, MAX_TEXT_CHARS),
+        "listing_text": listing_text,
+        "listing_text_preview": {
+            density: _listing_preview_text(listing_text, density)
+            for density in ("comfortable", "dense")
+        },
         "seller": _clean_optional_text(result.seller),
         "posted_date": _clean_optional_text(result.posted_date),
         "image_url": _normalize_url(result.image_url, config.watchfacts_url),
         "source_url": _normalize_url(result.source_url, config.watchfacts_url),
         "seller_phone": _clean_optional_text(result.seller_phone, max_chars=64),
     }
+
+
+def _listing_preview_text(value: str, density: str) -> str:
+    limit = MAX_LISTING_PREVIEW_CHARS.get(density, MAX_LISTING_PREVIEW_CHARS["comfortable"])
+    return _clean_text(value, limit)
 
 
 def _clean_optional_text(value: str | None, *, max_chars: int = MAX_SHORT_TEXT_CHARS) -> str | None:
@@ -656,8 +675,8 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .result-card {
-      --title-box: 5.05rem;
-      --meta-box: 1.05rem;
+      --title-lines: 4;
+      --title-line-height: 1.34;
       min-width: 0;
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -760,7 +779,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .listing-display-card {
-      grid-template-rows: var(--title-box) var(--meta-box) var(--meta-box);
+      grid-template-rows: auto auto auto;
     }
 
     .listing-display-card .listing-line {
@@ -798,20 +817,21 @@ _HTML_TEMPLATE = """<!doctype html>
 
     .listing-line-title .listing-value {
       display: -webkit-box;
-      -webkit-line-clamp: 4;
+      -webkit-line-clamp: var(--title-lines);
       -webkit-box-orient: vertical;
       overflow: hidden;
-      height: var(--title-box);
+      height: auto;
       color: var(--text);
       font-size: 0.92rem;
       font-weight: 760;
-      line-height: 1.34;
+      line-height: var(--title-line-height);
       letter-spacing: 0;
       overflow-wrap: anywhere;
+      text-overflow: ellipsis;
     }
 
     .listing-line-meta {
-      height: var(--meta-box);
+      min-height: 1.05rem;
       color: var(--muted);
       font-size: 0.76rem;
       line-height: 1.25;
@@ -1172,8 +1192,8 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .results.density-dense .result-card {
-      --title-box: 5.3rem;
-      --meta-box: 1rem;
+      --title-lines: 5;
+      --title-line-height: 1.26;
       grid-template-columns: minmax(0, 1fr);
       padding: 0;
     }
@@ -1197,7 +1217,6 @@ _HTML_TEMPLATE = """<!doctype html>
     .results.density-dense .listing-line-title .listing-value {
       font-size: 0.84rem;
       line-height: 1.26;
-      -webkit-line-clamp: 5;
     }
 
     .results.density-dense .listing-line-meta {
@@ -1450,8 +1469,8 @@ _HTML_TEMPLATE = """<!doctype html>
 
       .result-card,
       .results.density-dense .result-card {
-        --title-box: 4.2rem;
-        --meta-box: 1rem;
+        --title-lines: 4;
+        --title-line-height: 1.22;
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas:
           "media"
@@ -1460,7 +1479,8 @@ _HTML_TEMPLATE = """<!doctype html>
       }
 
       .results.density-dense .result-card {
-        --title-box: 4.8rem;
+        --title-lines: 4;
+        --title-line-height: 1.2;
       }
 
       .result-media,
@@ -1468,11 +1488,6 @@ _HTML_TEMPLATE = """<!doctype html>
       .thumb,
       .results.density-dense .thumb {
         width: 100%;
-      }
-
-      .listing-line-title .listing-value,
-      .results.density-dense .listing-line-title .listing-value {
-        -webkit-line-clamp: 4;
       }
 
       .result-actions {
@@ -1663,6 +1678,27 @@ _HTML_TEMPLATE = """<!doctype html>
       }
     }
 
+    @media (min-width: 741px) and (max-width: 820px) {
+      .results,
+      .results.density-dense {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .toolbar-inner {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "search"
+          "sort"
+          "actions";
+      }
+
+      .search-control { grid-area: search; }
+      .sort-control { grid-area: sort; }
+      .toolbar-actions {
+        grid-area: actions;
+      }
+    }
+
     @media (max-width: 360px) {
       .results,
       .results.density-dense {
@@ -1773,6 +1809,11 @@ _HTML_TEMPLATE = """<!doctype html>
       filter: "",
       sort: "rank",
       density: "comfortable"
+    };
+
+    const listingTextPreviewLimits = {
+      comfortable: 220,
+      dense: 150
     };
 
     const els = {
@@ -2016,9 +2057,14 @@ _HTML_TEMPLATE = """<!doctype html>
       }
     }
 
-    function titleFromListing(item) {
-      const listing = truncate(item.listing_text, 220);
-      return listing || "Listing #" + text(item.rank, "unknown");
+    function listingDisplayText(item) {
+      const density = state.density === "dense" ? "dense" : "comfortable";
+      const preview = item && item.listing_text_preview;
+      if (preview && typeof preview === "object") {
+        const previewValue = text(preview[density] || preview.comfortable);
+        if (previewValue) return previewValue;
+      }
+      return truncate(item && item.listing_text, listingTextPreviewLimits[density]);
     }
 
     function copyField(value, fallback = "-") {
@@ -2058,14 +2104,14 @@ _HTML_TEMPLATE = """<!doctype html>
       return raw;
     }
 
-    function formattedListingFields(item) {
+    function formattedListingFields(item, compact = true) {
       return [
         {
           label: "Listing",
           icon: "🏷️",
           copyPrefix: "🏷️  ",
           className: "listing-line-title",
-          value: copyField(item.listing_text, "No listing text")
+          value: compact ? listingDisplayText(item) : copyField(item.listing_text, "No listing text")
         },
         {
           label: "Seller",
@@ -2085,13 +2131,13 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     function formatListingCopy(item) {
-      return formattedListingFields(item).map((field) => field.copyPrefix + field.value).join("\\n");
+      return formattedListingFields(item, false).map((field) => field.copyPrefix + field.value).join("\\n");
     }
 
-    function createFormattedListingDisplay(item, className = "", titleTag = "h2") {
+    function createFormattedListingDisplay(item, className = "", titleTag = "h2", compact = true) {
       const displayClass = ["listing-display", className].filter(Boolean).join(" ");
       const display = createNode("div", displayClass);
-      for (const field of formattedListingFields(item)) {
+      for (const field of formattedListingFields(item, compact)) {
         const tagName = field.className.includes("listing-line-title") ? titleTag : "p";
         const row = document.createElement(tagName);
         row.className = "listing-line " + field.className + (tagName === "h2" ? " listing-title" : "");
@@ -2223,7 +2269,7 @@ _HTML_TEMPLATE = """<!doctype html>
     function createResultDetailsContent(item) {
       const details = createNode("section", "result-details");
       const listingSection = createNode("section", "modal-section modal-listing-section");
-      listingSection.appendChild(createFormattedListingDisplay(item, "listing-display-detail", "div"));
+      listingSection.appendChild(createFormattedListingDisplay(item, "listing-display-detail", "div", false));
       details.appendChild(listingSection);
 
       const metaSection = createNode("section", "modal-section modal-meta-section");
