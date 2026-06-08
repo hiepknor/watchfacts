@@ -13,6 +13,7 @@ from app.db import Database
 from app.dedupe import unique_latest_by_text, unique_latest_listings
 from app.ai_refiner import evaluate_refinement_suggestion
 from app.issues import detect_suspicious_result
+from app.matcher_token_classification import parse_query_terms
 from app.matcher_aliases import canonicalize_descriptor_tokens_as_set
 from app.matcher import (
     extract_relevant_listing_text,
@@ -384,7 +385,23 @@ def _filter_server_filtered_listings(
         if query_colors and _has_conflicting_color_descriptor(query_colors, listing.listing_text):
             continue
         filtered.append(listing)
-    return filtered
+
+    if not _server_filtered_query_requires_local_matching(query, query_colors):
+        return filtered
+
+    return filter_matching_listings(query, filtered)
+
+
+def _server_filtered_query_requires_local_matching(
+    query: str,
+    query_colors: set[str],
+) -> bool:
+    _, descriptor_tokens = parse_query_terms(query)
+    if not descriptor_tokens:
+        return False
+    if query_colors and set(descriptor_tokens).issubset(query_colors):
+        return False
+    return True
 
 
 def _color_descriptors(value: str) -> set[str]:

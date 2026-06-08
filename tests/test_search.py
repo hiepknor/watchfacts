@@ -342,6 +342,47 @@ def test_search_workflow_drops_server_filtered_non_sale_requests(tmp_path) -> No
     ]
 
 
+def test_search_workflow_refilters_server_filtered_non_color_descriptor_queries(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "228235A Choco New 3/26 $58,000 USD",
+          "companyName": "Seller",
+          "number": 111
+        },
+        {
+          "title": "228235A Sundust 436k hkd 12/25y",
+          "companyName": "Other",
+          "number": 222
+        },
+        {
+          "title": "228235A Cho N4 $465K",
+          "companyName": "Third",
+          "number": 333
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("228235a cho"))
+
+    assert [result.listing_text for result in results] == [
+        "228235A Choco New 3/26 $58,000 USD",
+        "228235A Cho N4 $465K",
+    ]
+
+
 def test_search_workflow_demotes_missing_price_result_when_priced_results_exist(
     tmp_path,
 ) -> None:
