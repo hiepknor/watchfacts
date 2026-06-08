@@ -30,7 +30,6 @@ watchfacts.onio.cc {
             header_up X-Request-ID {http.request.id}
         }
     }
-    }
 
     # Optional explicit /mcp block in case someone tries to access it publicly.
     handle /mcp* {
