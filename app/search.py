@@ -388,6 +388,7 @@ SERVER_FILTERED_MATCH_POLICY_COARSE_PASS_THROUGH_ALIAS = "coarse_pass_through_al
 SERVER_FILTERED_MATCH_POLICY_COARSE_COLOR_ONLY = "coarse_color_only"
 SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR = "strict_non_color_descriptor"
 SERVER_FILTERED_MATCH_POLICY_STRICT_COLOR_ALIAS = "strict_color_alias"
+SERVER_FILTERED_IMAGE_BACKED_MISSING_DESCRIPTOR_LIMIT = 6
 
 
 def _filter_server_filtered_listings(
@@ -407,7 +408,14 @@ def _filter_server_filtered_listings(
         return filtered
 
     matching_query = _server_filtered_matching_query(query, query_colors)
-    return filter_matching_listings(matching_query, filtered)
+    strict_matches = filter_matching_listings(matching_query, filtered)
+    if strict_matches:
+        return strict_matches
+
+    return _merge_listing_candidates(
+        strict_matches,
+        _server_filtered_image_backed_fallback_matches(query, filtered),
+    )
 
 
 def _server_filtered_matching_query(
@@ -436,6 +444,30 @@ def _server_filtered_matching_query(
             return f"{reference_text} {' '.join(effective_descriptors)}"
         return " ".join(effective_descriptors)
     return reference_text
+
+
+def _server_filtered_image_backed_fallback_matches(
+    query: str,
+    listings: list[ListingCandidate],
+) -> list[ListingCandidate]:
+    reference_query = _server_filtered_reference_query(query)
+    if not reference_query:
+        return []
+
+    relaxed: list[ListingCandidate] = []
+    for listing in listings:
+        if not listing.image_url:
+            continue
+        if listing_matches(reference_query, listing.listing_text):
+            relaxed.append(listing)
+            if len(relaxed) >= SERVER_FILTERED_IMAGE_BACKED_MISSING_DESCRIPTOR_LIMIT:
+                break
+    return relaxed
+
+
+def _server_filtered_reference_query(query: str) -> str:
+    reference_terms, _ = parse_query_terms(query)
+    return " ".join(" ".join(reference_term) for reference_term in reference_terms)
 
 
 def _server_filtered_query_requires_local_matching(

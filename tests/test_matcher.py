@@ -11,6 +11,7 @@ from app.matcher import (
     normalize_text,
     tokenize_query,
 )
+from app.matcher_aliases import canonicalize_descriptor_token
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,41 @@ def test_listing_matches_requires_all_query_tokens() -> None:
 def test_listing_matches_alias_query_cho_to_choco() -> None:
     assert listing_matches("228235a cho", "Rolex 228235A choco N2 467000hkd full set")
     assert listing_matches("228235a choco", "Rolex 228235A cho N2 467000hkd full set")
+
+
+def test_tokenize_query_alias_query_meteorite_to_mete() -> None:
+    assert tokenize_query("228349RBR meteorite") == ["228349rbr", "mete"]
+
+
+def test_listing_matches_alias_query_meteorite_to_mete() -> None:
+    assert listing_matches(
+        "228349rbr meteorite",
+        "AP 228349RBR mete 100k full set",
+    )
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_token", "listing_text"),
+    [
+        ("228235a cho", "choco", "Rolex 228235A choco N2 467000hkd full set"),
+        ("228349RBR meteorite", "mete", "AP 228349RBR mete 100k full set"),
+        ("116500 grey", "gray", "116500 grey 30.5k"),
+    ],
+)
+def test_descriptor_aliases_apply_to_multiple_queries(
+    query: str,
+    expected_token: str,
+    listing_text: str,
+) -> None:
+    expected_tokens = tokenize_query(query)
+    assert expected_token in expected_tokens
+    assert listing_matches(query, listing_text)
+
+
+def test_descriptor_aliases_are_global_tokens() -> None:
+    assert canonicalize_descriptor_token("cho") == "choco"
+    assert canonicalize_descriptor_token("meteorite") == "mete"
+    assert canonicalize_descriptor_token("grey") == "gray"
 
 
 def test_listing_matches_reference_tokens_across_punctuation() -> None:

@@ -5,8 +5,10 @@ from collections.abc import Iterable
 from app.matcher_normalization import normalize_text
 
 
+# Centralized descriptor alias map (shared by query parsing and listing matching).
 _DESCRIPTOR_CANONICAL_GROUPS = {
     "choco": ("choco", "chocolate", "cho"),
+    "mete": ("mete", "meteorite"),
     "gray": ("gray", "grey"),
 }
 

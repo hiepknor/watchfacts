@@ -423,11 +423,80 @@ def test_search_workflow_refilters_server_filtered_non_color_variant_descriptors
     ]
 
 
+def test_search_workflow_falls_back_to_image_backed_reference_matches(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "228349 r br Blue OMBRE ROM 2025 Used HKD 525K",
+          "companyName": "Seller",
+          "number": 111,
+          "frontImage": "https://watchfacts.example/228349rbr.jpg"
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("228349rbr mete"))
+
+    assert [result.listing_text for result in results] == [
+        "228349 r br Blue OMBRE ROM 2025 Used HKD 525K"
+    ]
+    assert results[0].image_url == "https://watchfacts.example/228349rbr.jpg"
+
+
+def test_search_workflow_refilters_server_filtered_non_color_variant_descriptor_alias(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "228349RBR A METE 2024 $610000",
+          "companyName": "Member 1000",
+          "number": 222
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("228349rbr meteorite"))
+
+    assert [result.listing_text for result in results] == [
+        "228349RBR A METE 2024 $610000"
+    ]
+
+
 def test_server_filtered_query_matching_policy() -> None:
     assert (
         search_module._server_filtered_query_matching_policy(
             "228349rbr mete",
             search_module._color_descriptors("228349rbr mete"),
+        )
+        == "strict_non_color_descriptor"
+    )
+    assert (
+        search_module._server_filtered_query_matching_policy(
+            "228349rbr meteorite",
+            search_module._color_descriptors("228349rbr meteorite"),
         )
         == "strict_non_color_descriptor"
     )
