@@ -80,6 +80,8 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "repeat(auto-fill, minmax(11rem, 1fr))" in html
     assert "-webkit-line-clamp: 4" in html
     assert "truncate(item.listing_text, 220)" in html
+    assert "scrollbar-gutter: stable;" in html
+    assert "--modal-scrollbar-compensation" in html
     assert "body.append(lead, actions);" in html
     assert "article.append(media, body);" in html
     assert "function hasImage(item)" in html
@@ -103,6 +105,11 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "value: formatCopyDate(item.posted_date)" in html
     assert 'join("\\n");' in html
     assert "function makeFormattedCopyButton(item)" in html
+    assert "function focusWithoutScroll(node)" in html
+    assert "function lockModalScroll()" in html
+    assert "function unlockModalScroll()" in html
+    assert "function needsModalScrollbarCompensation()" in html
+    assert 'CSS.supports("scrollbar-gutter", "stable")' in html
     assert 'createNode("span", "copy-label", "Copy Text")' in html
     assert 'label.dataset.full = "Copy Text";' in html
     assert 'label.dataset.short = "Copy";' in html
@@ -176,8 +183,16 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert "function modalTitle(item)" in html
     assert "els.modalTitle.textContent = modalTitle(item);" in html
     assert "els.modalBody.replaceChildren(createResultDetailsContent(item));" in html
+    assert "lockModalScroll();" in html
+    assert "focusWithoutScroll(els.modalClose);" in html
+    assert "unlockModalScroll();" in html
+    assert "focusWithoutScroll(lastModalTrigger);" in html
     assert 'values.push("👤 " + text(item.seller));' in html
     assert 'values.push("📅 " + formatCopyDate(item.posted_date));' in html
+    assert 'makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft"' in html
+    assert 'makeButton("Copy Report", "Copy prompt to report this result"' in html
+    assert 'makeButton("Copy URL", "Copy source URL"' in html
+    assert '"reason: wrong_result | missing_info | other"' in html
     assert 'const idIcon = createNode("span", "result-id-icon", "🆔");' in html
     assert 'idWrap.append(idIcon, idText, idCopy);' in html
     assert 'icon: "☎️"' in html
@@ -193,9 +208,9 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert html.index('const similarSection = createNode("section", "modal-section modal-similar-section");') < html.index('const actionsSection = createNode("section", "modal-actions-section");')
     assert 'const similarSection = createNode("section", "modal-section modal-similar-section");' in html
     assert 'document.body.classList.add("modal-open");' in html
-    assert "els.modalClose.focus();" in html
     assert 'document.body.classList.remove("modal-open");' in html
-    assert "if (restoreFocus && lastModalTrigger) lastModalTrigger.focus();" in html
+    assert "els.modalClose.focus();" not in html
+    assert "lastModalTrigger.focus();" not in html
     assert 'if (event.key === "Escape")' in html
     assert 'if (event.key !== "Tab") return;' in html
     assert 'els.modalClose.addEventListener("click", () => closeDetailsModal());' in html

@@ -345,6 +345,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
     html {
       min-width: 0;
+      scrollbar-gutter: stable;
     }
 
     body {
@@ -358,6 +359,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
     body.modal-open {
       overflow: hidden;
+      padding-right: var(--modal-scrollbar-compensation, 0px);
     }
 
     button, input, select {
@@ -1925,6 +1927,37 @@ _HTML_TEMPLATE = """<!doctype html>
       return button;
     }
 
+    function focusWithoutScroll(node) {
+      if (!node || typeof node.focus !== "function") return;
+      try {
+        node.focus({ preventScroll: true });
+      } catch (error) {
+        node.focus();
+      }
+    }
+
+    function modalScrollbarCompensation() {
+      const width = window.innerWidth - document.documentElement.clientWidth;
+      return width > 0 ? width : 0;
+    }
+
+    function needsModalScrollbarCompensation() {
+      return !(window.CSS && CSS.supports && CSS.supports("scrollbar-gutter", "stable"));
+    }
+
+    function lockModalScroll() {
+      document.documentElement.style.setProperty(
+        "--modal-scrollbar-compensation",
+        String(needsModalScrollbarCompensation() ? modalScrollbarCompensation() : 0) + "px"
+      );
+      document.body.classList.add("modal-open");
+    }
+
+    function unlockModalScroll() {
+      document.body.classList.remove("modal-open");
+      document.documentElement.style.removeProperty("--modal-scrollbar-compensation");
+    }
+
     function hostName(value) {
       const raw = text(value);
       if (!raw) return "";
@@ -2104,10 +2137,11 @@ _HTML_TEMPLATE = """<!doctype html>
     function createOverflowActions(item, similarPanel, className = "") {
       const secondaryClass = ["result-actions-secondary", className].filter(Boolean).join(" ");
       const secondary = createNode("div", secondaryClass);
-      secondary.appendChild(makeButton("OpenWA", "Copy OpenWA handoff prompt", () => copyText(openWaPrompt(item), "OpenWA prompt")));
-      secondary.appendChild(makeButton("Report", "Copy issue report prompt", () => copyText(reportPrompt(item), "Report prompt")));
-      if (item.source_url) {
-        secondary.appendChild(makeButton("Copy URL", "Copy source URL", () => copyText(item.source_url, "Source URL")));
+      secondary.appendChild(makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft", () => copyText(openWaPrompt(item), "OpenWA prompt")));
+      secondary.appendChild(makeButton("Copy Report", "Copy prompt to report this result", () => copyText(reportPrompt(item), "Report prompt")));
+      const sourceUrl = text(item.source_url).trim();
+      if (sourceUrl) {
+        secondary.appendChild(makeButton("Copy URL", "Copy source URL", () => copyText(sourceUrl, "Source URL")));
       }
       const count = similarCount(item);
       if (count) {
@@ -2183,8 +2217,8 @@ _HTML_TEMPLATE = """<!doctype html>
       els.modalTitle.textContent = modalTitle(item);
       els.modalBody.replaceChildren(createResultDetailsContent(item));
       els.modal.hidden = false;
-      document.body.classList.add("modal-open");
-      els.modalClose.focus();
+      lockModalScroll();
+      focusWithoutScroll(els.modalClose);
     }
 
     function closeDetailsModal(options = {}) {
@@ -2194,8 +2228,8 @@ _HTML_TEMPLATE = """<!doctype html>
       els.modalKicker.textContent = "";
       els.modalTitle.textContent = "Result details";
       els.modalBody.replaceChildren();
-      document.body.classList.remove("modal-open");
-      if (restoreFocus && lastModalTrigger) lastModalTrigger.focus();
+      unlockModalScroll();
+      if (restoreFocus && lastModalTrigger) focusWithoutScroll(lastModalTrigger);
       lastModalTrigger = null;
     }
 
@@ -2211,7 +2245,7 @@ _HTML_TEMPLATE = """<!doctype html>
       const nodes = modalFocusableNodes();
       if (!nodes.length) {
         event.preventDefault();
-        els.modalClose.focus();
+        focusWithoutScroll(els.modalClose);
         return;
       }
 
@@ -2272,11 +2306,21 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     function openWaPrompt(item) {
-      return "Create an OpenWA chat draft for query '" + text(results && results.query) + "' using result_id " + text(item.result_id) + ".";
+      return [
+        "Create an OpenWA chat draft for this WatchFacts result.",
+        "query: " + text(results && results.query),
+        "result_id: " + text(item.result_id)
+      ].join("\\n");
     }
 
     function reportPrompt(item) {
-      return "Report an issue for query '" + text(results && results.query) + "' using result_id " + text(item.result_id) + ": ";
+      return [
+        "Report an issue for this WatchFacts result.",
+        "query: " + text(results && results.query),
+        "result_id: " + text(item.result_id),
+        "reason: wrong_result | missing_info | other",
+        "notes: "
+      ].join("\\n");
     }
 
     function emptyState(title, message) {
