@@ -1812,11 +1812,6 @@ _HTML_TEMPLATE = """<!doctype html>
       density: "comfortable"
     };
 
-    const listingTextPreviewLimits = {
-      comfortable: 220,
-      dense: 150
-    };
-
     const els = {
       query: document.getElementById("queryText"),
       createdAt: document.getElementById("createdAt"),
@@ -2065,7 +2060,10 @@ _HTML_TEMPLATE = """<!doctype html>
         const previewValue = text(preview[density] || preview.comfortable);
         if (previewValue) return previewValue;
       }
-      return truncate(item && item.listing_text, listingTextPreviewLimits[density]);
+      if (density === "dense") {
+        return truncate(item.listing_text, 150);
+      }
+      return truncate(item.listing_text, 220);
     }
 
     function copyField(value, fallback = "-") {
