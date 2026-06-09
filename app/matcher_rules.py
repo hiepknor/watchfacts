@@ -106,6 +106,7 @@ REF_PREFIX_TOKENS = {
     "rose",
     "royal",
 }
+REFERENCE_LEADING_NOISE_TOKENS = {"group", "groups", "other"}
 
 
 class HasListingText(Protocol):
@@ -584,7 +585,13 @@ def _matching_segment_start(
 
         next_token = normalized_tokens[index + 1] if index + 1 < len(normalized_tokens) else ""
         previous_token = normalized_tokens[index - 1] if index > 0 else ""
-        if _looks_like_previous_product_boundary(token, next_token, previous_token):
+        if _looks_like_previous_product_boundary(
+            listing_text,
+            token_matches[index],
+            token,
+            next_token,
+            previous_token,
+        ):
             break
         start_index = index
     return token_matches[start_index].start()
@@ -947,10 +954,14 @@ def _looks_like_price_context_token(token: str) -> bool:
 
 
 def _looks_like_previous_product_boundary(
+    listing_text: str,
+    token_match: re.Match[str],
     token: str,
     next_token: str,
     previous_token: str,
 ) -> bool:
+    if token in REFERENCE_LEADING_NOISE_TOKENS:
+        return False
     if token in LOCAL_PREFIX_TOKENS:
         return False
     if _looks_like_year_token(token) or _looks_like_date_or_condition_token(token):
@@ -964,16 +975,35 @@ def _looks_like_previous_product_boundary(
     if token in {"full", "set", "only", "watch"}:
         return False
     if _looks_like_model_or_price_token(token):
+        if _looks_like_attached_currency_price_token(token_match, listing_text) and (
+            next_token in REFERENCE_LEADING_NOISE_TOKENS
+        ):
+            return False
         if _looks_like_plain_price_before_currency(token, next_token):
             return True
         if _looks_like_price_token(token) or any(
             currency in token for currency in ("hkd", "usd", "usdt", "eur", "aed")
         ):
+            if next_token in REFERENCE_LEADING_NOISE_TOKENS:
+                return False
             return True
         if previous_token in {"hkd", "usd", "usdt", "eur", "aed"}:
             return True
         return True
     return True
+
+
+def _looks_like_attached_currency_price_token(
+    token_match: re.Match[str],
+    listing_text: str,
+) -> bool:
+    token = token_match.group(0)
+    if not re.fullmatch(r"\d{4,}(?:[./-]\d+)?", token):
+        return False
+    token_end = token_match.end()
+    if token_end >= len(listing_text):
+        return False
+    return listing_text[token_end] in CURRENCY_PREFIX_CHARS
 
 
 def _include_trailing_currency_symbol(listing_text: str, end: int) -> int:

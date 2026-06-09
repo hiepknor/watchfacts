@@ -490,6 +490,14 @@ def test_extract_relevant_listing_text_keeps_price_prefix_before_reference() -> 
     )
 
 
+def test_extract_relevant_listing_text_keeps_leading_price_after_metadata_noise() -> None:
+    listing_text = "61000$ ( other groups ) ☄️☄️ 228349RBR - meteorite"
+
+    assert extract_relevant_listing_text("228349rbr mete", listing_text) == (
+        "61000$ ( other groups ) ☄️☄️ 228349RBR - meteorite"
+    )
+
+
 def test_explain_extraction_returns_rule_trace() -> None:
     listing_text = "4️⃣1️⃣k + 🚢 5205R blac d1al, 2015 pap3rs no b0x, reta1l r3ady"
 
