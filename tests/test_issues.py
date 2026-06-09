@@ -58,6 +58,30 @@ def test_detect_suspicious_result_ignores_plain_full_price() -> None:
     assert issues == []
 
 
+def test_detect_suspicious_result_ignores_currency_with_colon() -> None:
+    issues = detect_suspicious_result(
+        listing_text="Used 07-01 wg snow red lip 23y full set HKD:2400000",
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_euro_text() -> None:
+    issues = detect_suspicious_result(
+        listing_text="Audemars Royal Oak with 92 k euro",
+    )
+
+    assert issues == []
+
+
+def test_detect_suspicious_result_ignores_symbol_followed_by_text() -> None:
+    issues = detect_suspicious_result(
+        listing_text="2026 79360N New complete $9500shipped - NYC",
+    )
+
+    assert issues == []
+
+
 def test_detect_suspicious_result_ignores_numeric_nfc_price() -> None:
     issues = detect_suspicious_result(
         listing_text="228235a Choco New N2/2026 = 465 NFC",

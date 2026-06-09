@@ -11,7 +11,9 @@ class SuspiciousIssue:
     severity: int
 
 
+_PRICE_CURRENCY_SEP_RE = r"\s*[:;,./-]?\s*"
 CURRENCY_TOKENS = {"hkd", "usd", "usdt", "eur", "aed", "chf"}
+PRICE_ALIAS_CURRENCIES = {"euro": "eur"}
 PRICE_MARKERS = {"price", "$", "💰", "💲"}
 _PRICE_AMOUNT_RE = re.compile(
     r"\d+(?:[.,]\d+)*(?:\s*(?:k|m|u|mil|million))?",
@@ -102,19 +104,19 @@ def _has_price_before_trailing_marker(value: str) -> bool:
 def _has_price_evidence(value: str) -> bool:
     if _extract_currency_prices(value):
         return True
-    normalized = _price_scan_text(value)
+    normalized = _normalize_price_currencies(value)
     normalized = KARAT_GOLD_RE.sub(" ", normalized)
     amount = r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m|u)?"
     currency = r"(?:hk|hkd|us|usd|usdt|eur|aed|chf)"
     money_symbols = r"$€£¥💰💲"
     return bool(
-        re.search(rf"\b{currency}\s*{amount}\b", normalized)
-        or re.search(rf"\b{amount}\s*{currency}\b", normalized)
+        re.search(rf"\b{currency}{_PRICE_CURRENCY_SEP_RE}{amount}(?=\b|\\W)", normalized)
+        or re.search(rf"\b{amount}{_PRICE_CURRENCY_SEP_RE}{currency}(?=\b|\\W)", normalized)
         or re.search(rf"\b{currency}\s*[-~]\s*{amount}\b", normalized)
         or re.search(rf"\b{amount}\s*{currency}\s*~\s*{amount}\s*{currency}\b", normalized)
         or re.search(rf"\b[a-z]?\d+[-/]{amount}\s*{currency}\b", normalized)
-        or re.search(rf"[{money_symbols}]\s*{amount}\b", normalized)
-        or re.search(rf"[{money_symbols}]\s*{amount}\s*{currency}\b", normalized)
+        or re.search(rf"[{money_symbols}]\s*{amount}", normalized)
+        or re.search(rf"[{money_symbols}]\s*{amount}\s*{currency}", normalized)
         or re.search(rf"\b{amount}\s*[{money_symbols}]", normalized)
         or re.search(rf"\b{amount}\s*{currency}\s*[{money_symbols}]", normalized)
         or re.search(rf"\b({_PRICE_AMOUNT_RE.pattern})\s*\+\s*(?:lnl|lab|label|lbl)\b", normalized)
@@ -147,12 +149,12 @@ def _missing_price_after_currency(listing_text: str, raw_text: str) -> bool:
 
 
 def _extract_currency_prices(raw_text: str) -> set[str]:
-    normalized = _price_scan_text(raw_text)
+    normalized = _normalize_price_currencies(raw_text)
     prices: set[str] = set()
     currency_terms = "|".join(sorted(CURRENCY_TOKENS))
 
     for currency, amount in re.findall(
-        rf"\b({currency_terms})\b\s+({_PRICE_AMOUNT_RE.pattern})",
+        rf"\b({currency_terms})\b{_PRICE_CURRENCY_SEP_RE}({_PRICE_AMOUNT_RE.pattern})",
         normalized,
         flags=re.IGNORECASE,
     ):
@@ -164,7 +166,7 @@ def _extract_currency_prices(raw_text: str) -> set[str]:
         prices.add(f"{compact_amount}{compact_currency}")
 
     for amount, currency in re.findall(
-        rf"({_PRICE_AMOUNT_RE.pattern})\s+\b({currency_terms})\b",
+        rf"({_PRICE_AMOUNT_RE.pattern}){_PRICE_CURRENCY_SEP_RE}\b({currency_terms})\b",
         normalized,
         flags=re.IGNORECASE,
     ):
@@ -214,6 +216,18 @@ def _is_significant_currency_amount(amount: str) -> bool:
 
 def _compact_price_text(value: str) -> str:
     return re.sub(r"[\s,]", "", value.casefold())
+
+
+def _normalize_price_currencies(value: str) -> str:
+    normalized = _price_scan_text(value)
+    for alias, canonical in PRICE_ALIAS_CURRENCIES.items():
+        normalized = re.sub(
+            rf"\b{alias}\b",
+            canonical,
+            normalized,
+            flags=re.IGNORECASE,
+        )
+    return normalized
 
 
 def _price_scan_text(value: str) -> str:
