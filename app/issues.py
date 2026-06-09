@@ -117,6 +117,8 @@ def _has_price_evidence(value: str) -> bool:
         or re.search(rf"[{money_symbols}]\s*{amount}\s*{currency}\b", normalized)
         or re.search(rf"\b{amount}\s*[{money_symbols}]", normalized)
         or re.search(rf"\b{amount}\s*{currency}\s*[{money_symbols}]", normalized)
+        or re.search(rf"\b({_PRICE_AMOUNT_RE.pattern})\s*\+\s*(?:lnl|lab|label|lbl)\b", normalized)
+        or re.search(rf"\b(?:lnl|lab|label|lbl)\s*\+\s*({_PRICE_AMOUNT_RE.pattern})\b", normalized)
         or re.search(r"\b(?:19|20)\d{2}\s+\d{5,8}\b", normalized)
         or re.search(r"\b(?:full\s+set|fullset|used|new|naked)\s+\d{5,8}\b", normalized)
         or re.search(r"\b\d{5,8}\s*(?:lab|label|lbl|ship|shipping)\b", normalized)
