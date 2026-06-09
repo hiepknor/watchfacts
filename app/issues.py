@@ -13,7 +13,7 @@ class SuspiciousIssue:
 
 _PRICE_CURRENCY_SEP_RE = r"\s*[:;.,-]?\s*"
 CURRENCY_TOKENS = {"hkd", "usd", "usdt", "eur", "aed", "chf"}
-PRICE_ALIAS_CURRENCIES = {"euro": "eur"}
+PRICE_ALIAS_CURRENCIES = {"euro": "eur", "hkdl": "hkd"}
 PRICE_MARKERS = {"price", "$", "💰", "💲"}
 _PRICE_AMOUNT_RE = re.compile(
     r"\d+(?:[.,]\d+)*(?:\s*(?:k|m|u|mil|million))?",

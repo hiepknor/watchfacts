@@ -229,6 +229,12 @@ def test_detect_suspicious_result_ignores_condition_price_before_currency() -> N
     assert issues == []
 
 
+def test_detect_suspicious_result_ignores_condition_price_before_currency_alias_typo() -> None:
+    issues = detect_suspicious_result(listing_text="7118/1A grey 3-2026 595.000 hkdl")
+
+    assert issues == []
+
+
 def test_detect_suspicious_result_ignores_money_marker_price_before_currency() -> None:
     issues = detect_suspicious_result(
         listing_text="5168g New button 2020y full set 💰84000 USDT"
