@@ -11,7 +11,7 @@ class SuspiciousIssue:
     severity: int
 
 
-_PRICE_CURRENCY_SEP_RE = r"\s*[:;,./-]?\s*"
+_PRICE_CURRENCY_SEP_RE = r"\s*[:;.,-]?\s*"
 CURRENCY_TOKENS = {"hkd", "usd", "usdt", "eur", "aed", "chf"}
 PRICE_ALIAS_CURRENCIES = {"euro": "eur"}
 PRICE_MARKERS = {"price", "$", "💰", "💲"}
