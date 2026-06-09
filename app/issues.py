@@ -13,6 +13,10 @@ class SuspiciousIssue:
 
 CURRENCY_TOKENS = {"hkd", "usd", "usdt", "eur", "aed", "chf"}
 PRICE_MARKERS = {"price", "$", "💰", "💲"}
+_PRICE_AMOUNT_RE = re.compile(
+    r"\d+(?:[.,]\d+)*(?:\s*(?:k|m|u|mil|million))?",
+    re.IGNORECASE,
+)
 KARAT_GOLD_RE = re.compile(
     r"\b(?:9|10|14|18|19|20|21|22|24)k\s+(?:(?:rose|yellow|white|pink)\s+)?gold\b",
     re.IGNORECASE,
@@ -58,6 +62,11 @@ def _ends_with_currency(value: str) -> bool:
         return False
     if len(tokens) >= 2 and _looks_like_price_token(tokens[-2].strip(":,.;/-$")):
         return False
+    if len(tokens) >= 3:
+        suffix = tokens[-2].strip(":,.;/-").casefold()
+        amount_prefix = tokens[-3].strip(":,.;/-")
+        if suffix in {"k", "m", "mil", "million"} and _looks_like_price_token(amount_prefix):
+            return False
     return True
 
 
@@ -126,18 +135,56 @@ def _raw_much_longer(listing_text: str, raw_text: str) -> bool:
 def _missing_price_after_currency(listing_text: str, raw_text: str) -> bool:
     if _has_price_evidence(listing_text):
         return False
-    raw_prices = {
-        f"{currency} {amount}"
-        for currency, amount in re.findall(
-            r"\b(hkd|usd|usdt|eur|aed|chf)\b\s+(\d{5,8})\b",
-            raw_text,
-            flags=re.IGNORECASE,
-        )
-    }
+    raw_prices = _extract_currency_prices(raw_text)
     if not raw_prices:
         return False
-    normalized_listing = listing_text.casefold()
+    normalized_listing = _compact_price_text(listing_text.casefold())
     return any(price.casefold() not in normalized_listing for price in raw_prices)
+
+
+def _extract_currency_prices(raw_text: str) -> set[str]:
+    normalized = _price_scan_text(raw_text)
+    prices: set[str] = set()
+
+    for currency, amount in re.findall(
+        rf"\b({'|'.join(sorted(CURRENCY_TOKENS))})\b\s+({_PRICE_AMOUNT_RE.pattern})",
+        normalized,
+        flags=re.IGNORECASE,
+    ):
+        if not _is_significant_currency_amount(amount):
+            continue
+        compact_amount = _compact_price_text(amount)
+        compact_currency = currency.casefold()
+        prices.add(f"{compact_currency}{compact_amount}")
+        prices.add(f"{compact_amount}{compact_currency}")
+
+    for currency_symbol, amount in re.findall(
+        r"((?:hk\\$|us\\$)|[€£💰💲$])\s*(" + _PRICE_AMOUNT_RE.pattern + r")",
+        normalized,
+    ):
+        if not _is_significant_currency_amount(amount):
+            continue
+        compact_amount = _compact_price_text(amount)
+        symbol = currency_symbol
+        prices.add(compact_amount)
+        prices.add(_compact_price_text(f"{symbol}{compact_amount}"))
+        prices.add(_compact_price_text(f"{compact_amount}{symbol}"))
+
+    return prices
+
+
+def _is_significant_currency_amount(amount: str) -> bool:
+    compact = _compact_price_text(amount)
+    digits = re.sub(r"\D", "", compact)
+    if not digits:
+        return False
+    if compact.endswith(("k", "m", "u", "mil", "million")):
+        return True
+    return len(digits) >= 5
+
+
+def _compact_price_text(value: str) -> str:
+    return re.sub(r"[\s,]", "", value.casefold())
 
 
 def _price_scan_text(value: str) -> str:
