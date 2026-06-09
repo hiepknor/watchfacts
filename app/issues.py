@@ -33,9 +33,11 @@ def detect_suspicious_result(
     issues: list[SuspiciousIssue] = []
     normalized = " ".join(listing_text.casefold().split())
     raw_normalized = " ".join((raw_listing_text or "").casefold().split())
+    missing_price_after = False
 
     if _ends_with_currency(normalized):
-        issues.append(SuspiciousIssue("ends_with_currency", 3))
+        if not (raw_normalized and _missing_price_after_currency(normalized, raw_normalized)):
+            issues.append(SuspiciousIssue("ends_with_currency", 3))
 
     if _ends_with_price_marker(normalized):
         issues.append(SuspiciousIssue("ends_with_price_marker", 3))
@@ -49,8 +51,9 @@ def detect_suspicious_result(
 
     if raw_normalized and _missing_price_after_currency(normalized, raw_normalized):
         issues.append(SuspiciousIssue("missing_price_after_currency", 3))
+        missing_price_after = True
 
-    if not issues and _missing_price_evidence(normalized):
+    if not missing_price_after and not issues and _missing_price_evidence(normalized):
         issues.append(SuspiciousIssue("missing_price_evidence", 1))
 
     return _dedupe_issues(issues)
