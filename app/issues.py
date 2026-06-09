@@ -100,6 +100,8 @@ def _has_price_before_trailing_marker(value: str) -> bool:
 
 
 def _has_price_evidence(value: str) -> bool:
+    if _extract_currency_prices(value):
+        return True
     normalized = _price_scan_text(value)
     normalized = KARAT_GOLD_RE.sub(" ", normalized)
     amount = r"\d+(?:[,.]\d+)*(?:\.\d+)?(?:k|m|u)?"
@@ -145,9 +147,22 @@ def _missing_price_after_currency(listing_text: str, raw_text: str) -> bool:
 def _extract_currency_prices(raw_text: str) -> set[str]:
     normalized = _price_scan_text(raw_text)
     prices: set[str] = set()
+    currency_terms = "|".join(sorted(CURRENCY_TOKENS))
 
     for currency, amount in re.findall(
-        rf"\b({'|'.join(sorted(CURRENCY_TOKENS))})\b\s+({_PRICE_AMOUNT_RE.pattern})",
+        rf"\b({currency_terms})\b\s+({_PRICE_AMOUNT_RE.pattern})",
+        normalized,
+        flags=re.IGNORECASE,
+    ):
+        if not _is_significant_currency_amount(amount):
+            continue
+        compact_amount = _compact_price_text(amount)
+        compact_currency = currency.casefold()
+        prices.add(f"{compact_currency}{compact_amount}")
+        prices.add(f"{compact_amount}{compact_currency}")
+
+    for amount, currency in re.findall(
+        rf"({_PRICE_AMOUNT_RE.pattern})\s+\b({currency_terms})\b",
         normalized,
         flags=re.IGNORECASE,
     ):
@@ -160,6 +175,18 @@ def _extract_currency_prices(raw_text: str) -> set[str]:
 
     for currency_symbol, amount in re.findall(
         r"((?:hk\\$|us\\$)|[€£💰💲$])\s*(" + _PRICE_AMOUNT_RE.pattern + r")",
+        normalized,
+    ):
+        if not _is_significant_currency_amount(amount):
+            continue
+        compact_amount = _compact_price_text(amount)
+        symbol = currency_symbol
+        prices.add(compact_amount)
+        prices.add(_compact_price_text(f"{symbol}{compact_amount}"))
+        prices.add(_compact_price_text(f"{compact_amount}{symbol}"))
+
+    for amount, currency_symbol in re.findall(
+        rf"({_PRICE_AMOUNT_RE.pattern})([€£💰💲$])",
         normalized,
     ):
         if not _is_significant_currency_amount(amount):
