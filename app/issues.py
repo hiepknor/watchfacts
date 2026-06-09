@@ -60,16 +60,31 @@ def _ends_with_currency(value: str) -> bool:
     if _has_price_evidence(value):
         return False
     tokens = value.split()
-    if not tokens or tokens[-1].strip(":,.;/-") not in CURRENCY_TOKENS:
+    if not tokens:
         return False
+
+    trailing_currency = _normalize_currency_token(tokens[-1])
+    if trailing_currency not in CURRENCY_TOKENS:
+        return False
+
+    if len(tokens) >= 2 and _normalize_currency_token(tokens[-2]) in CURRENCY_TOKENS:
+        if len(tokens) == 2:
+            return False
+        if not _looks_like_price_token(tokens[-3].strip(":,.;/-")):
+            return False
+
     if len(tokens) >= 2 and _looks_like_price_token(tokens[-2].strip(":,.;/-$")):
         return False
     if len(tokens) >= 3:
-        suffix = tokens[-2].strip(":,.;/-").casefold()
+        suffix = _normalize_currency_token(tokens[-2])
         amount_prefix = tokens[-3].strip(":,.;/-")
         if suffix in {"k", "m", "mil", "million"} and _looks_like_price_token(amount_prefix):
             return False
     return True
+
+
+def _normalize_currency_token(value: str) -> str:
+    return value.strip(":,.;/-").casefold()
 
 
 def _looks_like_price_token(value: str) -> bool:
