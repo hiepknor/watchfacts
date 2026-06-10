@@ -81,7 +81,14 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
     source_url = _json_source_url(item)
     parent_text = _clean_text(item.get("title"))
     parent_image = _json_image_url(item)
-    parent_colors = _json_dial_colors(item, include_nested=False)
+    nested_listings = item.get("listings")
+    has_nested_listings = isinstance(nested_listings, list) and len(nested_listings) > 0
+
+    parent_colors = (
+        []
+        if has_nested_listings
+        else _json_dial_colors(item, include_nested=False)
+    )
     parent_match_text = _build_match_text(
         parent_text,
         *parent_colors,
@@ -101,8 +108,8 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
             )
         )
 
-    nested = item.get("listings")
-    if isinstance(nested, list):
+    nested = nested_listings
+    if has_nested_listings:
         for nested_item in nested:
             if not isinstance(nested_item, dict):
                 continue
