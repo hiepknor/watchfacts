@@ -106,6 +106,7 @@ def test_parse_listings_extracts_watchfacts_json_whatsapp_number() -> None:
             posted_date="June 2, 2026",
             image_url="https://watchfacts.example/5712g.jpg",
             source_url="/flash-sales/3074930",
+            match_text="5712G Used 2015 - 76k usdt",
         )
     ]
 
