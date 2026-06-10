@@ -32,6 +32,7 @@ class ScrapeResult:
     html: str
     final_url: str
     server_filtered: bool = False
+    used_playwright_fallback: bool = False
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,7 @@ async def fetch_watchfacts_html(
     if normalized_query and not settings.watchfacts_http_client_enabled:
         raise ScraperError("WatchFacts HTTP search client is disabled.")
 
+    used_playwright_fallback = False
     if normalized_query and settings.watchfacts_http_client_enabled:
         if http_client_factory is not None:
             http_client = http_client_factory(settings)
@@ -199,7 +201,6 @@ async def fetch_watchfacts_html(
                     "event=watchfacts_http_client.search_failed error_type=%s",
                     _http_error_type(exc),
                 )
-                raise
             finally:
                 await http_client.close()
         else:
@@ -219,13 +220,26 @@ async def fetch_watchfacts_html(
                     "event=watchfacts_http_client.search_failed error_type=%s",
                     watchfacts_http_error_type(exc),
                 )
-                raise
 
-    return await _fetch_watchfacts_html_with_playwright(
+        used_playwright_fallback = True
+
+    if playwright_factory is None:
+        from playwright.async_api import async_playwright
+        playwright_factory = async_playwright
+
+    result = await _fetch_watchfacts_html_with_playwright(
         settings,
         query=query,
         playwright_factory=playwright_factory,
         timeout_ms=timeout_ms,
+    )
+    if not used_playwright_fallback:
+        return result
+    return ScrapeResult(
+        html=result.html,
+        final_url=result.final_url,
+        server_filtered=result.server_filtered,
+        used_playwright_fallback=True,
     )
 
 
@@ -369,6 +383,15 @@ async def _fetch_search_results_with_request_bootstrap(
             "Saved browser session appears expired. "
             "Run `python scripts/ops/login.py` again."
         )
+    from app.parser import parse_listings
+
+    listings = parse_listings(html)
+    if listings:
+        # In some environments, the GET request to the search endpoint already
+        # returns filtered JSON/HTML results for the provided query.
+        # Use that payload directly when available, avoiding another POST roundtrip.
+        return ScrapeResult(html=html, final_url=response.url, server_filtered=True)
+
     search_result = await _fetch_search_results_from_html(
         context,
         response.url,

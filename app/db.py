@@ -10,7 +10,12 @@ from typing import Iterable, Protocol
 
 from app.dedupe import dedupe_key
 from app.matcher import normalize_text
-from app.search_result import SearchResult, search_result_to_dict, source_result_id
+from app.search_result import (
+    SearchResult,
+    search_result_to_dict,
+    source_result_id,
+    stable_listing_id,
+)
 
 
 SCHEMA = """
@@ -19,7 +24,10 @@ CREATE TABLE IF NOT EXISTS queries (
     query_text TEXT NOT NULL,
     normalized_query TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    result_count INTEGER NOT NULL
+    result_count INTEGER NOT NULL,
+    image_missing_count INTEGER NOT NULL DEFAULT 0,
+    server_filtered_hit_count INTEGER NOT NULL DEFAULT 0,
+    playwright_fallback_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS listings (
@@ -97,6 +105,9 @@ CREATE TABLE IF NOT EXISTS search_cache (
     normalized_query TEXT NOT NULL,
     result_json TEXT NOT NULL,
     result_count INTEGER NOT NULL,
+    image_missing_count INTEGER NOT NULL DEFAULT 0,
+    server_filtered_hit_count INTEGER NOT NULL DEFAULT 0,
+    playwright_fallback_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
     last_used_at TEXT NOT NULL
@@ -105,6 +116,7 @@ CREATE TABLE IF NOT EXISTS search_cache (
 CREATE TABLE IF NOT EXISTS result_reference_cache (
     search_cache_key TEXT NOT NULL,
     result_id TEXT NOT NULL,
+    stable_listing_id TEXT,
     query_text TEXT NOT NULL,
     normalized_query TEXT NOT NULL,
     result_rank INTEGER NOT NULL,
@@ -158,6 +170,9 @@ class QueryRecord:
     query_text: str
     normalized_query: str
     result_count: int
+    image_missing_count: int
+    server_filtered_hit_count: int
+    playwright_fallback_count: int
 
 
 @dataclass(frozen=True)
@@ -229,6 +244,10 @@ class Database:
         self,
         query_text: str,
         listings: Iterable[ListingLike],
+        *,
+        image_missing_count: int = 0,
+        server_filtered_hit_count: int = 0,
+        playwright_fallback_count: int = 0,
     ) -> QueryRecord:
         listing_rows = list(listings)
         now = _utc_now()
@@ -238,10 +257,25 @@ class Database:
             _ensure_schema(connection)
             cursor = connection.execute(
                 """
-                INSERT INTO queries (query_text, normalized_query, created_at, result_count)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO queries (
+                    query_text,
+                    normalized_query,
+                    created_at,
+                    result_count,
+                    image_missing_count,
+                    server_filtered_hit_count,
+                    playwright_fallback_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (query_text, normalized_query, now, len(listing_rows)),
+                (
+                    query_text,
+                    normalized_query,
+                    now,
+                    len(listing_rows),
+                    image_missing_count,
+                    server_filtered_hit_count,
+                    playwright_fallback_count,
+                ),
             )
             query_id = int(cursor.lastrowid)
 
@@ -260,15 +294,73 @@ class Database:
             query_text=query_text,
             normalized_query=normalized_query,
             result_count=len(listing_rows),
+            image_missing_count=image_missing_count,
+            server_filtered_hit_count=server_filtered_hit_count,
+            playwright_fallback_count=playwright_fallback_count,
         )
 
+    def get_search_quality_metrics(self) -> dict[str, float]:
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            row = connection.execute(
+                """
+                SELECT
+                    COUNT(*) AS query_count,
+                    COALESCE(SUM(result_count), 0) AS total_results,
+                    COALESCE(SUM(image_missing_count), 0) AS image_missing_count,
+                    COALESCE(SUM(server_filtered_hit_count), 0) AS server_filtered_hit_count,
+                    COALESCE(SUM(playwright_fallback_count), 0) AS playwright_fallback_count
+                FROM queries
+                """
+            ).fetchone()
+
+        assert row is not None
+        query_count = int(row[0])
+        total_results = int(row[1])
+        image_missing_total = int(row[2])
+        server_filtered_hits = int(row[3])
+        playwright_fallback_hits = int(row[4])
+
+        image_missing_rate = (
+            image_missing_total / total_results if total_results else 0.0
+        )
+        server_filtered_hit_rate = (
+            server_filtered_hits / query_count if query_count else 0.0
+        )
+        playwright_fallback_rate = (
+            playwright_fallback_hits / query_count if query_count else 0.0
+        )
+
+        return {
+            "image_missing_count": image_missing_total,
+            "server_filtered_hit_count": server_filtered_hits,
+            "playwright_fallback_count": playwright_fallback_hits,
+            "query_count": query_count,
+            "total_results": total_results,
+            "image_missing_rate": image_missing_rate,
+            "server_filtered_hit_rate": server_filtered_hit_rate,
+            "playwright_fallback_rate": playwright_fallback_rate,
+        }
+
     def get_fresh_search_cache(self, cache_key: str) -> str | None:
+        cache_row = self.get_fresh_search_cache_row(cache_key)
+        if cache_row is None:
+            return None
+        return cache_row[0]
+
+    def get_fresh_search_cache_row(
+        self, cache_key: str
+    ) -> tuple[str, int, int, int] | None:
         now = _utc_now()
         with self.connect() as connection:
             _ensure_schema(connection)
             row = connection.execute(
                 """
-                SELECT result_json
+                SELECT
+                    result_json,
+                    image_missing_count,
+                    server_filtered_hit_count,
+                    playwright_fallback_count
                 FROM search_cache
                 WHERE cache_key = ? AND expires_at > ?
                 """,
@@ -284,7 +376,39 @@ class Database:
                 """,
                 (now, cache_key),
             )
-            return str(row[0])
+            return (
+                str(row[0]),
+                int(row[1]),
+                int(row[2]),
+                int(row[3]),
+            )
+
+    def get_search_cache_quality_metrics(self, cache_key: str) -> dict[str, int]:
+        now = _utc_now()
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            row = connection.execute(
+                """
+                SELECT
+                    image_missing_count,
+                    server_filtered_hit_count,
+                    playwright_fallback_count
+                FROM search_cache
+                WHERE cache_key = ? AND expires_at > ?
+                """,
+                (cache_key, now),
+            ).fetchone()
+            if row is None:
+                return {
+                    "image_missing_count": 0,
+                    "server_filtered_hit_count": 0,
+                    "playwright_fallback_count": 0,
+                }
+            return {
+                "image_missing_count": int(row[0]),
+                "server_filtered_hit_count": int(row[1]),
+                "playwright_fallback_count": int(row[2]),
+            }
 
     def get_fresh_search_result_reference_by_id(
         self,
@@ -382,11 +506,13 @@ class Database:
             )
             for rank, result in enumerate(result_list, start=1):
                 result_id = _result_id_from_payload(query_text, rank, result)
+                stable_id = stable_listing_id(result)
                 connection.execute(
                     """
                     INSERT INTO result_reference_cache (
                         search_cache_key,
                         result_id,
+                        stable_listing_id,
                         query_text,
                         normalized_query,
                         result_rank,
@@ -395,9 +521,10 @@ class Database:
                         expires_at,
                         last_used_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(search_cache_key, result_rank) DO UPDATE SET
                         result_id = excluded.result_id,
+                        stable_listing_id = excluded.stable_listing_id,
                         query_text = excluded.query_text,
                         normalized_query = excluded.normalized_query,
                         result_json = excluded.result_json,
@@ -408,6 +535,7 @@ class Database:
                     (
                         cache_key,
                         result_id,
+                        stable_id,
                         query_text,
                         normalized_query,
                         rank,
@@ -433,6 +561,9 @@ class Database:
         result_json: str,
         result_count: int,
         ttl_seconds: int,
+        image_missing_count: int = 0,
+        server_filtered_hit_count: int = 0,
+        playwright_fallback_count: int = 0,
     ) -> None:
         now = datetime.now(UTC)
         created_at = now.isoformat(timespec="seconds")
@@ -451,16 +582,22 @@ class Database:
                     normalized_query,
                     result_json,
                     result_count,
+                    image_missing_count,
+                    server_filtered_hit_count,
+                    playwright_fallback_count,
                     created_at,
                     expires_at,
                     last_used_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(cache_key) DO UPDATE SET
                     query_text = excluded.query_text,
                     normalized_query = excluded.normalized_query,
                     result_json = excluded.result_json,
                     result_count = excluded.result_count,
+                    image_missing_count = excluded.image_missing_count,
+                    server_filtered_hit_count = excluded.server_filtered_hit_count,
+                    playwright_fallback_count = excluded.playwright_fallback_count,
                     created_at = excluded.created_at,
                     expires_at = excluded.expires_at,
                     last_used_at = excluded.last_used_at
@@ -471,6 +608,9 @@ class Database:
                     normalized_query,
                     result_json,
                     result_count,
+                    image_missing_count,
+                    server_filtered_hit_count,
+                    playwright_fallback_count,
                     created_at,
                     expires_at_text,
                     created_at,
@@ -1408,6 +1548,47 @@ def _utc_now() -> str:
 
 def _ensure_schema(connection: sqlite3.Connection) -> None:
     connection.executescript(SCHEMA)
+    for column, definition in {
+        "image_missing_count": "INTEGER NOT NULL DEFAULT 0",
+        "server_filtered_hit_count": "INTEGER NOT NULL DEFAULT 0",
+        "playwright_fallback_count": "INTEGER NOT NULL DEFAULT 0",
+    }.items():
+        _add_column_if_missing(connection, "queries", column, definition)
+    for column, definition in {
+        "image_missing_count": "INTEGER NOT NULL DEFAULT 0",
+        "server_filtered_hit_count": "INTEGER NOT NULL DEFAULT 0",
+        "playwright_fallback_count": "INTEGER NOT NULL DEFAULT 0",
+    }.items():
+        _add_column_if_missing(connection, "search_cache", column, definition)
+    _add_column_if_missing(
+        connection,
+        "result_reference_cache",
+        "stable_listing_id",
+        "TEXT",
+    )
+    for idx in connection.execute(
+        "PRAGMA index_list(result_reference_cache)"
+    ).fetchall():
+        if (
+            idx[1] == "result_reference_cache_search_cache_stable_listing_id_idx"
+            or (
+                idx[2] == 1
+                and _index_columns(connection, idx[1]) == [
+                    "search_cache_key",
+                    "stable_listing_id",
+                ]
+            )
+        ):
+            connection.execute(
+                f"DROP INDEX {idx[1]}"
+            )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+            result_reference_cache_search_cache_stable_listing_id_idx
+        ON result_reference_cache (search_cache_key, stable_listing_id)
+        """
+    )
     _add_column_if_missing(
         connection,
         "result_feedback",
@@ -1461,6 +1642,11 @@ def _add_column_if_missing(
     if column in {str(row[1]) for row in rows}:
         return
     connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _index_columns(connection: sqlite3.Connection, index_name: str) -> list[str]:
+    rows = connection.execute(f"PRAGMA index_xinfo({index_name})").fetchall()
+    return [str(row[2]) for row in rows if row[5] == 0]
 
 
 def _listing_hash(value: str) -> str:

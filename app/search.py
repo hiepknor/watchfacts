@@ -32,7 +32,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v8"
+SEARCH_CACHE_VERSION = "search-v9"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -63,9 +63,16 @@ class WatchFactsSearchWorkflow:
         try:
             cached_results = self._get_cached_results(cache_key)
             if cached_results is not None:
-                self.database.record_query_results(query, cached_results)
-                logger.info("event=query.cache_hit result_count=%d", len(cached_results))
-                return cached_results
+                results, cache_metrics = cached_results
+                self.database.record_query_results(
+                    query,
+                    results,
+                    image_missing_count=cache_metrics["image_missing_count"],
+                    server_filtered_hit_count=cache_metrics["server_filtered_hit_count"],
+                    playwright_fallback_count=cache_metrics["playwright_fallback_count"],
+                )
+                logger.info("event=query.cache_hit result_count=%d", len(results))
+                return results
 
             task = _IN_FLIGHT_SEARCHES.get(in_flight_key)
             if task is None:
@@ -83,7 +90,14 @@ class WatchFactsSearchWorkflow:
                     _IN_FLIGHT_SEARCHES.pop(in_flight_key, None)
 
             if not owner:
-                self.database.record_query_results(query, results)
+                cache_metrics = self.database.get_search_cache_quality_metrics(cache_key)
+                self.database.record_query_results(
+                    query,
+                    results,
+                    image_missing_count=self._count_missing_images(results),
+                    server_filtered_hit_count=cache_metrics["server_filtered_hit_count"],
+                    playwright_fallback_count=cache_metrics["playwright_fallback_count"],
+                )
             return results
         except Exception as exc:
             logger.error(
@@ -105,6 +119,8 @@ class WatchFactsSearchWorkflow:
         cache_key: str,
     ) -> list[SearchResult]:
         scrape_result = await self.fetch_html(self.settings, query=query)
+        server_filtered_hit_count = int(scrape_result.server_filtered)
+        playwright_fallback_count = int(scrape_result.used_playwright_fallback)
         parsed = parse_listings(scrape_result.html)
         matched = (
             _filter_server_filtered_listings(query, parsed)
@@ -118,6 +134,10 @@ class WatchFactsSearchWorkflow:
                 expanded_scrape_result = await self.fetch_html(
                     self.settings,
                     query=expanded_query,
+                )
+                server_filtered_hit_count += int(expanded_scrape_result.server_filtered)
+                playwright_fallback_count += int(
+                    expanded_scrape_result.used_playwright_fallback
                 )
                 expanded_parsed = parse_listings(expanded_scrape_result.html)
                 parsed_count += len(expanded_parsed)
@@ -133,9 +153,22 @@ class WatchFactsSearchWorkflow:
         unique = rank_results_by_quality(unique, query=query)
         unique = group_similar_results(unique, query=query)
 
-        self.database.record_query_results(query, unique)
+        self.database.record_query_results(
+            query,
+            unique,
+            image_missing_count=self._count_missing_images(unique),
+            server_filtered_hit_count=server_filtered_hit_count,
+            playwright_fallback_count=playwright_fallback_count,
+        )
         self._record_suspicious_results(query, unique)
-        self._record_cached_results(cache_key, query, unique)
+        self._record_cached_results(
+            cache_key=cache_key,
+            query=query,
+            results=unique,
+            image_missing_count=self._count_missing_images(unique),
+            server_filtered_hit_count=server_filtered_hit_count,
+            playwright_fallback_count=playwright_fallback_count,
+        )
         logger.info(
             "event=query.end parsed_count=%d matched_count=%d result_count=%d",
             parsed_count,
@@ -144,13 +177,26 @@ class WatchFactsSearchWorkflow:
         )
         return unique
 
-    def _get_cached_results(self, cache_key: str) -> list[SearchResult] | None:
-        payload = self.database.get_fresh_search_cache(cache_key)
-        if payload is None:
+    @staticmethod
+    def _count_missing_images(results: list[SearchResult]) -> int:
+        return sum(1 for result in results if not result.image_url)
+
+    def _get_cached_results(
+        self, cache_key: str
+    ) -> tuple[list[SearchResult], dict[str, int]] | None:
+        cache_record = self.database.get_fresh_search_cache_row(cache_key)
+        if cache_record is None:
             logger.info("event=query.cache_miss")
             return None
+        payload, image_missing_count, server_filtered_hit_count, playwright_fallback_count = (
+            cache_record
+        )
         try:
-            return _deserialize_results(payload)
+            return _deserialize_results(payload), {
+                "image_missing_count": image_missing_count,
+                "server_filtered_hit_count": server_filtered_hit_count,
+                "playwright_fallback_count": playwright_fallback_count,
+            }
         except (TypeError, ValueError, json.JSONDecodeError):
             logger.info("event=query.cache_decode_failed")
             return None
@@ -160,12 +206,19 @@ class WatchFactsSearchWorkflow:
         cache_key: str,
         query: str,
         results: list[SearchResult],
+        *,
+        image_missing_count: int,
+        server_filtered_hit_count: int,
+        playwright_fallback_count: int,
     ) -> None:
         self.database.record_search_cache(
             cache_key=cache_key,
             query_text=query,
             result_json=_serialize_results(results),
             result_count=len(results),
+            image_missing_count=image_missing_count,
+            server_filtered_hit_count=server_filtered_hit_count,
+            playwright_fallback_count=playwright_fallback_count,
             ttl_seconds=self.settings.search_cache_ttl_seconds,
         )
 

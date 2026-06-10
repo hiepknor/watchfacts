@@ -116,6 +116,9 @@ def test_parse_json_nested_variants_do_not_share_parent_color_metadata() -> None
     {
       "listings": [
         {
+          "title": "",
+          "dialColor": "blue",
+          "frontImage": "https://watchfacts.example/parent-blue.jpg",
           "listings": [
             {
               "title": "15510OR Non-blue variant 2026",
@@ -124,8 +127,7 @@ def test_parse_json_nested_variants_do_not_share_parent_color_metadata() -> None
             {
               "title": "15510OR Blue variant 2026"
             }
-          ],
-          "dialColor": "blue"
+          ]
         }
       ]
     }
@@ -135,10 +137,56 @@ def test_parse_json_nested_variants_do_not_share_parent_color_metadata() -> None
         ListingCandidate(
             listing_text="black 15510OR Non-blue variant 2026",
             match_text="black 15510OR Non-blue variant 2026",
+            image_url=None,
         ),
         ListingCandidate(
             listing_text="15510OR Blue variant 2026",
             match_text="15510OR Blue variant 2026",
+            image_url=None,
+        ),
+    ]
+
+
+def test_parse_json_nested_variant_without_nested_image_does_not_inherit_parent_color_image() -> None:
+    html = """
+    {
+      "listings": [
+        {
+          "title": "15510OR",
+          "dialColor": "blue",
+          "frontImage": "https://watchfacts.example/parent-blue.jpg",
+          "number": 333,
+          "listings": [
+            {
+              "title": "15510OR non-blue"
+            },
+            {
+              "title": "15510OR blue"
+            }
+          ]
+        }
+      ]
+    }
+    """
+
+    assert parse_listings(html) == [
+        ListingCandidate(
+            listing_text="15510OR",
+            image_url="https://watchfacts.example/parent-blue.jpg",
+            source_url="/flash-sales/333",
+            match_text="15510OR",
+        ),
+        ListingCandidate(
+            listing_text="15510OR non-blue",
+            image_url=None,
+            source_url="/flash-sales/333",
+            match_text="15510OR non-blue",
+        ),
+        ListingCandidate(
+            listing_text="15510OR blue",
+            image_url=None,
+            source_url="/flash-sales/333",
+            match_text="15510OR blue",
         ),
     ]
 

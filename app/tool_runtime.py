@@ -203,6 +203,9 @@ async def watchfacts_health_payload(
         },
         "search_runtime": {
             "ready": bool(database_status["ok"]) and bool(session_status["ok"]),
+            "quality_metrics": (
+                database.get_search_quality_metrics() if database_status["ok"] else {}
+            ),
         },
     }
 

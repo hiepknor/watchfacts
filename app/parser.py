@@ -81,6 +81,7 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
     source_url = _json_source_url(item)
     parent_text = _clean_text(item.get("title"))
     parent_image = _json_image_url(item)
+    parent_image_color = _json_color(item)
     nested_listings = item.get("listings")
     has_nested_listings = isinstance(nested_listings, list) and len(nested_listings) > 0
 
@@ -126,7 +127,11 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
                     seller=seller or None,
                     seller_phone=_json_seller_phone(item),
                     posted_date=posted_date,
-                    image_url=_json_image_url(nested_item) or parent_image,
+                    image_url=_nested_image_url(
+                        nested_item,
+                        parent_image=parent_image,
+                        parent_color=parent_image_color,
+                    ),
                     source_url=source_url,
                     match_text=nested_match_text,
                 )
@@ -251,6 +256,34 @@ def _json_image_url(item: dict[str, Any]) -> str | None:
                 if nested_url:
                     return nested_url
     return None
+
+
+def _nested_image_url(
+    item: dict[str, Any],
+    *,
+    parent_image: str | None,
+    parent_color: str | None,
+) -> str | None:
+    nested_image = _json_image_url(item)
+    if nested_image is not None:
+        return nested_image
+
+    if not parent_color:
+        return parent_image
+
+    nested_color = _json_color(item)
+    if not nested_color:
+        return None
+
+    if nested_color.casefold() == parent_color.casefold():
+        return parent_image
+
+    return None
+
+
+def _json_color(item: dict[str, Any]) -> str | None:
+    value = _clean_text(item.get("dialColor"))
+    return value if value else None
 
 
 def _json_seller_phone(item: dict[str, Any]) -> str | None:

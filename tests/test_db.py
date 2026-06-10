@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from app.config import load_search_settings
 from app.db import Database
 from app.search import _search_cache_key
-from app.search_result import SearchResult, source_result_id
+from app.search_result import SearchResult, source_result_id, stable_listing_id
 
 
 @dataclass(frozen=True)
@@ -101,6 +101,50 @@ def test_record_query_results_persists_query_listing_and_relationship(tmp_path) 
     assert result_row == (record.id, 1, 1)
 
 
+def test_record_query_results_tracks_quality_metrics(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    record = database.record_query_results(
+        "15510or",
+        [
+            Listing(
+                listing_text="15510OR blue",
+                image_url="https://watchfacts.example/blue.jpg",
+            ),
+            Listing(
+                listing_text="15510OR black",
+            ),
+        ],
+        image_missing_count=1,
+        server_filtered_hit_count=2,
+        playwright_fallback_count=1,
+    )
+
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT
+              query_text,
+              result_count,
+              image_missing_count,
+              server_filtered_hit_count,
+              playwright_fallback_count
+            FROM queries
+            WHERE id = ?
+            """,
+            (record.id,),
+        ).fetchone()
+
+    assert row == (
+        "15510or",
+        2,
+        1,
+        2,
+        1,
+    )
+
+
 def test_record_query_results_updates_existing_listing_by_dedupe_key(tmp_path) -> None:
     db_path = tmp_path / "data" / "bot.db"
     database = Database(db_path)
@@ -122,6 +166,44 @@ def test_record_query_results_updates_existing_listing_by_dedupe_key(tmp_path) -
     assert listing_count == 1
     assert query_count == 2
     assert result_count == 2
+
+
+def test_get_search_quality_metrics_computes_rates(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    database.record_query_results(
+        "15510or",
+        [
+            Listing("15510OR black"),
+            Listing("15510OR blue", image_url="https://watchfacts.example/blue.jpg"),
+        ],
+        image_missing_count=1,
+        server_filtered_hit_count=1,
+        playwright_fallback_count=0,
+    )
+    database.record_query_results(
+        "15510or blue",
+        [
+            Listing("15510OR blue", image_url="https://watchfacts.example/blue-2.jpg"),
+        ],
+        image_missing_count=0,
+        server_filtered_hit_count=0,
+        playwright_fallback_count=1,
+    )
+
+    metrics = database.get_search_quality_metrics()
+
+    assert metrics == {
+        "image_missing_count": 1,
+        "server_filtered_hit_count": 1,
+        "playwright_fallback_count": 1,
+        "query_count": 2,
+        "total_results": 3,
+        "image_missing_rate": 1 / 3,
+        "server_filtered_hit_rate": 0.5,
+        "playwright_fallback_rate": 0.5,
+    }
 
 
 def test_llm_refinement_cache_round_trips_by_query_listing_and_model(tmp_path) -> None:
@@ -377,6 +459,39 @@ def test_search_cache_round_trips_fresh_payload_and_expires(tmp_path) -> None:
     assert database.get_fresh_search_cache("cache-key") is None
 
 
+def test_record_search_cache_tracks_quality_metrics(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    database.record_search_cache(
+        cache_key="cache-key",
+        query_text="15510or blue",
+        result_json='[{"listing_text":"15510OR blue"}]',
+        result_count=1,
+        ttl_seconds=120,
+        image_missing_count=1,
+        server_filtered_hit_count=1,
+        playwright_fallback_count=2,
+    )
+
+    row = database.get_search_cache_quality_metrics("cache-key")
+    assert row == {
+        "image_missing_count": 1,
+        "server_filtered_hit_count": 1,
+        "playwright_fallback_count": 2,
+    }
+
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT image_missing_count, server_filtered_hit_count, playwright_fallback_count
+            FROM search_cache
+            """
+        ).fetchone()
+
+    assert row == (1, 1, 2)
+
+
 def test_result_reference_cache_round_trips_fresh_by_id_and_rank_and_expires(
     tmp_path,
 ) -> None:
@@ -429,6 +544,75 @@ def test_result_reference_cache_round_trips_fresh_by_id_and_rank_and_expires(
         )
         is None
     )
+
+
+def test_record_search_result_references_stores_stable_listing_id(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    results = (
+        SearchResult("15510OR black", source_url="/flash-sales/111"),
+        SearchResult("15510OR blue", source_url="/flash-sales/222"),
+    )
+    cache_key = _search_cache_key("15510or", settings)
+
+    database.record_search_result_references(
+        cache_key=cache_key,
+        query_text="15510or",
+        results=results,
+        ttl_seconds=120,
+    )
+
+    with sqlite3.connect(db_path) as connection:
+        stable_rows = [
+            row[0]
+            for row in connection.execute(
+                "SELECT stable_listing_id FROM result_reference_cache ORDER BY result_rank"
+            ).fetchall()
+        ]
+
+    assert stable_rows == [
+        stable_listing_id(results[0]),
+        stable_listing_id(results[1]),
+    ]
+
+
+def test_record_search_result_references_keeps_stable_ids_for_same_source_url(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    results = (
+        SearchResult(
+            "15510OR non-blue",
+            source_url="/flash-sales/111",
+        ),
+        SearchResult(
+            "15510OR blue",
+            source_url="/flash-sales/111",
+        ),
+    )
+    cache_key = _search_cache_key("15510or", settings)
+
+    database.record_search_result_references(
+        cache_key=cache_key,
+        query_text="15510or",
+        results=results,
+        ttl_seconds=120,
+    )
+
+    with sqlite3.connect(db_path) as connection:
+        stable_rows = [
+            row[0]
+            for row in connection.execute(
+                "SELECT stable_listing_id FROM result_reference_cache ORDER BY result_rank"
+            ).fetchall()
+        ]
+
+    assert stable_rows == [
+        stable_listing_id(results[0]),
+        stable_listing_id(results[1]),
+    ]
+    assert stable_rows[0] != stable_rows[1]
 
 
 def test_result_feedback_records_and_dedupes_reports(tmp_path) -> None:

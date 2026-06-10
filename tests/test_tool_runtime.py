@@ -741,6 +741,43 @@ def test_watchfacts_health_payload_includes_http_client_status_without_secrets(
     assert "csrf" not in serialized
 
 
+def test_watchfacts_health_payload_includes_quality_metrics(tmp_path) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    Database(settings.db_path).record_query_results(
+        "15510or",
+        [
+            SearchResult("15510OR black", source_url="/listing/1"),
+            SearchResult("15510OR blue", image_url="https://img.example/blue.jpg"),
+        ],
+        image_missing_count=1,
+        server_filtered_hit_count=1,
+        playwright_fallback_count=1,
+    )
+
+    async def fake_checker(active_settings):
+        return BrowserSessionStatus(
+            ok=True,
+            status="valid",
+            detail="Saved browser session is valid.",
+        )
+
+    payload = asyncio.run(
+        watchfacts_health_payload(settings=settings, session_checker=fake_checker)
+    )
+
+    quality_metrics = payload["search_runtime"]["quality_metrics"]
+    assert quality_metrics == {
+        "image_missing_count": 1,
+        "server_filtered_hit_count": 1,
+        "playwright_fallback_count": 1,
+        "query_count": 1,
+        "total_results": 2,
+        "image_missing_rate": 0.5,
+        "server_filtered_hit_rate": 1.0,
+        "playwright_fallback_rate": 1.0,
+    }
+
+
 def test_watchfacts_health_payload_warms_http_client_when_enabled(
     tmp_path,
     monkeypatch,

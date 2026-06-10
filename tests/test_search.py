@@ -69,6 +69,62 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
     assert result_count == 1
 
 
+def test_search_workflow_records_quality_metrics(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = '''
+    {
+      "listings": [
+        {
+          "title": "15510OR black",
+          "companyName": "Seller Black",
+          "number": 111,
+          "frontImage": "https://watchfacts.example/15510or-black.jpg"
+        },
+        {
+          "title": "15510OR blue",
+          "companyName": "Seller Blue",
+          "number": 222
+        }
+      ]
+    }
+    '''
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url=settings.watchfacts_url,
+            server_filtered=True,
+            used_playwright_fallback=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    workflow_results = asyncio.run(workflow.search("15510or"))
+
+    assert len(workflow_results) == 2
+
+    with sqlite3.connect(settings.db_path) as connection:
+        query_row = connection.execute(
+            """
+            SELECT
+              query_text,
+              result_count,
+              image_missing_count,
+              server_filtered_hit_count,
+              playwright_fallback_count
+            FROM queries
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+    assert query_row == ("15510or", 2, 1, 1, 1)
+
+
 def test_search_workflow_preserves_seller_phone_from_watchfacts_json(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """
@@ -417,6 +473,50 @@ def test_server_filtered_nested_variant_color_matches_are_variant_specific(tmp_p
     assert [result.listing_text for result in results] == [
         "15510OR.OO.D315CR03 blue",
     ]
+
+
+def test_search_workflow_matches_non_blue_variant_without_inheriting_blue_parent_image(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    html = '''
+    {
+      "listings": [
+        {
+          "title": "15510OR",
+          "dialColor": "blue",
+          "frontImage": "https://watchfacts.example/parent-blue.jpg",
+          "number": 333,
+          "listings": [
+            {
+              "title": "15510OR black",
+              "dialColor": "black"
+            },
+            {
+              "title": "15510OR blue",
+              "dialColor": "blue",
+              "frontImage": "https://watchfacts.example/15510or-blue.jpg"
+            }
+          ]
+        }
+      ]
+    }
+    '''
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    results = asyncio.run(workflow.search("15510or black"))
+
+    assert len(results) == 1
+    assert results[0].listing_text == "15510OR black"
+    assert results[0].image_url is None
 
 
 def test_server_filtered_parent_color_isolation_for_nested_listings(tmp_path) -> None:

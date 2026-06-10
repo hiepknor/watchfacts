@@ -1,8 +1,64 @@
 # System Design Review
 
-Date: 2026-06-05
+Date: 2026-06-10 (latest review update)
 
 Status: review snapshot, first follow-up fixed
+Additional snapshot: current operational assessment completed.
+
+## Current Assessment Snapshot (2026-06-10)
+
+### Scope reviewed
+
+- MCP and Telegram share the same search/parse/match pipeline through
+  `WatchFactsSearchWorkflow`.
+- Search flow with realistic fixtures and end-to-end tests (including cache and
+  follow-up tools).
+- Result presentation contract in MCP responses and legacy Telegram rendering.
+- Deployment and cache behavior under repeated query patterns.
+
+### Findings
+
+- **Design maturity:** Solid-to-good for this product scope. The layer separation
+  is clear and maintainable (scraper → parser → matcher → ranking → persistence
+  → payload).
+- **Determinism:** Matching and extraction remain deterministic; AI refinement is
+  optional and guarded, and does not replace deterministic output.
+- **Quality controls:** Suspicious detection, issue recording, `suspicious_summary`,
+  and focused test coverage are present for the main runtime paths.
+- **Follow-up:** `result_id` is explicitly treated as a short-lived handle for MCP
+  follow-up in both docs and code, which is the safer approach for current safety
+  boundaries.
+
+### Remaining Gaps
+
+- For color-specific queries such as `15510or blue`, recent runs still show a
+  non-trivial number of results missing `image_url`, especially with multi-listing
+  variant groupings. This remains a core data-quality gap.
+- `result_id` is stable for query/rank/listing snapshot but is not a durable
+  listing identity suitable for long-lived replay scenarios.
+- In-memory `_RESULT_CACHE` provides fast follow-up lookup, but restart semantics
+  still depend on process lifetime; after restart, follow-up flows may fallback to
+  re-search.
+
+### Quick Validation
+
+- `python -m pytest -q`: **476 passed**.
+- Color-specific flow for `15510or blue` (server-filtered + nested variants) is
+  covered by regression tests, including non-colored variants under colored parent
+  groups.
+- No active critical security bypass findings in the current code path.
+
+### Recommended Next Priorities (next 1-2 weeks)
+
+1. Add a targeted regression test for variants that should inherit parent images
+   when the visible variant text is not color-matching but belongs to a color-specific
+   group.
+2. Start tracking quality metrics: `image_missing_rate`, `server_filtered_hit_rate`,
+   `search_cache_hit`, `playwright_fallback_rate`.
+3. Consider an internal `stable_listing_id` derived from `source_url` for long-lived
+   follow-up/issue workflows, while preserving MCP short-lived `result_id` contract.
+4. Expand health/quality alerting so unusual `result image missing` spikes by query
+   class trigger early investigation.
 
 This review complements the product spec, technical spec, operations guide, and
 ADRs. It documents the current system shape, the design choices that are working
@@ -159,7 +215,7 @@ python -m pytest -q
 Result:
 
 ```text
-374 passed, 1 skipped
+478 passed
 ```
 
 The stale rank follow-up issue described above is fixed by
