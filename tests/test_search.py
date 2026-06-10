@@ -378,6 +378,46 @@ def test_server_filtered_color_query_uses_dial_color_match_text_for_server_json(
     assert results[0].source_url == "/flash-sales/111"
 
 
+def test_server_filtered_nested_variant_color_matches_are_variant_specific(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "dialColor": "blue",
+          "listings": [
+            {
+              "title": "15510OR.OO.D315CR02 nonblue",
+              "dialColor": "black",
+              "frontImage": "https://watchfacts.example/15510or-black.jpg"
+            },
+            {
+              "title": "15510OR.OO.D315CR03 blue",
+              "dialColor": "blue",
+              "frontImage": "https://watchfacts.example/15510or-blue.jpg"
+            }
+          ],
+          "number": 555
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    results = asyncio.run(workflow.search("15510or blue"))
+
+    assert [result.listing_text for result in results] == [
+        "15510OR.OO.D315CR03 blue",
+    ]
+
+
 def test_search_workflow_drops_server_filtered_non_sale_requests(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """

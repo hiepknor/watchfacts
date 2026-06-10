@@ -111,5 +111,37 @@ def test_parse_listings_extracts_watchfacts_json_whatsapp_number() -> None:
     ]
 
 
+def test_parse_json_nested_variants_do_not_share_parent_color_metadata() -> None:
+    html = """
+    {
+      "listings": [
+        {
+          "listings": [
+            {
+              "title": "15510OR Non-blue variant 2026",
+              "dialColor": "black"
+            },
+            {
+              "title": "15510OR Blue variant 2026"
+            }
+          ],
+          "dialColor": "blue"
+        }
+      ]
+    }
+    """
+
+    assert parse_listings(html) == [
+        ListingCandidate(
+            listing_text="black 15510OR Non-blue variant 2026",
+            match_text="black 15510OR Non-blue variant 2026",
+        ),
+        ListingCandidate(
+            listing_text="15510OR Blue variant 2026",
+            match_text="15510OR Blue variant 2026",
+        ),
+    ]
+
+
 def test_parse_listings_returns_empty_list_when_no_listing_container_exists() -> None:
     assert parse_listings("<html><body><p>No listings here</p></body></html>") == []
