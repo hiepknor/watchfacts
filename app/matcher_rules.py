@@ -222,7 +222,11 @@ def explain_extraction(query: str, listing_text: str) -> ExtractionTrace:
                 fallback = (reference_term, index, reference_index)
             if descriptor_tokens and not _descriptors_match_local_tokens(
                 descriptor_tokens,
-                _local_descriptor_tokens(normalized_tokens, reference_index),
+                _local_descriptor_tokens(
+                    normalized_tokens,
+                    reference_index,
+                    descriptor_tokens,
+                ),
             ):
                 continue
 
@@ -416,6 +420,7 @@ def _reference_has_local_descriptors(
             _local_descriptor_tokens(
                 listing_tokens,
                 index + match_length - 1,
+                descriptor_tokens,
             )
         )
         if _descriptors_match_local_tokens(descriptor_tokens, local_tokens):
@@ -536,18 +541,42 @@ def _reference_token_matches(query_token: str, listing_token: str) -> bool:
     )
 
 
-def _local_descriptor_tokens(listing_tokens: list[str], reference_index: int) -> list[str]:
+def _local_descriptor_tokens(
+    listing_tokens: list[str],
+    reference_index: int,
+    descriptor_tokens: list[str],
+) -> list[str]:
     local: list[str] = []
-    for token in listing_tokens[reference_index + 1 :]:
+    descriptor_tokens_set = set(descriptor_tokens)
+    for offset, token in enumerate(listing_tokens[reference_index + 1 :], start=1):
         if len(local) >= LOCAL_MATCH_WINDOW:
             break
         if _looks_like_query_descriptor_token(token):
             local.append(token)
             continue
+        next_token = (
+            listing_tokens[reference_index + 1 + offset]
+            if reference_index + 1 + offset < len(listing_tokens)
+            else ""
+        )
+        if token in descriptor_tokens_set and _looks_like_next_reference_token(next_token):
+            break
         if _looks_like_model_or_price_token(token):
             break
         local.append(token)
     return local
+
+
+def _looks_like_next_reference_token(token: str) -> bool:
+    if not _looks_like_model_or_price_token(token):
+        return False
+    if _looks_like_price_token(token):
+        return False
+    if _looks_like_year_token(token):
+        return False
+    if _looks_like_date_or_condition_token(token):
+        return False
+    return True
 
 
 # Segment expansion rules.

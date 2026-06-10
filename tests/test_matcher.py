@@ -136,6 +136,13 @@ def test_listing_matches_compound_reference_does_not_steal_later_descriptor() ->
     assert not listing_matches("7118/1200a blue", stock_list)
 
 
+def test_listing_matches_rejects_query_descriptor_in_next_reference_group() -> None:
+    assert not listing_matches(
+        "228235a blue",
+        "228235A black full set 2025 fullset Used blue 228235B White 4/2026 New",
+    )
+
+
 def test_extract_relevant_listing_text_returns_exact_stock_list_segment() -> None:
     stock_list = (
         "134300 pistachio $78500 N3 "
