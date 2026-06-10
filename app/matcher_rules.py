@@ -161,7 +161,10 @@ def filter_matching_listings(query: str, listings: Iterable[T]) -> list[T]:
     return [
         listing
         for listing in listings
-        if listing_matches(query, listing.listing_text)
+        if listing_matches(
+            query,
+            getattr(listing, "match_text", None) or listing.listing_text,
+        )
     ]
 
 

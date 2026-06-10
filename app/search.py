@@ -488,7 +488,7 @@ def _server_filtered_query_matching_policy(
     query: str,
     query_colors: set[str],
 ) -> str:
-    _, descriptor_tokens = parse_query_terms(query)
+    reference_terms, descriptor_tokens = parse_query_terms(query)
     if not descriptor_tokens:
         return SERVER_FILTERED_MATCH_POLICY_COARSE_NO_DESCRIPTOR
 
@@ -502,10 +502,11 @@ def _server_filtered_query_matching_policy(
         return SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR
 
     if descriptor_set_without_alias and not descriptor_set_without_alias - query_colors:
+        if not _server_filtered_reference_terms_are_specific(reference_terms):
+            return SERVER_FILTERED_MATCH_POLICY_COARSE_COLOR_ONLY
         if descriptor_set_without_alias & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES:
             return SERVER_FILTERED_MATCH_POLICY_STRICT_COLOR_ALIAS
-        if descriptor_set_without_alias:
-            return SERVER_FILTERED_MATCH_POLICY_COARSE_COLOR_ONLY
+        return SERVER_FILTERED_MATCH_POLICY_STRICT_NON_COLOR_DESCRIPTOR
 
     if descriptor_set & SERVER_FILTERED_ALIAS_EXPANSION_DESCRIPTORS:
         return SERVER_FILTERED_MATCH_POLICY_COARSE_PASS_THROUGH_ALIAS
@@ -517,6 +518,20 @@ def _server_filtered_query_matching_policy(
         if descriptor_set & SERVER_FILTERED_STRICT_DESCRIPTOR_ALIASES:
             return SERVER_FILTERED_MATCH_POLICY_STRICT_COLOR_ALIAS
     return SERVER_FILTERED_MATCH_POLICY_COARSE_COLOR_ONLY
+
+
+def _server_filtered_reference_terms_are_specific(
+    reference_terms: list[tuple[str, ...]],
+) -> bool:
+    for reference_term in reference_terms:
+        reference = "".join(reference_term)
+        if any(character.isalpha() for character in reference):
+            return True
+        if "/" in reference:
+            return True
+        if len(reference) >= 5:
+            return True
+    return False
 
 
 def _color_descriptors(value: str) -> set[str]:

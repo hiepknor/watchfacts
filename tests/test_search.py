@@ -307,6 +307,77 @@ def test_search_workflow_keeps_server_filtered_results_without_strict_refilter(t
     assert results[0].source_url == "/flash-sales/40881"
 
 
+def test_server_filtered_color_query_filters_text_mismatches(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "15510OR 2022 New 92k",
+          "companyName": "Seller NonBlue",
+          "number": 111,
+          "frontImage": "https://watchfacts.example/15510or-noblue.jpg"
+        },
+        {
+          "title": "15510OR Blue dial 2024 Fullset 94k",
+          "companyName": "Seller Blue",
+          "number": 222,
+          "frontImage": "https://watchfacts.example/15510or-blue.jpg"
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    results = asyncio.run(workflow.search("15510or blue"))
+
+    assert [result.listing_text for result in results] == [
+        "15510OR Blue dial 2024 Fullset 94k",
+    ]
+
+
+def test_server_filtered_color_query_uses_dial_color_match_text_for_server_json(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "15510OR New 92k",
+          "dialColor": "blue",
+          "companyName": "Seller MetaBlue",
+          "number": 111
+        },
+        {
+          "title": "15510OR New 96k",
+          "companyName": "Seller NoColor",
+          "number": 222
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    results = asyncio.run(workflow.search("15510or blue"))
+
+    assert len(results) == 1
+    assert results[0].listing_text == "15510OR New 92k"
+    assert results[0].source_url == "/flash-sales/111"
+
+
 def test_search_workflow_drops_server_filtered_non_sale_requests(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """
@@ -543,14 +614,14 @@ def test_server_filtered_query_matching_policy() -> None:
             "126500ln white",
             search_module._color_descriptors("126500ln white"),
         )
-        == "coarse_color_only"
+        == "strict_non_color_descriptor"
     )
     assert (
         search_module._server_filtered_query_requires_local_matching(
             "126500ln white",
             search_module._color_descriptors("126500ln white"),
         )
-        is False
+        is True
     )
 
 

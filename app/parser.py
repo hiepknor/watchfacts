@@ -16,6 +16,7 @@ class ListingCandidate:
     posted_date: str | None = None
     image_url: str | None = None
     source_url: str | None = None
+    match_text: str | None = None
 
 
 LISTING_SELECTORS = [
@@ -80,6 +81,11 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
     source_url = _json_source_url(item)
     parent_text = _clean_text(item.get("title"))
     parent_image = _json_image_url(item)
+    parent_colors = _json_dial_colors(item)
+    parent_match_text = _build_match_text(
+        parent_text,
+        *parent_colors,
+    )
 
     candidates: list[ListingCandidate] = []
     if parent_text:
@@ -91,6 +97,7 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
                 posted_date=posted_date,
                 image_url=parent_image,
                 source_url=source_url,
+                match_text=parent_match_text,
             )
         )
 
@@ -105,6 +112,7 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
             nested_text = _json_nested_text(nested_item)
             if not nested_text or nested_text == parent_text:
                 continue
+            nested_match_text = _build_match_text(nested_text, parent_match_text)
             candidates.append(
                 ListingCandidate(
                     listing_text=nested_text,
@@ -113,6 +121,7 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
                     posted_date=posted_date,
                     image_url=_json_image_url(nested_item) or parent_image,
                     source_url=source_url,
+                    match_text=nested_match_text,
                 )
             )
     return candidates
@@ -182,6 +191,28 @@ def _source_url(node: Tag) -> str | None:
 
 def _clean_text(value: str | None) -> str:
     return " ".join(str(value).split()) if value else ""
+
+
+def _build_match_text(*parts: str | None) -> str:
+    return " ".join(part for part in parts if part)
+
+
+def _json_dial_colors(item: dict[str, Any]) -> list[str]:
+    colors: list[str] = []
+    color = _clean_text(item.get("dialColor"))
+    if color:
+        colors.append(color)
+
+    nested_listings = item.get("listings")
+    if isinstance(nested_listings, list):
+        for nested_item in nested_listings:
+            if not isinstance(nested_item, dict):
+                continue
+            nested_color = _clean_text(nested_item.get("dialColor"))
+            if nested_color and nested_color not in colors:
+                colors.append(nested_color)
+
+    return colors
 
 
 def _json_nested_text(item: dict[str, Any]) -> str:
