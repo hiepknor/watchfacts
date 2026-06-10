@@ -399,6 +399,42 @@ def test_server_filtered_color_query_filters_text_mismatches(tmp_path) -> None:
     ]
 
 
+def test_server_filtered_color_query_with_or_connector_filters_text_mismatches(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "15510OR 2022 New 92k",
+          "companyName": "Seller NonBlue",
+          "number": 111,
+          "frontImage": "https://watchfacts.example/15510or-noblue.jpg"
+        },
+        {
+          "title": "15510OR Blue dial 2024 Fullset 94k",
+          "companyName": "Seller Blue",
+          "number": 222,
+          "frontImage": "https://watchfacts.example/15510or-blue.jpg"
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    results = asyncio.run(workflow.search("15510 or blue"))
+
+    assert [result.listing_text for result in results] == [
+        "15510OR Blue dial 2024 Fullset 94k",
+    ]
+
+
 def test_server_filtered_color_query_uses_dial_color_match_text_for_server_json(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """

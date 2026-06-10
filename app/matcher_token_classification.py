@@ -2,23 +2,51 @@ from __future__ import annotations
 
 import re
 
-from app.matcher_normalization import TOKEN_RE, normalize_text
+from app.matcher_normalization import TOKEN_RE
 from app.matcher_aliases import canonicalize_descriptor_token
 
 
 CURRENCY_PREFIX_CHARS = {"$", "€", "£", "¥", "💲"}
 QUERY_TERM_RE = TOKEN_RE
 MONTH_NAME_RE = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)"
+QUERY_CONNECTOR_TOKENS = {"and", "or"}
 
 
 def parse_query_terms(query: str) -> tuple[list[list[str]], list[str]]:
     reference_terms: list[list[str]] = []
     descriptor_tokens: list[str] = []
-    for match in QUERY_TERM_RE.finditer(query):
-        parts = [
-            canonicalize_descriptor_token(part)
-            for part in normalize_text(match.group(0)).split()
-        ]
+    tokens = [match.group(0).casefold() for match in QUERY_TERM_RE.finditer(query)]
+
+    index = 0
+    while index < len(tokens):
+        raw_token = canonicalize_descriptor_token(tokens[index])
+        if not raw_token:
+            index += 1
+            continue
+        next_token = (
+            canonicalize_descriptor_token(tokens[index + 1])
+            if index + 1 < len(tokens)
+            else ""
+        )
+        token_after_next = (
+            canonicalize_descriptor_token(tokens[index + 2])
+            if index + 2 < len(tokens)
+            else ""
+        )
+
+        parts = [raw_token]
+        if (
+            raw_token not in QUERY_CONNECTOR_TOKENS
+            and next_token == "or"
+            and raw_token.isdigit()
+            and token_after_next.isalpha()
+        ):
+            parts = [f"{raw_token}or"]
+            index += 2
+        else:
+            index += 1
+
+        parts = [part for part in parts if part not in QUERY_CONNECTOR_TOKENS]
         if not parts:
             continue
         if any(looks_like_reference_token(part) for part in parts) and not all(
@@ -27,6 +55,7 @@ def parse_query_terms(query: str) -> tuple[list[list[str]], list[str]]:
             reference_terms.append(parts)
         else:
             descriptor_tokens.extend(parts)
+
     return reference_terms, descriptor_tokens
 
 

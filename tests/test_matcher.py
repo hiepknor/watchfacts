@@ -12,6 +12,7 @@ from app.matcher import (
     tokenize_query,
 )
 from app.matcher_aliases import canonicalize_descriptor_token
+from app.matcher_token_classification import parse_query_terms
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,23 @@ def test_descriptor_aliases_are_global_tokens() -> None:
     assert canonicalize_descriptor_token("cho") == "choco"
     assert canonicalize_descriptor_token("meteorite") == "mete"
     assert canonicalize_descriptor_token("grey") == "gray"
+
+
+def test_parse_query_terms_ignores_connector_tokens() -> None:
+    assert parse_query_terms("15510 or blue") == ([["15510or"]], ["blue"])
+    assert listing_matches(
+        "15510 or blue",
+        "15510OR Blue dial 2024 Fullset 94k",
+    )
+    assert not listing_matches("15510 or blue", "15510OR New 92k")
+
+
+def test_parse_query_terms_keeps_compact_reference_and_descriptor() -> None:
+    assert parse_query_terms("15510or blue") == ([["15510or"]], ["blue"])
+
+
+def test_parse_query_terms_does_not_merge_reference_with_or_when_followed_by_year() -> None:
+    assert parse_query_terms("15510 or 2026") == ([["15510"]], ["2026"])
 
 
 def test_listing_matches_reference_tokens_across_punctuation() -> None:
