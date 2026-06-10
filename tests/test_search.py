@@ -967,7 +967,7 @@ def test_search_workflow_omits_bundle_images_for_multi_listing_cards(tmp_path) -
 
     assert len(results) == 1
     assert results[0].listing_text == "7118/1200A blue N2/2026y 725k hkd"
-    assert results[0].image_url is None
+    assert results[0].image_url == "https://watchfacts.example/watch-bundle.jpg"
 
 
 def test_search_workflow_records_suspicious_incomplete_results(tmp_path) -> None:

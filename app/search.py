@@ -32,7 +32,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v7"
+SEARCH_CACHE_VERSION = "search-v8"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -311,16 +311,55 @@ def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:
         seller=listing.seller,
         seller_phone=listing.seller_phone,
         posted_date=listing.posted_date,
-        image_url=_product_image_url(listing),
+        image_url=_product_image_url(
+            listing,
+            listing_text=listing_text,
+            query=query,
+        ),
         source_url=listing.source_url,
         raw_listing_text=listing.listing_text,
     )
 
 
-def _product_image_url(listing: ListingCandidate) -> str | None:
-    if _looks_like_multi_listing(listing.listing_text):
+def _product_image_url(
+    listing: ListingCandidate,
+    *,
+    listing_text: str | None = None,
+    query: str = "",
+) -> str | None:
+    if listing.image_url is None:
+        return None
+
+    candidate_text = listing_text or listing.listing_text
+    if _looks_like_multi_listing_for_image(listing.listing_text):
+        if (
+            not _looks_like_multi_listing_for_image(candidate_text)
+            and _query_is_color_specific(query)
+        ):
+            return listing.image_url
         return None
     return listing.image_url
+
+
+def _looks_like_multi_listing_for_image(listing_text: str) -> bool:
+    references = {
+        token.casefold()
+        for token in PRODUCT_REFERENCE_RE.findall(listing_text)
+        if (
+            _looks_like_product_reference(token)
+            and not _looks_like_bundle_year_reference(token)
+        )
+    }
+    return len(references) > MULTI_LIST_REFERENCE_THRESHOLD
+
+
+def _looks_like_bundle_year_reference(token: str) -> bool:
+    normalized = token.casefold()
+    return bool(re.fullmatch(r"[a-z]+\d+/\d{2,4}y?", normalized))
+
+
+def _query_is_color_specific(query: str) -> bool:
+    return bool(_color_descriptors(query))
 
 
 def _looks_like_multi_listing(listing_text: str) -> bool:
