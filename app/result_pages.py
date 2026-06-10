@@ -1388,15 +1388,67 @@ _HTML_TEMPLATE = """<!doctype html>
       }
 
       .toolbar-inner {
-        grid-template-columns: minmax(0, 1fr) minmax(8rem, 10rem);
+        grid-template-columns: 1fr;
         grid-template-areas:
-          "search search"
-          "sort actions";
+          "search"
+          "sort"
+          "actions";
       }
 
       .search-control { grid-area: search; }
       .sort-control { grid-area: sort; }
-      .toolbar-actions { grid-area: actions; }
+      .toolbar-actions {
+        grid-area: actions;
+        width: 100%;
+        min-width: 0;
+        justify-content: flex-start;
+        align-items: stretch;
+        gap: 0.35rem;
+        overflow: visible;
+        flex-wrap: wrap;
+      }
+
+      .toolbar-actions .density-toggle {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .toolbar-actions .density-toggle button {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .toolbar-actions .tool-button {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .search-control,
+      .sort-control,
+      .toolbar-actions {
+        width: 100%;
+      }
+
+      .sort-control {
+        max-width: 100%;
+      }
+
+      .result-actions,
+      .result-actions-primary {
+        width: 100%;
+        grid-template-columns: 1fr;
+      }
+
+      .result-actions .action-button,
+      .result-actions .source-link,
+      .result-actions .details-toggle {
+        width: 100%;
+      }
+
+      .result-actions-primary .action-button,
+      .result-actions-primary .source-link {
+        width: 100%;
+      }
 
       .results.density-dense .result-actions {
         grid-template-columns: 1fr;
@@ -1411,6 +1463,24 @@ _HTML_TEMPLATE = """<!doctype html>
 
       .results.density-dense .result-actions-primary {
         width: 100%;
+      }
+
+      .copy-label::after {
+        content: attr(data-short);
+      }
+
+      .toolbar-actions .density-toggle button,
+      .toolbar-actions .tool-button,
+      .action-button,
+      .result-actions .action-button,
+      .result-actions .source-link,
+      .result-actions .details-toggle,
+      .result-actions-primary .action-button,
+      .result-actions-primary .source-link,
+      .results.density-dense .result-actions-primary .action-button,
+      .results.density-dense .result-actions-primary .source-link,
+      .results.density-dense .result-actions .details-toggle {
+        white-space: normal;
       }
     }
 
@@ -1512,13 +1582,19 @@ _HTML_TEMPLATE = """<!doctype html>
         flex: 1 1 0;
       }
 
-      .copy-label::after {
-        content: attr(data-short);
-      }
-
-      button, .source-link {
+      .listing-line-meta .listing-value {
         white-space: normal;
       }
+
+      .result-details-meta {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .detail-value {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
     }
 
     @media (max-width: 520px) {
@@ -1683,6 +1759,16 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     @media (min-width: 741px) and (max-width: 820px) {
+      .results,
+      .results.density-dense {
+        grid-template-columns: 1fr;
+      }
+
+      .result-card,
+      .results.density-dense .result-card {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
       .toolbar-inner {
         grid-template-columns: 1fr;
         grid-template-areas:
@@ -1718,14 +1804,16 @@ _HTML_TEMPLATE = """<!doctype html>
         width: 100%;
       }
 
-      .results,
-      .results.density-dense {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .result-actions,
+      .result-actions-primary {
+        width: 100%;
+        grid-template-columns: 1fr;
       }
 
-      .result-card,
-      .results.density-dense .result-card {
-        grid-template-columns: minmax(0, 1fr);
+      .result-actions-primary .action-button,
+      .result-actions-primary .source-link,
+      .result-actions .details-toggle {
+        width: 100%;
       }
 
       .listing-line-title .listing-value,
@@ -1733,6 +1821,16 @@ _HTML_TEMPLATE = """<!doctype html>
         -webkit-line-clamp: 4;
         line-height: 1.36;
       }
+
+      .result-details-meta {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .detail-value {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
 
       .search-control { grid-area: search; }
       .sort-control { grid-area: sort; }
