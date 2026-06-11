@@ -14,6 +14,7 @@ import pytest
 from app.result_pages import (
     ResultPageConfig,
     generate_result_page,
+    read_result_page_action_payload,
     read_result_page_html,
     render_result_page_template,
 )
@@ -462,7 +463,11 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
     files = list(config.storage_dir.glob("*.html"))
     assert len(files) == 1
     assert files[0].stem == page.url.rsplit("/", maxsplit=1)[1]
+    sidecar_files = list(config.storage_dir.glob("*.json"))
+    assert len(sidecar_files) == 1
+    assert sidecar_files[0].stem == files[0].stem
     html = files[0].read_text(encoding="utf-8")
+    sidecar = json.loads(sidecar_files[0].read_text(encoding="utf-8"))
 
     assert "let results = null;" in html
     assert "5712G \\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e" in html
@@ -473,6 +478,77 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
     assert "cookie=secret" not in html
     assert "token=secret" not in html
     assert "second result should be bounded out" not in html
+    assert isinstance(sidecar["action_nonce"], str)
+    assert len(sidecar["action_nonce"]) >= 16
+    assert sidecar["payload"]["query"] == "5712g </script><script>alert(1)</script>"
+    assert (
+        sidecar["payload"]["results"][0]["source_url"]
+        == "https://watchfacts.example/listing/5712g"
+    )
+    assert "raw_listing_text" not in json.dumps(sidecar, ensure_ascii=False)
+    assert "raw cookie=secret" not in json.dumps(sidecar, ensure_ascii=False)
+    assert "cookie=secret" not in json.dumps(sidecar, ensure_ascii=False)
+    assert "token=secret" not in json.dumps(sidecar, ensure_ascii=False)
+
+
+def test_read_result_page_action_payload_reports_sidecar_states(tmp_path) -> None:
+    config = make_config(tmp_path)
+    now = datetime(2026, 6, 7, 12, 0, tzinfo=timezone.utc)
+    page = generate_result_page(
+        query="5712g",
+        results=[SearchResult("5712G", source_url="/listing/5712g")],
+        now=now,
+        config=config,
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+
+    found = read_result_page_action_payload(
+        token,
+        config=config,
+        now=now + timedelta(seconds=30),
+    )
+    assert found.status_code == 200
+    assert found.error is None
+    assert found.action_nonce
+    assert found.payload is not None
+    assert found.payload["query"] == "5712g"
+    assert (
+        found.payload["results"][0]["source_url"]
+        == "https://watchfacts.example/listing/5712g"
+    )
+
+    invalid = read_result_page_action_payload("../bad", config=config, now=now)
+    assert invalid.status_code == 404
+    assert invalid.error == "invalid_token"
+
+    (config.storage_dir / f"{token}.json").unlink()
+    missing = read_result_page_action_payload(token, config=config, now=now)
+    assert missing.status_code == 404
+    assert missing.error == "missing_sidecar"
+
+
+def test_expired_result_page_cleanup_removes_sidecar(tmp_path) -> None:
+    config = make_config(tmp_path)
+    now = datetime(2026, 6, 7, 12, 0, tzinfo=timezone.utc)
+    page = generate_result_page(
+        query="5712g",
+        results=[SearchResult("5712G")],
+        now=now,
+        config=config,
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+
+    expired = read_result_page_action_payload(
+        token,
+        config=config,
+        now=now + timedelta(seconds=61),
+    )
+    assert expired.status_code == 410
+    assert expired.error == "expired"
+    assert not (config.storage_dir / f"{token}.html").exists()
+    assert not (config.storage_dir / f"{token}.json").exists()
 
 
 def test_generate_result_page_returns_none_when_disabled(tmp_path) -> None:

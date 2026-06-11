@@ -74,6 +74,14 @@ class ResultPageRead:
     html: str | None = None
 
 
+@dataclass(frozen=True)
+class ResultPageActionRead:
+    status_code: int
+    payload: dict[str, Any] | None = None
+    action_nonce: str | None = None
+    error: str | None = None
+
+
 def generate_result_page(
     query: str,
     results: list[SearchResult],
@@ -112,9 +120,22 @@ def generate_result_page(
     active_config.storage_dir.mkdir(parents=True, exist_ok=True)
     html = render_result_page_template(payload)
     page_path = _page_path(active_config, token)
+    sidecar_path = _sidecar_path(active_config, token)
     page_path.write_text(html, encoding="utf-8")
+    sidecar_path.write_text(
+        json.dumps(
+            {
+                "action_nonce": secrets.token_urlsafe(24),
+                "payload": payload,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
     timestamp = created_at.timestamp()
     os.utime(page_path, (timestamp, timestamp))
+    os.utime(sidecar_path, (timestamp, timestamp))
     return GeneratedResultPage(
         url=f"{active_config.public_base_url.rstrip('/')}/{token}",
         expires_at=payload["expires_at"],
@@ -144,7 +165,7 @@ def read_result_page_html(
         return ResultPageRead(status_code=404)
 
     if _is_expired(page_path, active_config, now=_utc_now(now)):
-        _unlink_quietly(page_path)
+        _unlink_page_files(active_config, token)
         cleanup_expired_result_pages(active_config, now=now)
         return ResultPageRead(status_code=410)
 
@@ -152,6 +173,53 @@ def read_result_page_html(
     return ResultPageRead(
         status_code=200,
         html=page_path.read_text(encoding="utf-8"),
+    )
+
+
+def read_result_page_action_payload(
+    token: str,
+    *,
+    config: ResultPageConfig | None = None,
+    settings=None,
+    now: datetime | None = None,
+) -> ResultPageActionRead:
+    active_config = config or ResultPageConfig.from_settings(settings)
+    if not TOKEN_RE.fullmatch(token):
+        return ResultPageActionRead(status_code=404, error="invalid_token")
+
+    page_path = _page_path(active_config, token)
+    sidecar_path = _sidecar_path(active_config, token)
+    if not page_path.exists() or not page_path.is_file():
+        cleanup_expired_result_pages(active_config, now=now)
+        return ResultPageActionRead(status_code=404, error="not_found")
+    if not sidecar_path.exists() or not sidecar_path.is_file():
+        cleanup_expired_result_pages(active_config, now=now)
+        return ResultPageActionRead(status_code=404, error="missing_sidecar")
+
+    if _is_expired(page_path, active_config, now=_utc_now(now)):
+        _unlink_page_files(active_config, token)
+        cleanup_expired_result_pages(active_config, now=now)
+        return ResultPageActionRead(status_code=410, error="expired")
+
+    try:
+        sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ResultPageActionRead(status_code=404, error="invalid_sidecar")
+
+    if not isinstance(sidecar, dict):
+        return ResultPageActionRead(status_code=404, error="invalid_sidecar")
+    action_nonce = sidecar.get("action_nonce")
+    payload = sidecar.get("payload")
+    if not isinstance(action_nonce, str) or not action_nonce:
+        return ResultPageActionRead(status_code=404, error="invalid_sidecar")
+    if not isinstance(payload, dict):
+        return ResultPageActionRead(status_code=404, error="invalid_sidecar")
+
+    cleanup_expired_result_pages(active_config, now=now)
+    return ResultPageActionRead(
+        status_code=200,
+        payload=payload,
+        action_nonce=action_nonce,
     )
 
 
@@ -166,8 +234,14 @@ def cleanup_expired_result_pages(
     removed = 0
     for path in config.storage_dir.glob("*.html"):
         if path.is_file() and _is_expired(path, config, now=current):
-            _unlink_quietly(path)
+            _unlink_page_files(config, path.stem)
             removed += 1
+    for path in config.storage_dir.glob("*.json"):
+        if not path.is_file():
+            continue
+        page_path = _page_path(config, path.stem)
+        if not page_path.exists() or _is_expired(path, config, now=current):
+            _unlink_quietly(path)
     return removed
 
 
@@ -294,7 +368,10 @@ def _script_safe_json(payload: dict[str, Any]) -> str:
 def _new_token(storage_dir: Path) -> str:
     while True:
         token = secrets.token_urlsafe(24)
-        if not (_page_path_for_dir(storage_dir, token).exists()):
+        if (
+            not _page_path_for_dir(storage_dir, token).exists()
+            and not _sidecar_path_for_dir(storage_dir, token).exists()
+        ):
             return token
 
 
@@ -302,12 +379,25 @@ def _page_path(config: ResultPageConfig, token: str) -> Path:
     return _page_path_for_dir(config.storage_dir, token)
 
 
+def _sidecar_path(config: ResultPageConfig, token: str) -> Path:
+    return _sidecar_path_for_dir(config.storage_dir, token)
+
+
 def _page_path_for_dir(storage_dir: Path, token: str) -> Path:
     return storage_dir / f"{token}.html"
 
 
+def _sidecar_path_for_dir(storage_dir: Path, token: str) -> Path:
+    return storage_dir / f"{token}.json"
+
+
 def _is_expired(path: Path, config: ResultPageConfig, *, now: datetime) -> bool:
     return path.stat().st_mtime + config.ttl_seconds < now.timestamp()
+
+
+def _unlink_page_files(config: ResultPageConfig, token: str) -> None:
+    _unlink_quietly(_page_path(config, token))
+    _unlink_quietly(_sidecar_path(config, token))
 
 
 def _unlink_quietly(path: Path) -> None:
