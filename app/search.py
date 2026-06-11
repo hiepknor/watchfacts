@@ -39,6 +39,7 @@ PRODUCT_REFERENCE_RE = re.compile(
     re.IGNORECASE,
 )
 MULTI_LIST_REFERENCE_THRESHOLD = 1
+WATCHFACTS_SOURCE_TRUNCATION_THRESHOLD = 200
 _IN_FLIGHT_SEARCHES: dict[str, asyncio.Task[list[SearchResult]]] = {}
 _SEARCH_SEMAPHORES: dict[str, asyncio.Semaphore] = {}
 
@@ -47,6 +48,34 @@ _SEARCH_SEMAPHORES: dict[str, asyncio.Semaphore] = {}
 class ImageAttribution:
     image_url: str | None
     reason: str
+
+
+@dataclass(frozen=True)
+class SearchDiagnostics:
+    parsed_count: int | None
+    matched_count: int | None
+    search_result_count: int | None
+    unique_latest_count: int | None
+    unique_text_count: int | None
+    final_count: int
+    server_filtered: bool
+    playwright_fallback: bool
+    cache_hit: bool
+    source_truncation_suspected: bool | None
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "parsed_count": self.parsed_count,
+            "matched_count": self.matched_count,
+            "search_result_count": self.search_result_count,
+            "unique_latest_count": self.unique_latest_count,
+            "unique_text_count": self.unique_text_count,
+            "final_count": self.final_count,
+            "server_filtered": self.server_filtered,
+            "playwright_fallback": self.playwright_fallback,
+            "cache_hit": self.cache_hit,
+            "source_truncation_suspected": self.source_truncation_suspected,
+        }
 
 
 class WatchFactsSearchWorkflow:
@@ -62,6 +91,7 @@ class WatchFactsSearchWorkflow:
         self.database = database or Database(settings.db_path)
         self.fetch_html = fetch_html or fetch_watchfacts_html
         self.refine_results = refine_results
+        self.last_search_diagnostics: SearchDiagnostics | None = None
 
     async def search(self, query: str) -> list[SearchResult]:
         logger.info("event=query.start query_length=%d", len(query))
@@ -71,6 +101,18 @@ class WatchFactsSearchWorkflow:
             cached_results = self._get_cached_results(cache_key)
             if cached_results is not None:
                 results, cache_metrics = cached_results
+                self.last_search_diagnostics = SearchDiagnostics(
+                    parsed_count=None,
+                    matched_count=None,
+                    search_result_count=None,
+                    unique_latest_count=None,
+                    unique_text_count=None,
+                    final_count=len(results),
+                    server_filtered=cache_metrics["server_filtered_hit_count"] > 0,
+                    playwright_fallback=cache_metrics["playwright_fallback_count"] > 0,
+                    cache_hit=True,
+                    source_truncation_suspected=None,
+                )
                 self.database.record_query_results(
                     query,
                     results,
@@ -98,6 +140,19 @@ class WatchFactsSearchWorkflow:
 
             if not owner:
                 cache_metrics = self.database.get_search_cache_quality_metrics(cache_key)
+                if self.last_search_diagnostics is None:
+                    self.last_search_diagnostics = SearchDiagnostics(
+                        parsed_count=None,
+                        matched_count=None,
+                        search_result_count=None,
+                        unique_latest_count=None,
+                        unique_text_count=None,
+                        final_count=len(results),
+                        server_filtered=cache_metrics["server_filtered_hit_count"] > 0,
+                        playwright_fallback=cache_metrics["playwright_fallback_count"] > 0,
+                        cache_hit=True,
+                        source_truncation_suspected=None,
+                    )
                 self.database.record_query_results(
                     query,
                     results,
@@ -154,11 +209,27 @@ class WatchFactsSearchWorkflow:
                 )
         results = [_to_search_result(query, listing) for listing in matched]
         unique = unique_latest_listings(results)
+        unique_latest_count = len(unique)
         if self.refine_results is not None and self.settings.hybrid_ai_mode != "off":
             unique = await self._handle_hybrid_refinement(query, unique)
         unique = unique_latest_by_text(unique)
+        unique_text_count = len(unique)
         unique = rank_results_by_quality(unique, query=query)
         unique = group_similar_results(unique, query=query)
+        self.last_search_diagnostics = SearchDiagnostics(
+            parsed_count=parsed_count,
+            matched_count=len(matched),
+            search_result_count=len(results),
+            unique_latest_count=unique_latest_count,
+            unique_text_count=unique_text_count,
+            final_count=len(unique),
+            server_filtered=server_filtered_hit_count > 0,
+            playwright_fallback=playwright_fallback_count > 0,
+            cache_hit=False,
+            source_truncation_suspected=(
+                parsed_count >= WATCHFACTS_SOURCE_TRUNCATION_THRESHOLD
+            ),
+        )
 
         self.database.record_query_results(
             query,
@@ -509,6 +580,7 @@ def _filter_server_filtered_listings(
     listings: list[ListingCandidate],
 ) -> list[ListingCandidate]:
     query_colors = _color_descriptors(query)
+    reference_terms, descriptor_tokens = parse_query_terms(query)
     filtered: list[ListingCandidate] = []
     for listing in listings:
         if is_non_sale_request(listing.listing_text):
@@ -516,6 +588,11 @@ def _filter_server_filtered_listings(
         if query_colors and _has_conflicting_color_descriptor(query_colors, listing.listing_text):
             continue
         filtered.append(listing)
+
+    if reference_terms and not descriptor_tokens:
+        reference_matches = filter_matching_listings(query, filtered)
+        if reference_matches:
+            return reference_matches
 
     if not _server_filtered_query_requires_local_matching(query, query_colors):
         return filtered

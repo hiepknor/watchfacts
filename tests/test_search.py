@@ -55,6 +55,19 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
     assert results[0].listing_text == "Rolex 228253A choco N2 467000hkd"
     assert results[0].seller == "HK STOCKS"
     assert results[0].image_url == "https://watchfacts.example/images/228253a.jpg"
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.to_payload() == {
+        "parsed_count": 2,
+        "matched_count": 1,
+        "search_result_count": 1,
+        "unique_latest_count": 1,
+        "unique_text_count": 1,
+        "final_count": 1,
+        "server_filtered": False,
+        "playwright_fallback": False,
+        "cache_hit": False,
+        "source_truncation_suspected": False,
+    }
 
     with sqlite3.connect(settings.db_path) as connection:
         query_row = connection.execute(
@@ -185,6 +198,11 @@ def test_search_workflow_serves_repeated_query_from_cache(tmp_path) -> None:
 
     assert fetch_count == 1
     assert second == first
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.cache_hit is True
+    assert workflow.last_search_diagnostics.final_count == len(second)
+    assert workflow.last_search_diagnostics.parsed_count is None
+    assert workflow.last_search_diagnostics.source_truncation_suspected is None
     with sqlite3.connect(settings.db_path) as connection:
         query_count = connection.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
         cache_count = connection.execute("SELECT COUNT(*) FROM search_cache").fetchone()[0]
@@ -311,6 +329,9 @@ def test_search_workflow_coalesces_concurrent_same_query_fetches(tmp_path) -> No
 
     assert fetch_count == 1
     assert first == second
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.cache_hit is False
+    assert workflow.last_search_diagnostics.parsed_count == 2
     with sqlite3.connect(settings.db_path) as connection:
         query_count = connection.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
 
@@ -416,6 +437,43 @@ def test_search_workflow_keeps_server_filtered_results_without_strict_refilter(t
     assert results[0].posted_date == "April 22, 2026"
     assert results[0].image_url == "https://watchfacts.example/5712.jpg"
     assert results[0].source_url == "/flash-sales/40881"
+
+
+def test_search_workflow_refilters_broad_server_filtered_reference_queries(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "5205R black 2016 full set 49500 USD",
+          "companyName": "Seller Match",
+          "number": 111
+        },
+        {
+          "title": "5712R 2017 full set HKD 820000",
+          "companyName": "Seller Other",
+          "number": 222
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    results = asyncio.run(workflow.search("5205r"))
+
+    assert [result.listing_text for result in results] == [
+        "5205R black 2016 full set 49500 USD"
+    ]
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.parsed_count == 2
+    assert workflow.last_search_diagnostics.matched_count == 1
 
 
 def test_server_filtered_color_query_filters_text_mismatches(tmp_path) -> None:

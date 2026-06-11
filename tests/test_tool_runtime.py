@@ -93,6 +93,18 @@ def test_watchfacts_search_payload_serializes_results_for_tool_runtime(tmp_path)
             SearchResult("5712R 2016 HKD 830000"),
         ]
     )
+    workflow.last_search_diagnostics = {
+        "parsed_count": 4,
+        "matched_count": 3,
+        "search_result_count": 3,
+        "unique_latest_count": 2,
+        "unique_text_count": 2,
+        "final_count": 2,
+        "server_filtered": True,
+        "playwright_fallback": False,
+        "cache_hit": False,
+        "source_truncation_suspected": False,
+    }
 
     payload = asyncio.run(
         watchfacts_search_payload(
@@ -115,6 +127,7 @@ def test_watchfacts_search_payload_serializes_results_for_tool_runtime(tmp_path)
     assert payload["has_more"] is True
     assert payload["next_offset"] == 1
     assert payload["result_cache_ttl_seconds"] == settings.search_cache_ttl_seconds
+    assert payload["search_diagnostics"] == workflow.last_search_diagnostics
     result = payload["results"][0]
     assert result["rank"] == 1
     assert result["result_id"].startswith("watchfacts:")

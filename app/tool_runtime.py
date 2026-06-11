@@ -158,6 +158,9 @@ async def watchfacts_search_payload(
             for rank, result in enumerate(visible_results, start=offset + 1)
         ],
     }
+    diagnostics = _search_diagnostics_payload(active_workflow)
+    if diagnostics is not None:
+        payload["search_diagnostics"] = diagnostics
     if active_settings is not None:
         try:
             result_page = generate_result_page(
@@ -179,6 +182,19 @@ async def watchfacts_search_payload(
             if result_page is not None:
                 payload["result_page"] = result_page.to_payload()
     return payload
+
+
+def _search_diagnostics_payload(workflow: SearchWorkflow) -> dict[str, object] | None:
+    diagnostics = getattr(workflow, "last_search_diagnostics", None)
+    if diagnostics is None:
+        return None
+    to_payload = getattr(diagnostics, "to_payload", None)
+    if callable(to_payload):
+        payload = to_payload()
+        return payload if isinstance(payload, dict) else None
+    if isinstance(diagnostics, dict):
+        return diagnostics
+    return None
 
 
 async def watchfacts_health_payload(
