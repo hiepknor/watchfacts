@@ -79,6 +79,7 @@ def test_format_text_report_includes_bounded_score_summary() -> None:
     assert "=== 5712r count=1 top_qg=[0] ===" in output
     assert "summary=audited_result_count:1 image_missing_count:0 image_missing_rate:0.0000" in output
     assert "#1 qg=0 sev=0 date='May 18, 2026' ref=1 desc=0 price=1" in output
+    assert "fuzzy=" in output
     assert "image=True" in output
     assert "diagnostics=image_reason:image.direct scope_reason:scope.full_listing" in output
     assert "stable_listing_id:watchfacts-listing:" in output
@@ -137,6 +138,8 @@ def test_format_json_report_is_machine_readable() -> None:
     assert payload[0]["summary"]["audited_result_count"] == 1
     assert payload[0]["summary"]["image_reason_counts"] == {"image.missing_source": 1}
     assert payload[0]["rows"][0]["quality_group"] == 0
+    assert payload[0]["rows"][0]["fuzzy_score"] >= 0
+    assert payload[0]["rows"][0]["fuzzy_reference_score"] == 100
     assert payload[0]["rows"][0]["has_image"] is False
     assert payload[0]["rows"][0]["image_reason"] == "image.missing_source"
     assert payload[0]["rows"][0]["scope_reason"] == "scope.full_listing"

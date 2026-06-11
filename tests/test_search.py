@@ -64,6 +64,8 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
         "unique_latest_count": 1,
         "unique_text_count": 1,
         "deduped_drop_count": 0,
+        "fuzzy_score_min": 86,
+        "fuzzy_score_avg": 86.0,
         "final_count": 1,
         "server_filtered": False,
         "playwright_fallback": False,

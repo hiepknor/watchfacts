@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from app.ai_refiner import refine_search_results
 from app.config import load_search_settings
 from app.db import Database
+from app.fuzzy_diagnostics import score_fuzzy_match
 from app.issues import detect_suspicious_result
 from app.result_scoring import score_result
 from app.search import SearchAuditEvent, WatchFactsSearchWorkflow, _search_cache_key
@@ -73,7 +74,11 @@ class AuditResultRow:
     exact_reference_score: int
     descriptor_score: int
     price_evidence_score: int
+    fuzzy_score: int
+    fuzzy_reference_score: int
+    fuzzy_descriptor_overlap_score: int
     score_reasons: tuple[str, ...]
+    fuzzy_reason_codes: tuple[str, ...]
     suspicious_reasons: tuple[str, ...]
     has_image: bool
     image_reason: str
@@ -116,6 +121,7 @@ def build_query_report(
         )
         scope_reason = _scope_reason(result)
         image_reason = _image_reason(result, scope_reason=scope_reason)
+        fuzzy = score_fuzzy_match(query, result.listing_text)
         rows.append(
             AuditResultRow(
                 rank=index,
@@ -125,7 +131,11 @@ def build_query_report(
                 exact_reference_score=score.exact_reference_score,
                 descriptor_score=score.descriptor_score,
                 price_evidence_score=score.price_evidence_score,
+                fuzzy_score=fuzzy.overall_score,
+                fuzzy_reference_score=fuzzy.reference_score,
+                fuzzy_descriptor_overlap_score=fuzzy.descriptor_overlap_score,
                 score_reasons=score.reasons,
+                fuzzy_reason_codes=fuzzy.reason_codes,
                 suspicious_reasons=tuple(issue.reason for issue in suspicious),
                 has_image=bool(result.image_url),
                 image_reason=image_reason,
@@ -197,9 +207,12 @@ def format_text_report(reports: list[AuditQueryReport]) -> str:
                 f"#{row.rank} qg={row.quality_group} sev={row.quality_severity} "
                 f"date={row.posted_date!r} ref={row.exact_reference_score} "
                 f"desc={row.descriptor_score} price={row.price_evidence_score} "
+                f"fuzzy={row.fuzzy_score} "
                 f"suspicious={suspicious} image={row.has_image}"
             )
             lines.append(f" reasons={reasons}")
+            if row.fuzzy_reason_codes:
+                lines.append(" fuzzy_reasons=" + ",".join(row.fuzzy_reason_codes))
             lines.append(
                 f" diagnostics=image_reason:{row.image_reason} "
                 f"scope_reason:{row.scope_reason} server_filtered:{row.server_filtered} "

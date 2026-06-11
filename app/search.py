@@ -13,6 +13,7 @@ from app.config import Settings
 from app.db import Database
 from app.dedupe import latest_dedupe_key, unique_latest_by_text, unique_latest_listings
 from app.ai_refiner import evaluate_refinement_suggestion
+from app.fuzzy_diagnostics import score_fuzzy_match
 from app.issues import detect_suspicious_result
 from app.matcher_token_classification import parse_query_terms
 from app.matcher_aliases import canonicalize_descriptor_tokens_as_set
@@ -64,6 +65,8 @@ class SearchDiagnostics:
     source_truncation_suspected: bool | None
     raw_candidate_count: int | None = None
     deduped_drop_count: int | None = None
+    fuzzy_score_min: int | None = None
+    fuzzy_score_avg: float | None = None
     rejection_reasons: dict[str, int] | None = None
 
     def to_payload(self) -> dict[str, object]:
@@ -75,6 +78,8 @@ class SearchDiagnostics:
             "unique_latest_count": self.unique_latest_count,
             "unique_text_count": self.unique_text_count,
             "deduped_drop_count": self.deduped_drop_count,
+            "fuzzy_score_min": self.fuzzy_score_min,
+            "fuzzy_score_avg": self.fuzzy_score_avg,
             "final_count": self.final_count,
             "server_filtered": self.server_filtered,
             "playwright_fallback": self.playwright_fallback,
@@ -309,6 +314,10 @@ class WatchFactsSearchWorkflow:
         unique_text_count = len(unique)
         unique = rank_results_by_quality(unique, query=query)
         unique = group_similar_results(unique, query=query)
+        fuzzy_scores = [
+            score_fuzzy_match(query, result.listing_text).overall_score
+            for result in unique
+        ]
         self._audit_search_results(
             audit_events,
             query=query,
@@ -334,6 +343,12 @@ class WatchFactsSearchWorkflow:
                 1 for event in audit_events if event.stage == "raw"
             ),
             deduped_drop_count=deduped_drop_count,
+            fuzzy_score_min=min(fuzzy_scores) if fuzzy_scores else None,
+            fuzzy_score_avg=(
+                round(sum(fuzzy_scores) / len(fuzzy_scores), 2)
+                if fuzzy_scores
+                else None
+            ),
             rejection_reasons={
                 "dedupe.latest_listing": latest_drop_count,
                 "dedupe.text": text_drop_count,
