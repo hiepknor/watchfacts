@@ -740,7 +740,14 @@ _HTML_TEMPLATE = """<!doctype html>
       padding: 1rem;
     }
 
+    .has-image .thumb {
+      padding: 0;
+      position: relative;
+    }
+
     .thumb img {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
@@ -1884,6 +1891,159 @@ _HTML_TEMPLATE = """<!doctype html>
       .results,
       .results.density-dense {
         grid-template-columns: 1fr;
+      }
+    }
+
+    @media (min-width: 521px) and (max-width: 840px) {
+      .toolbar-inner {
+        grid-template-columns: minmax(14rem, 1fr) minmax(8rem, 10rem);
+        grid-template-areas:
+          "search sort"
+          "actions actions";
+        gap: 0.5rem;
+      }
+
+      .toolbar-actions {
+        display: grid;
+        grid-template-columns: minmax(11rem, 1.2fr) repeat(4, minmax(0, 1fr));
+        align-items: stretch;
+        gap: 0.4rem;
+      }
+
+      .toolbar-actions .density-toggle {
+        grid-column: auto;
+        width: 100%;
+      }
+
+      .toolbar-actions .tool-button {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .page-header {
+        position: relative;
+        z-index: 5;
+      }
+
+      .toolbar-inner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.42fr);
+        grid-template-areas:
+          "search sort"
+          "actions actions";
+        gap: 0.42rem;
+        padding: 0.52rem 0;
+      }
+
+      .search-control {
+        grid-area: search;
+        flex: initial;
+      }
+
+      .sort-control {
+        grid-area: sort;
+        flex: initial;
+      }
+
+      .toolbar-actions {
+        grid-area: actions;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.35rem;
+      }
+
+      .toolbar-actions .density-toggle {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        min-width: 0;
+        width: 100%;
+      }
+
+      .toolbar-actions .tool-button {
+        width: 100%;
+        min-height: 2rem;
+        padding: 0.32rem 0.35rem;
+        font-size: 0.74rem;
+      }
+
+      main {
+        padding-top: 0.65rem;
+      }
+
+      .results,
+      .results.density-dense {
+        grid-template-columns: 1fr;
+        gap: 0.55rem;
+      }
+
+      .result-card,
+      .results.density-dense .result-card {
+        grid-template-columns: clamp(5.75rem, 28vw, 7rem) minmax(0, 1fr);
+        grid-template-rows: auto;
+        grid-template-areas: "media body";
+        min-height: 8.5rem;
+      }
+
+      .result-media,
+      .results.density-dense .result-media {
+        min-height: 100%;
+      }
+
+      .thumb,
+      .results.density-dense .thumb {
+        height: 100%;
+        min-height: 8.5rem;
+        aspect-ratio: auto;
+        border-right: 1px solid var(--border);
+        border-bottom: 0;
+      }
+
+      .no-image .thumb {
+        min-height: 8.5rem;
+        padding: 0.55rem;
+      }
+
+      .result-body,
+      .results.density-dense .result-body {
+        min-height: 0;
+        gap: 0.38rem;
+        padding: 0.5rem 0.55rem;
+      }
+
+      .listing-display-card,
+      .results.density-dense .listing-display-card {
+        gap: 0.18rem;
+      }
+
+      .listing-line-title .listing-value,
+      .results.density-dense .listing-line-title .listing-value {
+        -webkit-line-clamp: 3;
+        font-size: 0.84rem;
+        line-height: 1.28;
+      }
+
+      .listing-line-meta,
+      .results.density-dense .listing-line-meta {
+        font-size: 0.72rem;
+        line-height: 1.22;
+      }
+
+      .result-actions,
+      .results.density-dense .result-actions {
+        gap: 0.25rem;
+      }
+
+      .action-button,
+      .source-link,
+      .details-toggle,
+      .results.density-dense .action-button,
+      .results.density-dense .source-link,
+      .results.density-dense .details-toggle {
+        min-height: 1.72rem;
+        padding: 0.2rem 0.34rem;
+        font-size: 0.72rem;
       }
     }
 
