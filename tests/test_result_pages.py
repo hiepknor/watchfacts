@@ -92,6 +92,16 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "--listing-accent" in html
     assert "repeat(auto-fill, minmax(13.5rem, 1fr))" in html
     assert "repeat(auto-fill, minmax(11rem, 1fr))" in html
+    assert "repeat(auto-fill, minmax(18rem, 1fr))" in html
+    assert "grid-template-columns: 5.25rem minmax(0, 1fr)" in html
+    assert "grid-template-areas: \"media body\"" in html
+    assert ".results.density-dense .thumb {\n        min-height: 100%;" in html
+    assert ".density-toggle {\n        flex: 1 0 100%;" in html
+    assert "flex: 1 1 calc(50% - 0.3rem)" in html
+    assert ".results {\n        grid-template-columns: 1fr;\n        gap: 0.55rem;" in html
+    assert "repeat(auto-fill, minmax(9.5rem, 1fr))" in html
+    assert ".results {\n        grid-template-columns: repeat(2, minmax(0, 1fr));" in html
+    assert ".results.density-dense {\n        grid-template-columns: repeat(3, minmax(0, 1fr));" in html
     assert "-webkit-line-clamp: 4" in html
     assert "truncate(item.listing_text, 220)" in html
     assert "scrollbar-gutter: stable;" in html

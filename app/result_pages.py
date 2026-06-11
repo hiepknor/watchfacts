@@ -1252,6 +1252,39 @@ _HTML_TEMPLATE = """<!doctype html>
       font-size: 0.74rem;
     }
 
+    @media (min-width: 841px) {
+      .results.density-dense {
+        grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+      }
+
+      .results.density-dense .result-card {
+        grid-template-columns: 5.25rem minmax(0, 1fr);
+        grid-template-rows: auto;
+        grid-template-areas: "media body";
+        min-height: 7rem;
+      }
+
+      .results.density-dense .thumb {
+        min-height: 100%;
+        border-right: 1px solid var(--border);
+        border-bottom: 0;
+      }
+
+      .results.density-dense .result-body {
+        min-height: 0;
+        padding: 0.55rem 0.6rem;
+        gap: 0.4rem;
+      }
+
+      .results.density-dense .listing-display-card {
+        gap: 0.2rem;
+      }
+
+      .results.density-dense .listing-line-title .listing-value {
+        -webkit-line-clamp: 3;
+      }
+    }
+
     .empty {
       border: 1px dashed var(--border-strong);
       border-radius: var(--radius);
@@ -1637,20 +1670,24 @@ _HTML_TEMPLATE = """<!doctype html>
       }
 
       .density-toggle {
-        flex: 1 0 8.75rem;
+        flex: 1 0 100%;
       }
 
       .tool-button {
-        flex: 1 1 3.25rem;
+        flex: 1 1 calc(50% - 0.3rem);
       }
 
       .result-actions-primary {
         gap: 0.25rem;
       }
 
-      .results,
+      .results {
+        grid-template-columns: 1fr;
+        gap: 0.55rem;
+      }
+
       .results.density-dense {
-        grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
         gap: 0.55rem;
       }
 
@@ -1760,9 +1797,12 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     @media (min-width: 741px) and (max-width: 820px) {
-      .results,
+      .results {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .results.density-dense {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
       .result-card,
