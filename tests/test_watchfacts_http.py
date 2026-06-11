@@ -523,6 +523,78 @@ def test_watchfacts_http_manager_posts_reference_only_query(
     assert posted_references == ["7118/1200a"]
 
 
+def test_watchfacts_http_manager_keeps_brand_model_query_for_server_filter(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+    posted_references: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return form_response(request)
+        posted = urllib.parse.parse_qs(request.content.decode())
+        posted_references.extend(posted["reference"])
+        return search_response(request, title="A. Lange & Sohne Lange 1")
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+
+    async def run() -> None:
+        manager = WatchFactsHttpClientManager(client_factory=client_factory)
+        try:
+            await manager.fetch_search(settings, "Lange 1", timeout_ms=30_000)
+        finally:
+            await manager.close_all()
+
+    asyncio.run(run())
+
+    assert posted_references == ["Lange 1"]
+
+
+def test_watchfacts_http_manager_does_not_treat_listing_sign_in_text_as_auth_expired(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return form_response(request)
+        return search_response(request, title="Panerai Luminor sign in stock")
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+
+    async def run() -> ScrapeResult:
+        manager = WatchFactsHttpClientManager(client_factory=client_factory)
+        try:
+            return await manager.fetch_search(
+                settings,
+                "Panerai Luminor",
+                timeout_ms=30_000,
+            )
+        finally:
+            await manager.close_all()
+
+    result = asyncio.run(run())
+
+    assert result.server_filtered is True
+    assert "Panerai Luminor" in result.html
+
+
 def test_watchfacts_http_manager_warmup_caches_form_before_first_search(
     tmp_path: Path,
 ) -> None:
@@ -624,6 +696,65 @@ def test_watchfacts_http_manager_skips_network_during_failure_cooldown(
     assert recovered_status.last_error_type is None
     assert recovered_status.consecutive_failures == 0
     assert recovered_status.cooldown_until is None
+
+
+def test_watchfacts_http_manager_auth_expired_does_not_start_global_cooldown(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(tmp_path)
+    settings = Settings(
+        **{
+            **settings.__dict__,
+            "watchfacts_http_failure_cooldown_seconds": 60,
+        }
+    )
+    write_storage_state(settings, cookie_value="first", mtime_ns=100)
+    wall_now = 1_700_000_000.0
+    post_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal post_count
+        if request.method == "GET":
+            return form_response(request)
+        post_count += 1
+        if post_count <= 2:
+            return httpx.Response(
+                200,
+                text='<html><body><form><input type="password"></form></body></html>',
+                request=request,
+            )
+        return search_response(request, title="5712r")
+
+    def client_factory(cookies, timeout, limits) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            cookies=cookies,
+            timeout=timeout,
+            limits=limits,
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+
+    async def run() -> tuple[WatchFactsHttpClientStatus, WatchFactsHttpClientStatus]:
+        manager = WatchFactsHttpClientManager(
+            client_factory=client_factory,
+            wall_clock=lambda: wall_now,
+        )
+        try:
+            with pytest.raises(ScraperError, match="Saved browser session appears expired"):
+                await manager.fetch_search(settings, "5712g", timeout_ms=1234)
+            failed_status = manager.status(settings)
+
+            await manager.fetch_search(settings, "5712r", timeout_ms=1234)
+            return failed_status, manager.status(settings)
+        finally:
+            await manager.close_all()
+
+    failed_status, recovered_status = asyncio.run(run())
+
+    assert failed_status.last_error_type == "auth_expired"
+    assert failed_status.consecutive_failures == 0
+    assert failed_status.cooldown_until is None
+    assert recovered_status.last_error_type is None
 
 
 def test_watchfacts_http_manager_recreates_client_when_config_changes(

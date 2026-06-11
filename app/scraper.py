@@ -444,10 +444,23 @@ def _looks_unauthenticated(final_url: str, html: str) -> bool:
         return True
 
     normalized_html = html.casefold()
-    login_markers = [
+    password_markers = [
         'type="password"',
         "name=\"password\"",
+    ]
+    if any(marker in normalized_html for marker in password_markers):
+        return True
+
+    form_markers = [
+        "<form",
+        "login",
+        "signin",
+        "sign-in",
+    ]
+    action_markers = [
         "log in",
         "sign in",
     ]
-    return any(marker in normalized_html for marker in login_markers)
+    return any(marker in normalized_html for marker in form_markers) and any(
+        marker in normalized_html for marker in action_markers
+    )

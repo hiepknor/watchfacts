@@ -11,6 +11,7 @@ import httpx
 
 from app.config import Settings
 from app.matcher_token_classification import parse_query_terms
+from app.query_intent import classify_query_intent
 from app.scraper import (
     BrowserSessionError,
     ScrapeResult,
@@ -548,7 +549,7 @@ class WatchFactsHttpClient:
     def _record_failure(self, error_type: str, started_at: float) -> None:
         self._last_error_type = error_type
         self._last_elapsed_ms = _elapsed_ms(self._now(), started_at)
-        if error_type == "cooldown":
+        if error_type in {"cooldown", "auth_expired"}:
             return
         failure_at = self._wall_clock()
         self._last_failure_at = failure_at
@@ -735,6 +736,9 @@ def watchfacts_http_error_type(exc: Exception) -> str:
 
 
 def _server_search_query(query: str) -> str:
+    intent = classify_query_intent(query)
+    if intent.kind == "brand_model_descriptor":
+        return query.strip()
     reference_terms, _ = parse_query_terms(query)
     if not reference_terms:
         return query.strip()
