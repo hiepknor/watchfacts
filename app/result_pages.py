@@ -32,12 +32,10 @@ SENSITIVE_PATH_RE = re.compile(
 )
 RESULT_PAGE_TEMPLATE_PLACEHOLDER = "__WATCHFACTS_RESULTS_PAYLOAD__"
 RESULT_PAGE_CSS_PLACEHOLDER = "__WATCHFACTS_RESULTS_CSS__"
-RESULT_PAGE_VENDOR_JS_PLACEHOLDER = "__WATCHFACTS_RESULTS_VENDOR_JS__"
 RESULT_PAGE_JS_PLACEHOLDER = "__WATCHFACTS_RESULTS_JS__"
 RESULT_PAGE_TEMPLATE_PATH = Path(__file__).with_name("templates") / "result_page.html"
 RESULT_PAGE_STATIC_DIR = Path(__file__).with_name("static")
 RESULT_PAGE_CSS_PATH = RESULT_PAGE_STATIC_DIR / "result_page.css"
-RESULT_PAGE_VENDOR_JS_PATH = RESULT_PAGE_STATIC_DIR / "vendor" / "petite-vue.iife.js"
 RESULT_PAGE_JS_PATH = RESULT_PAGE_STATIC_DIR / "result_page.js"
 RESULT_PAGE_SCHEMA_VERSION = 1
 
@@ -175,18 +173,15 @@ def render_result_page_template(payload: dict[str, Any] | None = None) -> str:
 def _load_result_page_template() -> str:
     template = RESULT_PAGE_TEMPLATE_PATH.read_text(encoding="utf-8")
     css = RESULT_PAGE_CSS_PATH.read_text(encoding="utf-8")
-    vendor_js = RESULT_PAGE_VENDOR_JS_PATH.read_text(encoding="utf-8")
     js = RESULT_PAGE_JS_PATH.read_text(encoding="utf-8")
     if RESULT_PAGE_TEMPLATE_PLACEHOLDER not in js:
         raise RuntimeError("Result page script is missing the payload placeholder")
     template = template.replace(RESULT_PAGE_CSS_PLACEHOLDER, css)
-    template = template.replace(RESULT_PAGE_VENDOR_JS_PLACEHOLDER, vendor_js)
     template = template.replace(RESULT_PAGE_JS_PLACEHOLDER, js)
     missing = [
         placeholder
         for placeholder in (
             RESULT_PAGE_CSS_PLACEHOLDER,
-            RESULT_PAGE_VENDOR_JS_PLACEHOLDER,
             RESULT_PAGE_JS_PLACEHOLDER,
         )
         if placeholder in template

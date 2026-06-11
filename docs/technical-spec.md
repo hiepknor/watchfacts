@@ -241,9 +241,9 @@ Responsibilities:
 - Load CSS/JS from `app/static/result_page.css` and
   `app/static/result_page.js`, then embed them into generated pages so result
   pages remain standalone behind `/results/{token}`.
-- Use vendored `petite-vue` from `app/static/vendor/` for lightweight
-  progressive enhancement of filter/sort/density/action state; do not require
-  CDN access or a Node/Vite build step.
+- Keep result-page interactions in plain JavaScript so production CSP can avoid
+  `unsafe-eval`; do not introduce a frontend runtime that evaluates template
+  expressions in the browser.
 - Include additive `result_page_schema_version` metadata in the embedded page
   payload for future presentation/schema migrations.
 - Generate and clean up sidecar JSON for result-page actions.

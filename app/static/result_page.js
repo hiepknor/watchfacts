@@ -878,37 +878,29 @@
       state.density = "comfortable";
     }
 
-    function resultPageApp() {
-      return {
-        results,
-        state,
-        render,
-        setFilter(value) {
-          state.filter = value;
-          render();
-        },
-        setSort(value) {
-          state.sort = value;
-          render();
-        },
-        setDensity(value) {
-          state.density = value;
-          render();
-        },
-        copyPageLink() {
-          return copyText(window.location.href, "Page link");
-        },
-        exportJson,
-        exportCsv,
-        printPage() {
-          window.print();
-        },
-        closeDetailsModal
-      };
-    }
-
+    els.filter.addEventListener("input", event => {
+      state.filter = event.target.value;
+      render();
+    });
+    els.sort.addEventListener("change", event => {
+      state.sort = event.target.value;
+      render();
+    });
+    els.densityComfortable.addEventListener("click", () => {
+      state.density = "comfortable";
+      render();
+    });
+    els.densityDense.addEventListener("click", () => {
+      state.density = "dense";
+      render();
+    });
+    els.copyPageLink.addEventListener("click", () => copyText(window.location.href, "Page link"));
+    els.exportJson.addEventListener("click", exportJson);
+    els.exportCsv.addEventListener("click", exportCsv);
+    els.printPage.addEventListener("click", () => window.print());
+    els.modalClose.addEventListener("click", () => closeDetailsModal());
     els.modalBackdrop.addEventListener("click", () => closeDetailsModal());
     document.addEventListener("keydown", handleModalKeydown);
 
     initializeDensity();
-    PetiteVue.createApp(resultPageApp()).mount("#resultPageApp");
+    render();
