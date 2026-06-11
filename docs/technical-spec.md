@@ -233,7 +233,16 @@ Responsibilities:
 
 Responsibilities:
 
-- Generate static HTML result pages from sanitized result payloads.
+- Generate static HTML result-page artifacts from sanitized result payloads.
+- Keep MCP/search structured JSON as the canonical output; result pages are
+  presentation/export artifacts linked from that output.
+- Load the HTML shell from `app/templates/result_page.html` so presentation
+  changes are reviewable outside the Python runtime module.
+- Load CSS/JS from `app/static/result_page.css` and
+  `app/static/result_page.js`, then embed them into generated pages so result
+  pages remain standalone behind `/results/{token}`.
+- Include additive `result_page_schema_version` metadata in the embedded page
+  payload for future presentation/schema migrations.
 - Generate and clean up sidecar JSON for result-page actions.
 - Keep embedded payloads bounded and script-safe.
 - Normalize image/source URLs against the configured WatchFacts URL.

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+import app.result_pages as result_pages
 from app.result_pages import (
     ResultPageConfig,
     generate_result_page,
@@ -60,6 +61,27 @@ def test_render_result_page_template_defaults_to_null_results() -> None:
     html = render_result_page_template()
 
     assert "let results = null;" in html
+
+
+def test_result_page_template_is_loaded_from_project_template_file() -> None:
+    source = Path(result_pages.__file__).read_text(encoding="utf-8")
+    template = result_pages.RESULT_PAGE_TEMPLATE_PATH.read_text(encoding="utf-8")
+    css = result_pages.RESULT_PAGE_CSS_PATH.read_text(encoding="utf-8")
+    js = result_pages.RESULT_PAGE_JS_PATH.read_text(encoding="utf-8")
+    rendered = render_result_page_template({"query": "5712g", "results": []})
+
+    assert result_pages.RESULT_PAGE_TEMPLATE_PATH.name == "result_page.html"
+    assert result_pages.RESULT_PAGE_CSS_PATH.name == "result_page.css"
+    assert result_pages.RESULT_PAGE_JS_PATH.name == "result_page.js"
+    assert result_pages.RESULT_PAGE_CSS_PLACEHOLDER in template
+    assert result_pages.RESULT_PAGE_JS_PLACEHOLDER in template
+    assert result_pages.RESULT_PAGE_TEMPLATE_PLACEHOLDER in js
+    assert ".result-card" in css
+    assert "function renderResults()" in js
+    assert "_HTML_TEMPLATE" not in source
+    assert result_pages.RESULT_PAGE_TEMPLATE_PLACEHOLDER not in rendered
+    assert result_pages.RESULT_PAGE_CSS_PLACEHOLDER not in rendered
+    assert result_pages.RESULT_PAGE_JS_PLACEHOLDER not in rendered
 
 
 def test_render_result_page_template_includes_operational_dashboard_hooks() -> None:
@@ -502,6 +524,7 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
     assert page.url.startswith("https://mcp.example/results/")
     assert page.expires_at == "2026-06-07T12:01:00Z"
     assert page.result_count == 1
+    assert page.to_payload()["schema_version"] == 1
 
     files = list(config.storage_dir.glob("*.html"))
     assert len(files) == 1
@@ -529,6 +552,7 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
         "report_url": f"{page.url}/actions/report",
     }
     assert sidecar["payload"]["query"] == "5712g </script><script>alert(1)</script>"
+    assert sidecar["payload"]["result_page_schema_version"] == 1
     assert (
         sidecar["payload"]["results"][0]["source_url"]
         == "https://watchfacts.example/listing/5712g"

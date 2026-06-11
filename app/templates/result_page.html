@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WatchFacts Results</title>
+  <link rel="icon" href="data:,">
+  <style>
+__WATCHFACTS_RESULTS_CSS__
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div class="wrap header-inner">
+      <div class="header-main">
+        <div class="eyebrow">WatchFacts search</div>
+        <h1><span class="sr-only">Query </span><span class="query" id="queryText">No result payload</span></h1>
+        <div class="header-meta" id="resultsMeta" aria-label="Result page metadata">
+          <span class="meta-chip"><span class="meta-label">Generated</span><span class="meta-value" id="createdAt">Unknown</span></span>
+          <span class="meta-chip"><span class="meta-label">Expires</span><span class="meta-value" id="expiresAt">Unknown</span></span>
+          <span class="meta-chip"><span class="meta-label">Page</span><span class="meta-value" id="pageRange">Unavailable</span></span>
+        </div>
+      </div>
+      <div class="summary-panel" aria-label="Result summary">
+        <div class="summary-item summary-total">
+          <span class="summary-label">Total</span>
+          <span class="summary-value" id="resultCount">0</span>
+        </div>
+        <div class="summary-item summary-status">
+          <span class="summary-label">Status</span>
+          <span class="summary-value status-value" id="pageStatus">Unavailable</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="commandbar" aria-label="Result controls">
+    <div class="wrap toolbar-inner">
+      <div class="search-control">
+        <label class="sr-only" for="filterInput">Filter results</label>
+        <input id="filterInput" type="search" autocomplete="off" placeholder="Filter model, seller, phone, source">
+      </div>
+      <div class="sort-control">
+        <label class="sr-only" for="sortSelect">Sort results</label>
+        <select id="sortSelect" aria-label="Sort results">
+          <option value="rank">Rank</option>
+          <option value="posted_desc">Posted date</option>
+          <option value="seller">Seller</option>
+        </select>
+      </div>
+      <div class="toolbar-actions">
+        <div class="density-toggle" role="group" aria-label="View density">
+          <button type="button" id="densityComfortable" aria-pressed="true">Comfort</button>
+          <button type="button" id="densityDense" aria-pressed="false">Dense</button>
+        </div>
+        <button type="button" class="tool-button" id="copyPageLink">Link</button>
+        <button type="button" class="tool-button" id="exportJson">JSON</button>
+        <button type="button" class="tool-button" id="exportCsv">CSV</button>
+        <button type="button" class="tool-button" id="printPage">Print</button>
+      </div>
+    </div>
+  </section>
+
+  <main class="wrap">
+    <div class="results-head">
+      <div class="status" id="statusText" role="status" aria-live="polite"></div>
+      <div class="view-note" id="viewNote"></div>
+    </div>
+    <section class="results" id="resultsList" aria-label="WatchFacts results"></section>
+  </main>
+
+  <div class="result-modal" id="resultModal" role="dialog" aria-modal="true" aria-labelledby="resultModalTitle" hidden>
+    <div class="modal-backdrop" id="resultModalBackdrop"></div>
+    <div class="modal-panel" id="resultModalPanel" role="document">
+      <div class="modal-header">
+        <div class="modal-heading">
+          <p class="modal-kicker" id="resultModalKicker"></p>
+          <h2 class="modal-title" id="resultModalTitle">Result details</h2>
+        </div>
+        <button type="button" class="modal-close" id="resultModalClose">Close</button>
+      </div>
+      <div class="modal-body" id="resultModalBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+__WATCHFACTS_RESULTS_JS__
+  </script>
+</body>
+</html>

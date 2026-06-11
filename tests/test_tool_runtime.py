@@ -385,6 +385,7 @@ def test_watchfacts_search_payload_adds_result_page_when_enabled(tmp_path) -> No
         "url": payload["result_page"]["url"],
         "expires_at": payload["result_page"]["expires_at"],
         "result_count": 2,
+        "schema_version": 1,
     }
     assert payload["result_page"]["url"].startswith("https://mcp.example/results/")
     html_files = list(settings.result_page_storage_dir.glob("*.html"))
