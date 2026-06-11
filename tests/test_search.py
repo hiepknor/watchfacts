@@ -92,6 +92,7 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
         "rejection_reasons": {
             "dedupe.latest_listing": 0,
             "dedupe.text": 0,
+            "guardrail.blocked_final": 0,
         },
     }
     assert [event.stage for event in workflow.last_search_audit_events] == [
@@ -1810,3 +1811,41 @@ def test_search_workflow_final_dedupe_keeps_newest_when_text_matches_across_sell
     assert results[0].seller == "Chris"
     assert results[0].posted_date == "April 5, 2026"
     assert results[0].source_url == "/flash-sales/21"
+
+
+def test_search_workflow_blocks_short_model_final_phrase_miss() -> None:
+    events: list[search_module.SearchAuditEvent] = []
+    query_intent = search_module.classify_query_intent("Lange 1")
+    clear_lange_1 = SearchResult(
+        "1 Series 101.031 Watch LANGE 1 101.031 38.5 mm watch only 24500usd",
+        posted_date="May 14, 2026",
+    )
+    zeitwerk_false_positive = SearchResult(
+        "1,163,000 145.032 Zeitwerk, Used Full set | HKD 821,000 Lange Zeitwerk",
+        seller="Member 6685",
+        posted_date="May 28, 2026",
+        raw_listing_text=(
+            "Rolex and others 336938 green Jub 540000 hkd "
+            "1,163,000 145.032 Zeitwerk, Used Full set | HKD 821,000 Lange Zeitwerk"
+        ),
+    )
+    results = [clear_lange_1, zeitwerk_false_positive]
+
+    blocked_count = WatchFactsSearchWorkflow._audit_and_filter_blocked_final_results(
+        events,
+        query="Lange 1",
+        query_intent=query_intent,
+        results=results,
+    )
+
+    assert blocked_count == 1
+    assert results == [clear_lange_1]
+    blocked_events = [
+        event
+        for event in events
+        if event.stage == "blocked_final"
+    ]
+    assert len(blocked_events) == 1
+    assert blocked_events[0].decision == "exclude"
+    assert blocked_events[0].guardrail_action == "block_from_final"
+    assert "guardrail.brand_model_phrase_missing" in blocked_events[0].reason_codes

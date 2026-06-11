@@ -26,7 +26,7 @@ from app.matcher import (
 )
 from app.parser import ListingCandidate, parse_listings
 from app.query_intent import QueryIntentMetadata, classify_query_intent
-from app.result_scoring import rank_results_by_quality
+from app.result_scoring import rank_results_by_quality, score_result
 from app.scraper import ScrapeResult, fetch_watchfacts_html
 from app.search_result import SearchResult, search_results_to_dicts
 from app.similarity import group_similar_results
@@ -35,7 +35,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v13"
+SEARCH_CACHE_VERSION = "search-v14"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -371,6 +371,12 @@ class WatchFactsSearchWorkflow:
         )
         unique_text_count = len(unique)
         unique = rank_results_by_quality(unique, query=query)
+        blocked_final_count = self._audit_and_filter_blocked_final_results(
+            audit_events,
+            query=query,
+            query_intent=query_intent,
+            results=unique,
+        )
         unique = group_similar_results(unique, query=query)
         fuzzy_scores = [
             score_fuzzy_match(query, result.listing_text).overall_score
@@ -418,6 +424,7 @@ class WatchFactsSearchWorkflow:
             rejection_reasons={
                 "dedupe.latest_listing": latest_drop_count,
                 "dedupe.text": text_drop_count,
+                "guardrail.blocked_final": blocked_final_count,
             },
         )
 
@@ -596,6 +603,51 @@ class WatchFactsSearchWorkflow:
                 )
             )
         return dropped
+
+    @staticmethod
+    def _audit_and_filter_blocked_final_results(
+        audit_events: list[SearchAuditEvent],
+        *,
+        query: str,
+        query_intent: QueryIntentMetadata,
+        results: list[SearchResult],
+    ) -> int:
+        kept: list[SearchResult] = []
+        blocked = 0
+        for index, result in enumerate(results, start=1):
+            score = score_result(result, original_rank=index - 1, query=query)
+            if not _should_block_short_model_phrase_miss(result, score.reasons, query):
+                kept.append(result)
+                continue
+
+            blocked += 1
+            fuzzy_score = score_fuzzy_match(query, result.listing_text).overall_score
+            audit_events.append(
+                SearchAuditEvent(
+                    query=query,
+                    stage="blocked_final",
+                    candidate_id=f"blocked_final:{index}",
+                    rank=index,
+                    seller=result.seller,
+                    posted_date=result.posted_date,
+                    source_url=result.source_url,
+                    has_image=bool(result.image_url),
+                    text=result.raw_listing_text or result.listing_text,
+                    reason_codes=(
+                        "guardrail.brand_model_phrase_missing",
+                        "blocked.short_model_phrase_missing",
+                    ),
+                    decision="exclude",
+                    query_intent=query_intent.kind,
+                    fuzzy_score=fuzzy_score,
+                    guardrail_action="block_from_final",
+                    stable_audit_id=_stable_audit_id(result),
+                )
+            )
+
+        if blocked:
+            results[:] = kept
+        return blocked
 
     @staticmethod
     def _audit_match_confidence(
@@ -865,6 +917,23 @@ def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:
         source_url=listing.source_url,
         raw_listing_text=listing.listing_text,
     )
+
+
+def _should_block_short_model_phrase_miss(
+    result: SearchResult,
+    score_reasons: tuple[str, ...],
+    query: str,
+) -> bool:
+    if "guardrail.brand_model_phrase_missing" not in score_reasons:
+        return False
+    if not result.raw_listing_text or result.raw_listing_text == result.listing_text:
+        return True
+    raw_score = score_result(
+        SearchResult(result.raw_listing_text),
+        original_rank=0,
+        query=query,
+    )
+    return "guardrail.brand_model_phrase_missing" in raw_score.reasons
 
 
 def _product_image_url(
