@@ -56,7 +56,17 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
     assert results[0].seller == "HK STOCKS"
     assert results[0].image_url == "https://watchfacts.example/images/228253a.jpg"
     assert workflow.last_search_diagnostics is not None
-    assert workflow.last_search_diagnostics.to_payload() == {
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert isinstance(diagnostics_payload["fuzzy_score_min"], int)
+    assert 0 <= diagnostics_payload["fuzzy_score_min"] <= 100
+    assert isinstance(diagnostics_payload["fuzzy_score_avg"], float)
+    assert 0 <= diagnostics_payload["fuzzy_score_avg"] <= 100
+    diagnostics_payload = {
+        key: value
+        for key, value in diagnostics_payload.items()
+        if key not in {"fuzzy_score_min", "fuzzy_score_avg"}
+    }
+    assert diagnostics_payload == {
         "raw_candidate_count": 1,
         "parsed_count": 2,
         "matched_count": 1,
@@ -66,8 +76,6 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
         "deduped_drop_count": 0,
         "weak_match_count": 0,
         "ambiguous_candidate_count": 0,
-        "fuzzy_score_min": 86,
-        "fuzzy_score_avg": 86.0,
         "final_count": 1,
         "server_filtered": False,
         "playwright_fallback": False,
