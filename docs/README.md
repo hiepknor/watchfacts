@@ -15,6 +15,7 @@ Hermes.
 | [Product Spec](product-spec.md) | Product goals, users, behavior, acceptance criteria, and non-goals |
 | [Technical Spec](technical-spec.md) | Architecture, modules, data model, matching rules, and error handling |
 | [System Design Review](system-design-review.md) | Architecture review snapshot, strengths, risks, and prioritized follow-ups |
+| [Search Quality Improvement Plan](search-quality-improvement-plan.md) | One-month plan for image attribution, stock-list scoping, audit visibility, and deploy verification |
 | [Continuous Improvement Spec](continuous-improvement.md) | Feedback buttons, issue storage, suspicious-result detection, and regression loop |
 | [Result Quality Scoring Spec](result-quality-scoring.md) | Next-phase ranking, matcher diagnostics, score reasons, and refactor guardrails |
 | [Production Quality Audit Spec](production-quality-audit.md) | Production query audit loop, issue classification, ambiguous price policy, and deploy verification |
@@ -49,6 +50,7 @@ Agents should read documents selectively:
 - For crawler changes: read `technical-spec.md`, `security-compliance.md`, and ADR-002.
 - For matching/parser changes: read `technical-spec.md` and ADR-001.
 - For result ranking or next-phase matcher diagnostics: read `result-quality-scoring.md`, `technical-spec.md`, and ADR-001.
+- For search quality improvement work: read `search-quality-improvement-plan.md`, `system-design-review.md`, `production-quality-audit.md`, and `result-quality-scoring.md`.
 - For production query audits or quality gate changes: read `production-quality-audit.md`, `result-quality-scoring.md`, and `operations.md`.
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.
 - For OpenAI controlled refinement: read `roadmap.md` Milestone 7, `implementation-plan.md` Phase 7, `technical-spec.md`, `security-compliance.md`, and ADR-005.
