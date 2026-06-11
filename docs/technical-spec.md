@@ -97,7 +97,7 @@ Expected environment:
 | `OPENWA_API_KEY` | Required for OpenWA handoff | None | OpenWA operator API key |
 | `OPENWA_DASHBOARD_URL` | No | None | Public OpenWA dashboard URL used for returned links |
 | `OPENWA_CHAT_DRAFT_ENDPOINT` | No | `/api/chats/drafts` | OpenWA draft endpoint path |
-| `HERMES_DOCKER_NETWORK` | Server deploy only | `hermes-agent_default` | Docker network joined by `watchfacts-mcp` so Hermes can call it |
+| `HERMES_DOCKER_NETWORK` | Server deploy only | `hermes-network` | Docker network joined by `watchfacts-mcp` so Hermes can call it |
 
 Configuration rules:
 
