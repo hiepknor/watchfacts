@@ -35,7 +35,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v16"
+SEARCH_CACHE_VERSION = "search-v17"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -1006,11 +1006,6 @@ def attribute_product_image(
 
     candidate_text = listing_text or listing.listing_text
     if _looks_like_multi_listing_for_image(listing.listing_text):
-        if (
-            not _looks_like_multi_listing_for_image(candidate_text)
-            and _query_is_color_specific(query)
-        ):
-            return ImageAttribution(listing.image_url, "image.inherited_parent_color")
         if _is_first_scoped_listing_for_image(
             raw_text=listing.listing_text,
             candidate_text=candidate_text,

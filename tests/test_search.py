@@ -361,7 +361,7 @@ def test_attribute_product_image_marks_missing_source() -> None:
     assert attribution.reason == "image.missing_source"
 
 
-def test_attribute_product_image_inherits_parent_image_for_color_scoped_listing() -> None:
+def test_attribute_product_image_inherits_parent_image_for_first_color_scoped_item() -> None:
     attribution = search_module.attribute_product_image(
         ListingCandidate(
             listing_text=(
@@ -375,7 +375,7 @@ def test_attribute_product_image_inherits_parent_image_for_color_scoped_listing(
     )
 
     assert attribution.image_url == "https://watchfacts.example/7118-parent.jpg"
-    assert attribution.reason == "image.inherited_parent_color"
+    assert attribution.reason == "image.inherited_parent_first_item"
 
 
 def test_attribute_product_image_inherits_parent_image_for_first_scoped_item() -> None:
@@ -393,6 +393,24 @@ def test_attribute_product_image_inherits_parent_image_for_first_scoped_item() -
 
     assert attribution.image_url == "https://watchfacts.example/panerai-first.jpg"
     assert attribution.reason == "image.inherited_parent_first_item"
+
+
+def test_attribute_product_image_omits_color_scoped_bundle_when_reference_precedes() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(
+            listing_text=(
+                "126710BLRO Jub N4 hkd235K "
+                "5205R Green N9/2025 New hkd410K "
+                "5227G Salmon N5 hkd335K"
+            ),
+            image_url="https://watchfacts.example/rolex-parent.jpg",
+        ),
+        listing_text="5205R Green N9/2025 New hkd410K",
+        query="5205r green",
+    )
+
+    assert attribution.image_url is None
+    assert attribution.reason == "image.omitted_bundle_ambiguous"
 
 
 def test_attribute_product_image_omits_bundle_when_other_reference_precedes_item() -> None:
@@ -1341,7 +1359,7 @@ def test_search_workflow_omits_bundle_images_for_multi_listing_cards(tmp_path) -
 
     assert len(results) == 1
     assert results[0].listing_text == "7118/1200A blue N2/2026y 725k hkd"
-    assert results[0].image_url == "https://watchfacts.example/watch-bundle.jpg"
+    assert results[0].image_url is None
 
 
 def test_search_workflow_records_suspicious_incomplete_results(tmp_path) -> None:
