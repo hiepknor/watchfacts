@@ -379,6 +379,21 @@ Run focused queries:
 python scripts/diagnostics/audit_quality.py "5712r" "RM65-01 Lebron" --limit 10
 ```
 
+Run a pasteable MCP latency and surface-quality benchmark against the running
+MCP service:
+
+```bash
+make mcp-benchmark
+MCP_BENCHMARK_FORMAT=jsonl make mcp-benchmark > mcp-benchmark.jsonl
+docker compose -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml exec -T watchfacts-mcp \
+  python scripts/diagnostics/benchmark_mcp_queries.py \
+  --query "Panerai Luminor" --query "Lange 1" --format markdown --allow-empty
+```
+
+Use the benchmark for pass/fail, latency, result counts, intent/cache
+diagnostics, and top-result snippets. Use `audit_quality.py` when a query needs
+quality-group, scoring, image attribution, or raw-to-final funnel evidence.
+
 Write machine-readable output for handoff or later fixture work:
 
 ```bash

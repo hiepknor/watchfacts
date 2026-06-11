@@ -55,3 +55,15 @@ def test_makefile_has_post_deploy_mcp_smoke_set() -> None:
     assert "mcp-wait-healthy restart-hermes mcp-smoke-set" in deploy_target
     assert "scripts/diagnostics/mcp_smoke.py" in smoke_set_target
     assert '--url "$(MCP_SMOKE_URL)"' in smoke_set_target
+
+
+def test_makefile_has_mcp_benchmark_target() -> None:
+    makefile = Path("Makefile").read_text()
+    benchmark_target = makefile.split("\nmcp-benchmark:", 1)[1].split(
+        "\n\nmcp-wait-healthy:",
+        1,
+    )[0]
+
+    assert "scripts/diagnostics/benchmark_mcp_queries.py" in benchmark_target
+    assert '--url "$(MCP_SMOKE_URL)"' in benchmark_target
+    assert "--format $(MCP_BENCHMARK_FORMAT)" in benchmark_target
