@@ -1257,6 +1257,10 @@ _HTML_TEMPLATE = """<!doctype html>
       font-weight: 820;
     }
 
+    .modal-fact-label {
+      color: var(--muted);
+    }
+
     .modal-listing-copy {
       min-width: 0;
       border: 1px solid var(--border);
@@ -1276,6 +1280,13 @@ _HTML_TEMPLATE = """<!doctype html>
       letter-spacing: 0.04em;
       line-height: 1.2;
       text-transform: uppercase;
+    }
+
+    .action-card-description {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.35;
     }
 
     .detail-chip {
@@ -2469,6 +2480,428 @@ _HTML_TEMPLATE = """<!doctype html>
       }
     }
 
+    /* Professional results workspace redesign overrides. */
+    body {
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.09), transparent 24rem),
+        linear-gradient(180deg, #f7faf9 0%, #eef4f2 100%);
+    }
+
+    .page-header {
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(238, 246, 244, 0.94));
+    }
+
+    .header-inner {
+      padding: 1.1rem 0;
+      grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+    }
+
+    .header-main {
+      border-left-color: var(--accent);
+      gap: 0.5rem;
+    }
+
+    .eyebrow {
+      color: var(--accent-strong);
+      letter-spacing: 0.04em;
+    }
+
+    .summary-panel {
+      align-self: stretch;
+    }
+
+    .summary-item {
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 8px 24px rgba(17, 24, 23, 0.06);
+    }
+
+    .commandbar {
+      background: rgba(247, 250, 249, 0.92);
+    }
+
+    .toolbar-inner {
+      grid-template-columns: minmax(18rem, 1fr) minmax(10rem, 12rem) auto;
+    }
+
+    input[type="search"], select, button, .source-link {
+      border-radius: 9px;
+    }
+
+    main.wrap {
+      width: min(1080px, calc(100% - 2rem));
+      padding-top: 1rem;
+    }
+
+    .results {
+      grid-template-columns: 1fr;
+      gap: 0.7rem;
+    }
+
+    .result-card,
+    .results.density-dense .result-card {
+      grid-template-columns: clamp(8.5rem, 18vw, 11.5rem) minmax(0, 1fr);
+      grid-template-rows: auto;
+      grid-template-areas: "media body";
+      min-height: 10.25rem;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 10px 28px rgba(17, 24, 23, 0.055);
+    }
+
+    .result-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 36px rgba(17, 24, 23, 0.09);
+    }
+
+    .result-media,
+    .results.density-dense .result-media {
+      min-height: 100%;
+    }
+
+    .thumb,
+    .results.density-dense .thumb {
+      height: 100%;
+      min-height: 10.25rem;
+      aspect-ratio: auto;
+      border-right: 1px solid var(--border);
+      border-bottom: 0;
+      background:
+        linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0.68));
+    }
+
+    .no-image .thumb {
+      min-height: 10.25rem;
+    }
+
+    .result-body,
+    .results.density-dense .result-body {
+      padding: 0.85rem 0.95rem;
+      gap: 0.7rem;
+      grid-template-rows: minmax(0, 1fr) auto;
+    }
+
+    .listing-display-card {
+      gap: 0.34rem;
+    }
+
+    .listing-line-title .listing-value,
+    .results.density-dense .listing-line-title .listing-value {
+      -webkit-line-clamp: 3;
+      font-size: 1rem;
+      line-height: 1.34;
+      letter-spacing: -0.01em;
+    }
+
+    .listing-line-meta,
+    .results.density-dense .listing-line-meta {
+      font-size: 0.8rem;
+    }
+
+    .result-actions,
+    .results.density-dense .result-actions {
+      grid-template-columns: minmax(0, 1fr) minmax(5.25rem, auto);
+      gap: 0.45rem;
+      align-items: end;
+    }
+
+    .result-actions-primary,
+    .results.density-dense .result-actions-primary {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .action-button, .source-link, .details-toggle,
+    .results.density-dense .action-button,
+    .results.density-dense .source-link,
+    .results.density-dense .details-toggle {
+      min-height: 2.1rem;
+      border-radius: 8px;
+      padding: 0.38rem 0.62rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .details-toggle {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .details-toggle:hover {
+      background: var(--accent-strong);
+      border-color: var(--accent-strong);
+      color: #ffffff;
+    }
+
+    .source-link {
+      background: #f4fbfa;
+    }
+
+    .rank-badge {
+      top: 0.65rem;
+      left: 0.65rem;
+      padding: 0.34rem 0.52rem;
+    }
+
+    .modal-panel {
+      width: min(62rem, calc(100vw - 2rem));
+      max-height: calc(100vh - 2rem);
+      border-radius: 18px;
+      box-shadow: 0 24px 72px rgba(17, 24, 23, 0.28);
+    }
+
+    .modal-header {
+      padding: 1rem 1.15rem;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 247, 245, 0.98));
+    }
+
+    .modal-title {
+      font-size: 1.16rem;
+    }
+
+    .modal-section {
+      padding: 1rem 1.15rem;
+    }
+
+    .modal-hero {
+      grid-template-columns: minmax(12rem, 0.42fr) minmax(0, 1fr);
+      gap: 0.85rem;
+    }
+
+    .modal-media-card,
+    .modal-listing-copy,
+    .modal-primary-action,
+    .report-form,
+    .modal-utility-actions {
+      border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(17, 24, 23, 0.045);
+    }
+
+    .modal-media-card .thumb {
+      min-height: 0;
+      max-height: 18rem;
+      aspect-ratio: 4 / 3;
+      border-radius: 11px;
+    }
+
+    .modal-quick-facts {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.32rem;
+    }
+
+    .modal-fact {
+      justify-content: space-between;
+      border-radius: 10px;
+      padding: 0.38rem 0.5rem;
+      font-size: 0.74rem;
+    }
+
+    .modal-listing-copy {
+      padding: 0.8rem;
+    }
+
+    .listing-display-detail {
+      border-radius: 12px;
+      padding: 0.9rem;
+      gap: 0.6rem;
+    }
+
+    .listing-display-detail .listing-line-title .listing-value {
+      font-size: 1.04rem;
+      line-height: 1.42;
+    }
+
+    .modal-actions-section {
+      padding: 0.85rem 1.15rem;
+      background: #f8fbfa;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+
+    .modal-actions {
+      grid-template-columns: minmax(14rem, 0.8fr) minmax(18rem, 1.2fr);
+      gap: 0.75rem;
+    }
+
+    .modal-primary-action .action-button {
+      min-height: 2.55rem;
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .modal-primary-action .action-button:hover {
+      background: var(--accent-strong);
+      border-color: var(--accent-strong);
+      color: #ffffff;
+    }
+
+    .modal-meta-section {
+      padding: 0.85rem 1.15rem;
+      background: #f5f8f7;
+      grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.8fr);
+    }
+
+    .result-id-wrap,
+    .detail-chip {
+      border-radius: 12px;
+      background: #ffffff;
+    }
+
+    @media (min-width: 1180px) {
+      main.wrap {
+        width: min(1120px, calc(100% - 2rem));
+      }
+
+      .modal-panel {
+        width: min(66rem, calc(100vw - 2rem));
+      }
+    }
+
+    @media (min-width: 761px) and (max-width: 1024px) {
+      main.wrap {
+        width: min(920px, calc(100% - 1.5rem));
+      }
+
+      .results,
+      .results.density-dense {
+        grid-template-columns: 1fr;
+      }
+
+      .result-card,
+      .results.density-dense .result-card {
+        grid-template-columns: clamp(8rem, 20vw, 10rem) minmax(0, 1fr);
+      }
+
+      .modal-panel {
+        width: min(46rem, calc(100vw - 1.5rem));
+      }
+
+      .modal-hero {
+        grid-template-columns: minmax(10rem, 0.48fr) minmax(0, 1fr);
+      }
+
+      .modal-actions,
+      .modal-meta-section {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      main.wrap {
+        width: min(calc(100% - 1rem), 44rem);
+      }
+
+      .header-inner {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar-inner {
+        grid-template-columns: 1fr;
+      }
+
+      .results,
+      .results.density-dense {
+        grid-template-columns: 1fr;
+      }
+
+      .result-card,
+      .results.density-dense .result-card {
+        grid-template-columns: clamp(6rem, 29vw, 7.5rem) minmax(0, 1fr);
+        min-height: 8.75rem;
+        border-radius: 12px;
+      }
+
+      .thumb,
+      .results.density-dense .thumb,
+      .no-image .thumb {
+        min-height: 8.75rem;
+      }
+
+      .result-body,
+      .results.density-dense .result-body {
+        padding: 0.55rem 0.6rem;
+        gap: 0.42rem;
+      }
+
+      .listing-line-title .listing-value,
+      .results.density-dense .listing-line-title .listing-value {
+        -webkit-line-clamp: 3;
+        font-size: 0.86rem;
+        line-height: 1.28;
+      }
+
+      .result-actions,
+      .results.density-dense .result-actions {
+        grid-template-columns: 1fr;
+        gap: 0.3rem;
+      }
+
+      .result-actions-primary,
+      .results.density-dense .result-actions-primary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .result-actions .details-toggle,
+      .results.density-dense .result-actions .details-toggle {
+        width: 100%;
+      }
+
+      .modal-panel {
+        border-radius: 16px;
+      }
+
+      .modal-hero,
+      .modal-actions,
+      .modal-meta-section {
+        grid-template-columns: 1fr;
+      }
+
+      .modal-media-card {
+        grid-template-columns: minmax(6rem, 0.42fr) minmax(0, 1fr);
+      }
+
+      .modal-media-card .thumb {
+        aspect-ratio: 1;
+        max-height: 8rem;
+      }
+
+      .modal-quick-facts {
+        align-content: start;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .result-card,
+      .results.density-dense .result-card {
+        grid-template-columns: clamp(5.5rem, 28vw, 6.5rem) minmax(0, 1fr);
+      }
+
+      .toolbar-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .toolbar-actions .density-toggle {
+        grid-column: 1 / -1;
+      }
+
+      .result-actions-primary,
+      .results.density-dense .result-actions-primary {
+        grid-template-columns: 1fr;
+      }
+
+      .modal-section,
+      .modal-meta-section,
+      .modal-actions-section {
+        padding-left: 0.65rem;
+        padding-right: 0.65rem;
+      }
+    }
+
     @media print {
       .commandbar, .result-actions, .result-modal, .toast {
         display: none;
@@ -2970,12 +3403,15 @@ _HTML_TEMPLATE = """<!doctype html>
 
     function createModalFact(label, value) {
       const fact = createNode("span", "modal-fact");
-      fact.append(createNode("span", "", label), createNode("strong", "", value));
+      fact.setAttribute("aria-label", label + ": " + value);
+      fact.append(createNode("span", "modal-fact-label", label), createNode("strong", "", value));
       return fact;
     }
 
     function createModalQuickFacts(item) {
       const facts = createNode("div", "modal-quick-facts");
+      facts.appendChild(createModalFact("Seller", copyField(item.seller)));
+      facts.appendChild(createModalFact("Posted", formatCopyDate(item.posted_date)));
       if (similarCount(item)) facts.appendChild(createModalFact("Similar", String(similarCount(item))));
       facts.appendChild(createModalFact("Media", hasImage(item) ? "Image" : "No image"));
       return facts;
@@ -3060,6 +3496,7 @@ _HTML_TEMPLATE = """<!doctype html>
       const actions = resultActionConfig();
       const container = createNode("div", "modal-primary-action");
       container.appendChild(createNode("div", "action-card-title", "OpenWA handoff"));
+      container.appendChild(createNode("p", "action-card-description", "Create a seller chat draft from this exact result_id."));
       const status = createActionStatus();
       if (!actions.openwa_draft_url || !actions.action_nonce) {
         container.appendChild(makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft", () => copyText(openWaPrompt(item), "OpenWA prompt")));
@@ -3100,6 +3537,7 @@ _HTML_TEMPLATE = """<!doctype html>
       const actions = resultActionConfig();
       const form = createNode("form", "report-form");
       form.appendChild(createNode("div", "action-card-title", "Quality feedback"));
+      form.appendChild(createNode("p", "action-card-description", "Report missing details or a wrong match for review."));
       const status = createActionStatus();
       if (!actions.report_url || !actions.action_nonce) {
         form.appendChild(makeButton("Copy Report", "Copy prompt to report this result", () => copyText(reportPrompt(item), "Report prompt")));

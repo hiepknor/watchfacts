@@ -223,6 +223,12 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert "focusWithoutScroll(lastModalTrigger);" in html
     assert 'return "WatchFacts listing";' in html
     assert 'createModalFact("Media", hasImage(item) ? "Image" : "No image")' in html
+    assert 'class="modal-fact-label"' not in html
+    assert 'fact.setAttribute("aria-label", label + ": " + value);' in html
+    assert 'createNode("span", "modal-fact-label", label)' in html
+    assert 'createModalFact("Source"' not in html
+    assert 'Create a seller chat draft from this exact result_id.' in html
+    assert 'Report missing details or a wrong match for review.' in html
     assert 'function createOpenWaDraftAction(item)' in html
     assert 'function createReportIssueForm(item)' in html
     assert 'function postResultAction(url, item, extra = {})' in html
