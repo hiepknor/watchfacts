@@ -1258,12 +1258,6 @@ _HTML_TEMPLATE = """<!doctype html>
       align-self: start;
     }
 
-    .modal-media-card-no-image .thumb {
-      min-height: 4.75rem;
-      max-height: 5.5rem;
-      aspect-ratio: auto;
-    }
-
     .modal-quick-facts {
       display: flex;
       flex-wrap: wrap;
@@ -2586,17 +2580,6 @@ _HTML_TEMPLATE = """<!doctype html>
       box-shadow: 0 16px 36px rgba(17, 24, 23, 0.09);
     }
 
-    @media (min-width: 761px) {
-      .result-card.no-image {
-        grid-template-columns: 7rem minmax(0, 1fr);
-        min-height: 8rem;
-      }
-
-      .result-card.no-image .thumb {
-        min-height: 8rem;
-      }
-    }
-
     .result-media,
     .results.density-dense .result-media {
       min-height: 100%;
@@ -2615,6 +2598,9 @@ _HTML_TEMPLATE = """<!doctype html>
 
     .no-image .thumb {
       min-height: var(--result-card-min-height);
+      border-right-style: dashed;
+      background:
+        linear-gradient(135deg, rgba(15, 118, 110, 0.07), rgba(255, 255, 255, 0.84));
     }
 
     .result-body,
@@ -2799,12 +2785,6 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 11px;
     }
 
-    .modal-media-card-no-image .thumb {
-      min-height: 4.75rem;
-      max-height: 5.5rem;
-      aspect-ratio: auto;
-    }
-
     .modal-quick-facts {
       display: grid;
       grid-template-columns: 1fr;
@@ -2900,15 +2880,6 @@ _HTML_TEMPLATE = """<!doctype html>
       .result-card,
       .results.density-dense .result-card {
         grid-template-columns: var(--result-media-tablet) minmax(0, 1fr);
-      }
-
-      .result-card.no-image {
-        grid-template-columns: 7rem minmax(0, 1fr);
-        min-height: 8rem;
-      }
-
-      .result-card.no-image .thumb {
-        min-height: 8rem;
       }
 
       .result-actions,
@@ -3078,11 +3049,6 @@ _HTML_TEMPLATE = """<!doctype html>
       .modal-media-card .thumb {
         aspect-ratio: 1;
         max-height: 8rem;
-      }
-
-      .modal-media-card-no-image .thumb {
-        min-height: 5.5rem;
-        max-height: 6rem;
       }
 
       .modal-quick-facts {

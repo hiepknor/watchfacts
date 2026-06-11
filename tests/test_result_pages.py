@@ -254,7 +254,10 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert 'mediaCard.classList.add("modal-media-card-no-image")' in html
     assert 'const listingCopy = createNode("div", "modal-listing-copy");' in html
     assert ".modal-media-card .thumb" in html
-    assert ".modal-media-card-no-image .thumb" in html
+    assert "grid-template-columns: 7rem minmax(0, 1fr)" not in html
+    assert "max-height: 5.5rem" not in html
+    assert "max-height: 6rem" not in html
+    assert "border-right-style: dashed" in html
     assert "position: relative;" in html
     assert 'createNode("div", "modal-section-label", "Listing snapshot")' in html
     assert 'createNode("div", "action-card-title", "OpenWA handoff")' in html
