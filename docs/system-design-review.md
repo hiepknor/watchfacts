@@ -1,9 +1,26 @@
 # System Design Review
 
-Date: 2026-06-10 (latest review update)
+Date: 2026-06-11 (latest review update)
 
-Status: review snapshot, first follow-up fixed
-Additional snapshot: current operational assessment completed.
+Status: review snapshot updated after production validation.
+
+## Current Operational Snapshot (2026-06-11)
+
+- `15510or blue` returns `total_count=40`, `result_count=20`, `has_more=True` on
+  the first page and the same 40 listings on page 2 with no overlap.
+- `15510 or blue` returns the same result set as `15510or blue` (same `source_url`
+  ordering and payload shape at both pages).
+- `15510 or 2026` is a distinct constrained query: `total_count=4`,
+  `result_count=4`, `has_more=False`.
+- For `15510or blue` with `limit=40`, image completeness is currently
+  `image_missing_count=13` (`32.5%` of first 40).
+- Health metrics show quality counters are tracked and queryable:
+  - `image_missing_rate: 0.0181`
+  - `server_filtered_hit_rate: 0.0818`
+  - `playwright_fallback_rate: 0.0`
+
+This confirms parser behavior, pagination, and query normalization (`or` connector)
+are consistent in deployed runtime.
 
 ## Current Assessment Snapshot (2026-06-10)
 
@@ -48,17 +65,26 @@ Additional snapshot: current operational assessment completed.
   groups.
 - No active critical security bypass findings in the current code path.
 
+### Production Evidence Notes (2026-06-11)
+
+- `15510or blue` and `15510 or blue` produce identical sets in MCP output.
+- `playwright_fallback_count` for this query class is `0` in observed runs.
+- Search cache quality counters for these queries are persisted in
+  `search_cache` and visible through query cache metadata.
+
 ### Recommended Next Priorities (next 1-2 weeks)
 
 1. Add a targeted regression test for variants that should inherit parent images
    when the visible variant text is not color-matching but belongs to a color-specific
    group.
-2. Start tracking quality metrics: `image_missing_rate`, `server_filtered_hit_rate`,
-   `search_cache_hit`, `playwright_fallback_rate`.
+2. Reduce image-missing rate for color-specific result groups, especially where
+   parent-level image context should propagate to sub-listing variants.
 3. Consider an internal `stable_listing_id` derived from `source_url` for long-lived
    follow-up/issue workflows, while preserving MCP short-lived `result_id` contract.
 4. Expand health/quality alerting so unusual `result image missing` spikes by query
    class trigger early investigation.
+5. Add cache-hit trend tracking by query class so regressions hidden by cache
+   freshness are easier to detect.
 
 This review complements the product spec, technical spec, operations guide, and
 ADRs. It documents the current system shape, the design choices that are working

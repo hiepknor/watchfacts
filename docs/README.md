@@ -36,6 +36,7 @@ Architecture Decision Records live in [decisions/](decisions/):
 | [ADR-003](decisions/003-sqlite-local-cache.md) | Use SQLite for local cache, dedupe, and query history |
 | [ADR-004](decisions/004-docker-compose-runtime.md) | Use Docker Compose and Makefile as the primary runtime wrapper |
 | [ADR-005](decisions/005-controlled-hybrid-ai-refinement.md) | Use OpenAI controlled AI for result refinement |
+| [ADR-006](decisions/006-result-identity-and-followup-caching.md) | Separate short-lived follow-up `result_id` from durable `stable_listing_id` identity |
 
 ## Agent Usage
 
