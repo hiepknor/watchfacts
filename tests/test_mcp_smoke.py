@@ -15,6 +15,7 @@ def test_validate_search_payload_accepts_required_search_shape() -> None:
         "results": [
             {
                 "result_id": "watchfacts:abc",
+                "stable_listing_id": "watchfacts-listing:def",
                 "rank": 1,
                 "listing_text": "5712G Used 2015 76k usdt",
                 "seller": "Issac",
@@ -43,6 +44,7 @@ def test_validate_search_payload_reports_missing_fields() -> None:
     errors = validate_search_payload(payload)
 
     assert "results[0].result_id is required" in errors
+    assert "results[0].stable_listing_id is required" in errors
     assert "results[0].seller is required" in errors
     assert "results[0].posted_date is required" in errors
     assert "results[0].source_url is required" in errors
@@ -61,6 +63,7 @@ def test_validate_search_payload_allows_nullable_optional_result_fields() -> Non
         "results": [
             {
                 "result_id": "watchfacts:abc",
+                "stable_listing_id": "watchfacts-listing:def",
                 "rank": 1,
                 "listing_text": "5712G Used 2015 76k usdt",
                 "seller": None,
@@ -86,6 +89,7 @@ def test_validate_search_payload_reports_invalid_types_and_pagination() -> None:
         "results": [
             {
                 "result_id": "",
+                "stable_listing_id": "",
                 "rank": 0,
                 "listing_text": "",
                 "seller": 123,
@@ -105,6 +109,7 @@ def test_validate_search_payload_reports_invalid_types_and_pagination() -> None:
     assert "result_count must equal the number of results" in errors
     assert "next_offset must be null when has_more is false" in errors
     assert "results[0].result_id must be a non-empty string" in errors
+    assert "results[0].stable_listing_id must be a non-empty string" in errors
     assert "results[0].rank must be a positive integer" in errors
     assert "results[0].listing_text must be a non-empty string" in errors
     assert "results[0].seller must be a string or null" in errors
@@ -125,6 +130,7 @@ def test_validate_search_payload_requires_next_offset_when_has_more() -> None:
         "results": [
             {
                 "result_id": "watchfacts:abc",
+                "stable_listing_id": "watchfacts-listing:def",
                 "rank": 1,
                 "listing_text": "5712G Used 2015 76k usdt",
                 "seller": None,

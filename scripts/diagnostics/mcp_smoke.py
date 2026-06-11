@@ -31,6 +31,7 @@ REQUIRED_TOP_LEVEL_FIELDS = {
 }
 REQUIRED_RESULT_FIELDS = {
     "result_id",
+    "stable_listing_id",
     "rank",
     "listing_text",
     "seller",
@@ -81,6 +82,12 @@ def validate_search_payload(
             if field not in result:
                 errors.append(f"results[{index}].{field} is required")
         _validate_required_text(result, "result_id", errors, prefix=f"results[{index}].")
+        _validate_required_text(
+            result,
+            "stable_listing_id",
+            errors,
+            prefix=f"results[{index}].",
+        )
         _validate_positive_int(result, "rank", errors, prefix=f"results[{index}].")
         _validate_required_text(
             result,

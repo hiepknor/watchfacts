@@ -1184,6 +1184,41 @@ def test_search_workflow_scopes_variant_reference_and_omits_bundle_image(tmp_pat
     assert results[0].image_url is None
 
 
+def test_server_filtered_json_stock_list_scopes_reference_and_omits_bundle_image(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "HK STOCK LIST 116505 aftermarket rainbow watch only → 284k 5712g new 2024 → 115k 116500 panda 2025 → 31k",
+          "companyName": "Mr Et",
+          "repostedAt": "2026-06-10 10:00:00",
+          "frontImage": "https://watchfacts.example/stock-list-cover.jpg",
+          "number": 9714092
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("5712g"))
+
+    assert len(results) == 1
+    assert results[0].listing_text == "5712g new 2024 → 115k"
+    assert results[0].seller == "Mr Et"
+    assert results[0].image_url is None
+
+
 def test_search_workflow_logs_counts_without_query_or_state_path(tmp_path, caplog) -> None:
     settings = make_settings(tmp_path)
 
