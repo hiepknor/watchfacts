@@ -8,6 +8,7 @@ from pathlib import Path
 import app.search as search_module
 from app.config import Settings
 from app.db import Database
+from app.parser import ListingCandidate
 from app.scraper import ScrapeResult
 from app.search import SEARCH_CACHE_VERSION, WatchFactsSearchWorkflow
 from app.telegram_bot import SearchResult
@@ -226,6 +227,60 @@ def test_search_cache_key_includes_search_cache_version(tmp_path, monkeypatch) -
     second_key = search_module._search_cache_key("5712g", settings)
 
     assert first_key != second_key
+
+
+def test_attribute_product_image_marks_direct_listing_image() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(
+            listing_text="Patek 5712G New 2024 115k",
+            image_url="https://watchfacts.example/5712g.jpg",
+        ),
+        query="5712g",
+    )
+
+    assert attribution.image_url == "https://watchfacts.example/5712g.jpg"
+    assert attribution.reason == "image.direct"
+
+
+def test_attribute_product_image_marks_missing_source() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(listing_text="Patek 5712G New 2024 115k"),
+        query="5712g",
+    )
+
+    assert attribution.image_url is None
+    assert attribution.reason == "image.missing_source"
+
+
+def test_attribute_product_image_inherits_parent_image_for_color_scoped_listing() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(
+            listing_text=(
+                "7118/1200A blue fullset 7118/1200A grey fullset "
+                "5712G new 2024"
+            ),
+            image_url="https://watchfacts.example/7118-parent.jpg",
+        ),
+        listing_text="7118/1200A blue fullset",
+        query="7118/1200a blue",
+    )
+
+    assert attribution.image_url == "https://watchfacts.example/7118-parent.jpg"
+    assert attribution.reason == "image.inherited_parent_color"
+
+
+def test_attribute_product_image_omits_ambiguous_bundle_image() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(
+            listing_text="5712G new 2024 115k 5726/1A used 2022 68k",
+            image_url="https://watchfacts.example/bundle.jpg",
+        ),
+        listing_text="5726/1A used 2022 68k",
+        query="5726/1a",
+    )
+
+    assert attribution.image_url is None
+    assert attribution.reason == "image.omitted_bundle_ambiguous"
 
 
 def test_search_workflow_coalesces_concurrent_same_query_fetches(tmp_path) -> None:

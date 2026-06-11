@@ -75,7 +75,7 @@ def test_format_text_report_includes_bounded_score_summary() -> None:
     assert "summary=audited_result_count:1 image_missing_count:0 image_missing_rate:0.0000" in output
     assert "#1 qg=0 sev=0 date='May 18, 2026' ref=1 desc=0 price=1" in output
     assert "image=True" in output
-    assert "diagnostics=image_reason:image.present scope_reason:scope.full_listing" in output
+    assert "diagnostics=image_reason:image.direct scope_reason:scope.full_listing" in output
     assert "stable_listing_id:watchfacts-listing:" in output
     assert "quality.clean" in output
     assert "text=5712R long long" in output
@@ -137,7 +137,7 @@ def test_build_query_report_marks_stock_list_scope_and_redacts_raw_preview() -> 
     row = report.rows[0]
 
     assert row.scope_reason == "scope.stock_list"
-    assert row.image_reason == "image.missing_scoped_stock_list"
+    assert row.image_reason == "image.omitted_bundle_ambiguous"
     assert row.server_filtered is True
     assert row.raw_listing_preview is not None
     assert "cookie=session" not in row.raw_listing_preview

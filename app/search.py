@@ -7,6 +7,7 @@ import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 from app.config import Settings
 from app.db import Database
@@ -40,6 +41,12 @@ PRODUCT_REFERENCE_RE = re.compile(
 MULTI_LIST_REFERENCE_THRESHOLD = 1
 _IN_FLIGHT_SEARCHES: dict[str, asyncio.Task[list[SearchResult]]] = {}
 _SEARCH_SEMAPHORES: dict[str, asyncio.Semaphore] = {}
+
+
+@dataclass(frozen=True)
+class ImageAttribution:
+    image_url: str | None
+    reason: str
 
 
 class WatchFactsSearchWorkflow:
@@ -380,8 +387,21 @@ def _product_image_url(
     listing_text: str | None = None,
     query: str = "",
 ) -> str | None:
+    return attribute_product_image(
+        listing,
+        listing_text=listing_text,
+        query=query,
+    ).image_url
+
+
+def attribute_product_image(
+    listing: ListingCandidate,
+    *,
+    listing_text: str | None = None,
+    query: str = "",
+) -> ImageAttribution:
     if listing.image_url is None:
-        return None
+        return ImageAttribution(None, "image.missing_source")
 
     candidate_text = listing_text or listing.listing_text
     if _looks_like_multi_listing_for_image(listing.listing_text):
@@ -389,9 +409,9 @@ def _product_image_url(
             not _looks_like_multi_listing_for_image(candidate_text)
             and _query_is_color_specific(query)
         ):
-            return listing.image_url
-        return None
-    return listing.image_url
+            return ImageAttribution(listing.image_url, "image.inherited_parent_color")
+        return ImageAttribution(None, "image.omitted_bundle_ambiguous")
+    return ImageAttribution(listing.image_url, "image.direct")
 
 
 def _looks_like_multi_listing_for_image(listing_text: str) -> bool:

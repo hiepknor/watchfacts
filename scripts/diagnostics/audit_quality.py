@@ -334,9 +334,9 @@ def _scope_reason(result: SearchResult) -> str:
 
 def _image_reason(result: SearchResult, *, scope_reason: str) -> str:
     if result.image_url:
-        return "image.present"
+        return "image.direct"
     if scope_reason == "scope.stock_list":
-        return "image.missing_scoped_stock_list"
+        return "image.omitted_bundle_ambiguous"
     return "image.missing_source"
 
 
