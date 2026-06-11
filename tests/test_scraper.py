@@ -10,15 +10,13 @@ import pytest
 from app.config import Settings
 from app.scraper import (
     BrowserSessionError,
+    BrowserSessionStatus,
     ScrapeResult,
     ScraperError,
+    check_watchfacts_session,
     fetch_watchfacts_html,
 )
-from app.watchfacts_http import (
-    WatchFactsHttpClient,
-    close_watchfacts_http_client,
-    watchfacts_http_client_status,
-)
+from app.watchfacts_http import WatchFactsHttpClient
 
 
 class FakeResponse:
@@ -614,7 +612,7 @@ def test_fetch_watchfacts_html_uses_http_client_for_query(tmp_path) -> None:
     assert fetched == [("5712g", 1234)]
 
 
-def test_fetch_watchfacts_html_falls_back_to_playwright_when_http_client_fails(
+def test_fetch_watchfacts_html_raises_when_http_client_fails(
     tmp_path,
 ) -> None:
     settings = make_settings(tmp_path, http_client_enabled=True)
@@ -628,38 +626,21 @@ def test_fetch_watchfacts_html_falls_back_to_playwright_when_http_client_fails(
             nonlocal closed
             closed = True
 
-    factory, request = make_request_bootstrap_playwright_factory(
-        FakeSearchPage("<html></html>", settings.watchfacts_url),
-        get_response=FakeSearchResponse(
-            body='{"listings":[{"title":"116500 black"}]}',
-            url="https://watchfacts.example/simon-search-matches",
-        ),
-        post_response=FakeSearchResponse(
-            body='{"listings":[{"title":"116500 black"}]}',
-            url="https://watchfacts.example/simon-search-matches",
-        ),
-    )
-    result = asyncio.run(
-        fetch_watchfacts_html(
-            settings,
-            query="116500 black",
-            playwright_factory=factory,
-            http_client_factory=lambda _: FailingHttpClient(),
-            timeout_ms=1234,
+    with pytest.raises(ScraperError, match="HTTPX search failed"):
+        asyncio.run(
+            fetch_watchfacts_html(
+                settings,
+                query="116500 black",
+                playwright_factory=None,
+                http_client_factory=lambda _: FailingHttpClient(),
+                timeout_ms=1234,
+            )
         )
-    )
 
     assert closed is True
-    assert result == ScrapeResult(
-        html='{"listings":[{"title":"116500 black"}]}',
-        final_url="https://watchfacts.example/simon-search-matches",
-        server_filtered=True,
-        used_playwright_fallback=True,
-    )
-    assert request.posts == []
 
 
-def test_fetch_watchfacts_html_falls_back_to_playwright_on_http_timeout(
+def test_fetch_watchfacts_html_raises_when_http_timeout(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -671,9 +652,7 @@ def test_fetch_watchfacts_html_falls_back_to_playwright_on_http_timeout(
         assert active_settings == settings
         assert query == "116500 black"
         assert timeout_ms == 1234
-        exc = ScraperError("HTTPX search timed out")
-        setattr(exc, "watchfacts_http_error_type", "timeout")
-        raise exc
+        raise ScraperError("HTTPX search timed out")
 
     monkeypatch.setattr(
         watchfacts_http,
@@ -681,76 +660,64 @@ def test_fetch_watchfacts_html_falls_back_to_playwright_on_http_timeout(
         failing_http_search,
     )
 
-    factory, request = make_request_bootstrap_playwright_factory(
-        FakeSearchPage("<html></html>", settings.watchfacts_url),
-        get_response=FakeSearchResponse(
-            body='{"listings":[{"title":"116500 black"}]}',
-            url="https://watchfacts.example/simon-search-matches",
-        ),
-        post_response=FakeSearchResponse(
-            body='{"listings":[{"title":"116500 black"}]}',
-            url="https://watchfacts.example/simon-search-matches",
-        ),
-    )
-
-    closed = False
-
-    class TimeoutHttpClient:
-        async def fetch_search(self, query: str, *, timeout_ms: int) -> ScrapeResult:
-            raise ScraperError("HTTPX search timed out")
-
-        async def close(self) -> None:
-            nonlocal closed
-            closed = True
-
-    async def run() -> ScrapeResult:
-        await close_watchfacts_http_client()
-        try:
-            return await fetch_watchfacts_html(
+    with pytest.raises(ScraperError, match="HTTPX search timed out"):
+        asyncio.run(
+            fetch_watchfacts_html(
                 settings,
                 query="116500 black",
-                playwright_factory=factory,
-                http_client_factory=lambda _: TimeoutHttpClient(),
                 timeout_ms=1234,
             )
-        finally:
-            await close_watchfacts_http_client()
+        )
 
-    result = asyncio.run(run())
 
-    assert closed is True
-    assert result == ScrapeResult(
-        html='{"listings":[{"title":"116500 black"}]}',
-        final_url="https://watchfacts.example/simon-search-matches",
-        server_filtered=True,
-        used_playwright_fallback=True,
-    )
-    assert request.posts == []
+def test_fetch_watchfacts_html_requires_query(tmp_path) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=True)
+
+    with pytest.raises(ScraperError, match="A non-empty query is required"):
+        asyncio.run(fetch_watchfacts_html(settings))
+
+
+def test_fetch_watchfacts_html_rejects_query_when_http_client_is_disabled(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path, http_client_enabled=False)
+
+    with pytest.raises(ScraperError, match="HTTP search client is disabled"):
+        asyncio.run(
+            fetch_watchfacts_html(
+                settings,
+                query="116500 black",
+                timeout_ms=1234,
+            )
+        )
 
 
 def test_missing_browser_state_raises_clear_error(tmp_path) -> None:
     settings = make_settings(tmp_path, state_exists=False)
 
-    with pytest.raises(BrowserSessionError, match="Run `python scripts/ops/login.py` first"):
-        asyncio.run(fetch_watchfacts_html(settings))
+    with pytest.raises(
+        BrowserSessionError, match="Run `python scripts/ops/login.py` first"
+    ):
+        asyncio.run(fetch_watchfacts_html(settings, query="116500 black"))
 
 
-def test_fetch_watchfacts_html_loads_state_and_navigates_to_configured_url(tmp_path) -> None:
+def test_check_watchfacts_session_loads_state_and_navigates_to_configured_url(tmp_path) -> None:
     settings = make_settings(tmp_path)
     page = FakePage("<html><body>Listings</body></html>", settings.watchfacts_url)
     factory, chromium, browser, context = make_playwright_factory(page)
 
-    result = asyncio.run(
-        fetch_watchfacts_html(
+    status = asyncio.run(
+        check_watchfacts_session(
             settings,
             playwright_factory=factory,
             timeout_ms=1234,
         )
     )
 
-    assert result == ScrapeResult(
-        html="<html><body>Listings</body></html>",
-        final_url=settings.watchfacts_url,
+    assert status == BrowserSessionStatus(
+        ok=True,
+        status="valid",
+        detail="Saved browser session is valid.",
     )
     assert chromium.headless is True
     assert browser.storage_state == settings.browser_state_path
@@ -759,26 +726,7 @@ def test_fetch_watchfacts_html_loads_state_and_navigates_to_configured_url(tmp_p
     assert browser.closed is True
 
 
-def test_fetch_watchfacts_html_rejects_query_when_http_client_is_disabled(
-    tmp_path,
-) -> None:
-    settings = make_settings(tmp_path, http_client_enabled=False)
-
-    def fail_playwright_factory():
-        raise AssertionError("Playwright should not launch for query search")
-
-    with pytest.raises(ScraperError, match="HTTP search client is disabled"):
-        asyncio.run(
-            fetch_watchfacts_html(
-                settings,
-                query="116500 black",
-                playwright_factory=fail_playwright_factory,
-                timeout_ms=1234,
-            )
-        )
-
-
-def test_expired_browser_state_raises_clear_error(tmp_path) -> None:
+def test_check_watchfacts_session_raises_on_expired_session(tmp_path) -> None:
     settings = make_settings(tmp_path)
     page = FakePage(
         "<html><body><input type=\"password\"></body></html>",
@@ -786,14 +734,24 @@ def test_expired_browser_state_raises_clear_error(tmp_path) -> None:
     )
     factory, _, _, _ = make_playwright_factory(page)
 
-    with pytest.raises(BrowserSessionError, match="appears expired"):
-        asyncio.run(fetch_watchfacts_html(settings, playwright_factory=factory))
+    status = asyncio.run(check_watchfacts_session(settings, playwright_factory=factory))
+
+    assert status == BrowserSessionStatus(
+        ok=False,
+        status="expired",
+        detail="Saved browser session appears expired.",
+    )
 
 
-def test_http_error_raises_scraper_error(tmp_path) -> None:
+def test_check_watchfacts_session_http_error_status(tmp_path) -> None:
     settings = make_settings(tmp_path)
     page = FakePage("<html></html>", settings.watchfacts_url, response_status=500)
     factory, _, _, _ = make_playwright_factory(page)
 
-    with pytest.raises(ScraperError, match="HTTP 500"):
-        asyncio.run(fetch_watchfacts_html(settings, playwright_factory=factory))
+    status = asyncio.run(check_watchfacts_session(settings, playwright_factory=factory))
+
+    assert status == BrowserSessionStatus(
+        ok=False,
+        status="http_error",
+        detail="WatchFacts returned HTTP 500.",
+    )

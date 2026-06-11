@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +15,6 @@ from app.watchfacts_forms import (
 
 DEFAULT_TIMEOUT_MS = 30_000
 SEARCH_TIMEOUT_MS = 90_000
-logger = logging.getLogger(__name__)
 
 
 class ScraperError(RuntimeError):
@@ -178,79 +176,29 @@ async def fetch_watchfacts_html(
             "Run `python scripts/ops/login.py` first."
         )
 
-    if playwright_factory is None:
-        from playwright.async_api import async_playwright
-
-        playwright_factory = async_playwright
-
     normalized_query = query.strip() if query is not None else ""
-    if normalized_query and not settings.watchfacts_http_client_enabled:
+    if not normalized_query:
+        raise ScraperError("A non-empty query is required for search.")
+    if not settings.watchfacts_http_client_enabled:
         raise ScraperError("WatchFacts HTTP search client is disabled.")
 
-    used_playwright_fallback = False
-    if normalized_query and settings.watchfacts_http_client_enabled:
-        if http_client_factory is not None:
-            http_client = http_client_factory(settings)
-            try:
-                return await http_client.fetch_search(
-                    normalized_query,
-                    timeout_ms=timeout_ms,
-                )
-            except Exception as exc:
-                logger.info(
-                    "event=watchfacts_http_client.search_failed error_type=%s",
-                    _http_error_type(exc),
-                )
-            finally:
-                await http_client.close()
-        else:
-            from app.watchfacts_http import (
-                fetch_watchfacts_http_search,
-                watchfacts_http_error_type,
+    if http_client_factory is not None:
+        http_client = http_client_factory(settings)
+        try:
+            return await http_client.fetch_search(
+                normalized_query,
+                timeout_ms=timeout_ms,
             )
+        finally:
+            await http_client.close()
 
-            try:
-                return await fetch_watchfacts_http_search(
-                    settings,
-                    normalized_query,
-                    timeout_ms=timeout_ms,
-                )
-            except Exception as exc:
-                logger.info(
-                    "event=watchfacts_http_client.search_failed error_type=%s",
-                    watchfacts_http_error_type(exc),
-                )
+    from app.watchfacts_http import fetch_watchfacts_http_search
 
-        used_playwright_fallback = True
-
-    if playwright_factory is None:
-        from playwright.async_api import async_playwright
-        playwright_factory = async_playwright
-
-    result = await _fetch_watchfacts_html_with_playwright(
+    return await fetch_watchfacts_http_search(
         settings,
-        query=query,
-        playwright_factory=playwright_factory,
+        normalized_query,
         timeout_ms=timeout_ms,
     )
-    if not used_playwright_fallback:
-        return result
-    return ScrapeResult(
-        html=result.html,
-        final_url=result.final_url,
-        server_filtered=result.server_filtered,
-        used_playwright_fallback=True,
-    )
-
-
-def _http_error_type(exc: Exception) -> str:
-    tagged = getattr(exc, "watchfacts_http_error_type", None)
-    if isinstance(tagged, str) and tagged:
-        return tagged
-    class_name = exc.__class__.__name__
-    if "timeout" in class_name.casefold():
-        return "timeout"
-    return class_name
 
 
 async def _fetch_watchfacts_html_with_playwright(

@@ -21,7 +21,12 @@ from app.openwa_handoff import (
 from app.result_pages import ResultPageConfig, generate_result_page
 from app.scraper import BrowserSessionStatus, check_watchfacts_session
 from app.search import WatchFactsSearchWorkflow, _search_cache_key
-from app.search_result import SearchResult, search_result_to_dict, source_result_id
+from app.search_result import (
+    SearchResult,
+    search_result_to_dict,
+    source_result_id,
+    stable_listing_id,
+)
 from app.watchfacts_http import (
     WatchFactsHttpClientStatus,
     warm_watchfacts_http_client,
@@ -471,6 +476,7 @@ def _search_result_payload(
         {
             "rank": rank,
             "result_id": result_id,
+            "stable_listing_id": stable_listing_id(result),
             "source_result_id": result_id,
         }
     )
@@ -490,12 +496,15 @@ def _store_results(
     cache_key = _result_cache_key(query, settings) if settings is not None else None
     for rank, result in enumerate(results, start=1):
         result_id = _source_result_id(query, rank, result)
-        _RESULT_CACHE[result_id] = StoredResult(
+        stable_id = stable_listing_id(result)
+        stored = StoredResult(
             query=query,
             rank=rank,
             result=result,
             stored_at=now,
         )
+        _RESULT_CACHE[result_id] = stored
+        _RESULT_CACHE[stable_id] = stored
     if cache_key is not None and settings is not None:
         Database(settings.db_path).record_search_result_references(
             cache_key=cache_key,
@@ -520,8 +529,9 @@ async def _resolve_result(
         return stored
 
     database = Database(settings.db_path)
+    cache_key = _result_cache_key(query, settings)
     cached = database.get_fresh_search_result_reference_by_id(
-        cache_key=_result_cache_key(query, settings),
+        cache_key=cache_key,
         result_id=result_id,
     )
     if cached is not None:
@@ -533,6 +543,23 @@ async def _resolve_result(
             stored_at=now,
         )
         _RESULT_CACHE[result_id] = stored
+        return stored
+
+    cached = database.get_fresh_search_result_reference_by_stable_listing_id(
+        cache_key=cache_key,
+        stable_listing_id=result_id,
+    )
+    if cached is not None:
+        rank, result = cached
+        result_id = _source_result_id(query, rank, result)
+        stored = StoredResult(
+            query=query,
+            rank=rank,
+            result=result,
+            stored_at=now,
+        )
+        _RESULT_CACHE[result_id] = stored
+        _RESULT_CACHE[stable_listing_id(result)] = stored
         return stored
 
     active_workflow = workflow or WatchFactsSearchWorkflow(settings)

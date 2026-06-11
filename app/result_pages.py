@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-from app.search_result import SearchResult, source_result_id
+from app.search_result import SearchResult, source_result_id, stable_listing_id
 
 
 TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
@@ -200,6 +200,7 @@ def _result_payload(
     return {
         "rank": rank,
         "result_id": result_id,
+        "stable_listing_id": stable_listing_id(result),
         "source_result_id": result_id,
         "listing_text": listing_text,
         "listing_text_preview": {

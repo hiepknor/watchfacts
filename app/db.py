@@ -445,6 +445,41 @@ class Database:
             )
             return result_rank, result
 
+    def get_fresh_search_result_reference_by_stable_listing_id(
+        self,
+        *,
+        cache_key: str,
+        stable_listing_id: str,
+    ) -> tuple[int, SearchResult] | None:
+        now = _utc_now()
+        with self.connect() as connection:
+            _ensure_schema(connection)
+            row = connection.execute(
+                """
+                SELECT result_rank, result_json
+                FROM result_reference_cache
+                WHERE search_cache_key = ? AND stable_listing_id = ? AND expires_at > ?
+                ORDER BY last_used_at DESC
+                LIMIT 1
+                """,
+                (cache_key, stable_listing_id, now),
+            ).fetchone()
+            if row is None:
+                return None
+            result_rank = int(row[0])
+            result = _search_result_from_payload(str(row[1]))
+            if result is None:
+                return None
+            connection.execute(
+                """
+                UPDATE result_reference_cache
+                SET last_used_at = ?
+                WHERE search_cache_key = ? AND stable_listing_id = ?
+                """,
+                (now, cache_key, stable_listing_id),
+            )
+            return result_rank, result
+
     def get_fresh_search_result_reference_by_rank(
         self,
         *,

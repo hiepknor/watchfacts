@@ -577,6 +577,31 @@ def test_record_search_result_references_stores_stable_listing_id(tmp_path) -> N
     ]
 
 
+def test_result_reference_cache_can_lookup_by_stable_listing_id(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    results = (
+        SearchResult("15510OR black", source_url="/flash-sales/111", posted_date="June 1, 2026"),
+        SearchResult("15510OR blue", source_url="/flash-sales/222", posted_date="June 2, 2026"),
+    )
+    cache_key = _search_cache_key("15510or", settings)
+
+    database.record_search_result_references(
+        cache_key=cache_key,
+        query_text="15510or",
+        results=results,
+        ttl_seconds=120,
+    )
+    stable_id = stable_listing_id(results[1])
+    by_stable = database.get_fresh_search_result_reference_by_stable_listing_id(
+        cache_key=cache_key,
+        stable_listing_id=stable_id,
+    )
+
+    assert by_stable == (2, results[1])
+
+
 def test_record_search_result_references_keeps_stable_ids_for_same_source_url(tmp_path) -> None:
     db_path = tmp_path / "data" / "bot.db"
     database = Database(db_path)
