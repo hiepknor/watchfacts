@@ -23,6 +23,10 @@ KARAT_GOLD_RE = re.compile(
     r"\b(?:9|10|14|18|19|20|21|22|24)k\s+(?:(?:rose|yellow|white|pink)\s+)?gold\b",
     re.IGNORECASE,
 )
+PRODUCT_REFERENCE_RE = re.compile(
+    r"\b(?=[a-z0-9/.-]*\d)[a-z0-9]+(?:[./-][a-z0-9]+)*\b",
+    re.IGNORECASE,
+)
 
 
 def detect_suspicious_result(
@@ -40,15 +44,19 @@ def detect_suspicious_result(
     if _ends_with_price_marker(normalized):
         issues.append(SuspiciousIssue("ends_with_price_marker", 3))
 
+    if raw_normalized and _missing_price_after_currency(normalized, raw_normalized):
+        issues.append(SuspiciousIssue("missing_price_after_currency", 3))
+
+    if _scoped_stock_list_missing_price(normalized, raw_normalized):
+        issues.append(SuspiciousIssue("scoped_stock_list_missing_price", 2))
+
     if (
-        raw_normalized
+        not issues
+        and raw_normalized
         and _raw_much_longer(normalized, raw_normalized)
         and not _has_price_evidence(listing_text)
     ):
         issues.append(SuspiciousIssue("raw_much_longer", 2))
-
-    if raw_normalized and _missing_price_after_currency(normalized, raw_normalized):
-        issues.append(SuspiciousIssue("missing_price_after_currency", 3))
 
     if not issues and _missing_price_evidence(normalized):
         issues.append(SuspiciousIssue("missing_price_evidence", 1))
@@ -259,7 +267,43 @@ def _missing_price_evidence(listing_text: str) -> bool:
         return False
     if _looks_like_non_sale_request(listing_text):
         return False
-    return bool(re.search(r"\b(?=[a-z0-9/.-]*\d)[a-z0-9]+(?:[./-][a-z0-9]+)*\b", listing_text))
+    return bool(PRODUCT_REFERENCE_RE.search(listing_text))
+
+
+def _scoped_stock_list_missing_price(listing_text: str, raw_text: str) -> bool:
+    if not raw_text or not listing_text or listing_text == raw_text:
+        return False
+    if _has_price_evidence(listing_text):
+        return False
+    if not _missing_price_evidence(listing_text):
+        return False
+    return _raw_looks_like_stock_list(raw_text)
+
+
+def _raw_looks_like_stock_list(value: str) -> bool:
+    if not re.search(r"\b(?:hk\s+)?stock\s+list\b|\bstocklist\b", value):
+        return False
+    references = {
+        token.casefold()
+        for token in PRODUCT_REFERENCE_RE.findall(value)
+        if _looks_like_product_reference(token)
+    }
+    return len(references) > 1
+
+
+def _looks_like_product_reference(token: str) -> bool:
+    normalized = token.casefold().strip(":,.;")
+    if normalized.isdigit() and len(normalized) == 4:
+        year = int(normalized)
+        if 1900 <= year <= 2099:
+            return False
+    if len(normalized) < 4 and "/" not in normalized:
+        return False
+    if any(currency in normalized for currency in CURRENCY_TOKENS):
+        return False
+    if _looks_like_price_token(normalized):
+        return False
+    return True
 
 
 def _looks_like_non_sale_request(value: str) -> bool:

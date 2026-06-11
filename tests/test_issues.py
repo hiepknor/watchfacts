@@ -285,3 +285,27 @@ def test_detect_suspicious_result_flags_long_raw_without_price() -> None:
     )
 
     assert [issue.reason for issue in issues] == ["raw_much_longer"]
+
+
+def test_detect_suspicious_result_flags_scoped_stock_list_missing_price() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5712g new 2024",
+        raw_listing_text=(
+            "HK STOCK LIST 116505 rainbow 284k "
+            "5712g new 2024 -> 115k 5726/1A used 2022 68k"
+        ),
+    )
+
+    assert [issue.reason for issue in issues] == ["scoped_stock_list_missing_price"]
+
+
+def test_detect_suspicious_result_keeps_priced_stock_list_segment_clean() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5712g new 2024 -> 115k",
+        raw_listing_text=(
+            "HK STOCK LIST 116505 rainbow 284k "
+            "5712g new 2024 -> 115k 5726/1A used 2022 68k"
+        ),
+    )
+
+    assert issues == []

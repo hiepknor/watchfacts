@@ -765,6 +765,18 @@ def test_extract_relevant_listing_text_stops_at_reference_after_complete_price()
     )
 
 
+def test_extract_relevant_listing_text_keeps_stock_list_segment_price() -> None:
+    listing_text = (
+        "HK STOCK LIST 116505 rainbow 284k "
+        "5712g new 2024 -> 115k "
+        "5726/1A used 2022 68k"
+    )
+
+    assert extract_relevant_listing_text("5712g", listing_text) == (
+        "5712g new 2024 -> 115k"
+    )
+
+
 def test_extract_relevant_listing_text_keeps_unicode_currency_prefix() -> None:
     listing_text = "26240BA ALYX 2022💲128.5 + label"
 

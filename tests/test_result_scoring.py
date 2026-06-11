@@ -83,6 +83,32 @@ def test_rank_results_by_quality_keeps_missing_price_after_clean_even_when_newer
     assert ranked == [priced_older, missing_price_newer]
 
 
+def test_rank_results_by_quality_demotes_incomplete_scoped_stock_list_segment() -> None:
+    incomplete = SearchResult(
+        "5712g new 2024",
+        raw_listing_text=(
+            "HK STOCK LIST 116505 rainbow 284k "
+            "5712g new 2024 -> 115k 5726/1A used 2022 68k"
+        ),
+        posted_date="May 18, 2026",
+    )
+    clean = SearchResult(
+        "5712g new 2024 -> 115k",
+        raw_listing_text=(
+            "HK STOCK LIST 116505 rainbow 284k "
+            "5712g new 2024 -> 115k 5726/1A used 2022 68k"
+        ),
+        posted_date="May 17, 2026",
+    )
+
+    incomplete_score = score_result(incomplete, original_rank=0, query="5712g")
+    ranked = rank_results_by_quality([incomplete, clean], query="5712g")
+
+    assert incomplete_score.quality_group == 2
+    assert "suspicious.scoped_stock_list_missing_price" in incomplete_score.reasons
+    assert ranked == [clean, incomplete]
+
+
 def test_rank_results_by_quality_preserves_original_order_when_scores_tie() -> None:
     first = SearchResult("5205R 2026-04 $428000", posted_date="May 17, 2026")
     second = SearchResult("5205R 2026-04 $429000", posted_date="May 17, 2026")
