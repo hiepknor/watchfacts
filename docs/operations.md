@@ -196,6 +196,31 @@ OpenWA chat handoff:
 - The legacy Telegram bot can still use `make deploy-bot OPENWA_COMPOSE=1` if it
   needs to join the separate OpenWA compose network.
 
+Result page modal actions:
+
+- Result page action development is specified in
+  `docs/result-page-actions-plan.md` and ADR-007.
+- When implemented, generated result pages can create OpenWA drafts and record
+  feedback issues from the detail modal.
+- Browser requests must call same-origin routes under `/results/{token}/actions/`
+  and must include the page-scoped `action_nonce`.
+- OpenWA draft creation still uses server-side `.env` values:
+  `ENABLE_OPENWA_CHAT_HANDOFF`, `OPENWA_BASE_URL`, `OPENWA_API_KEY`,
+  `OPENWA_DASHBOARD_URL`, and `OPENWA_CHAT_DRAFT_ENDPOINT`.
+- To smoke test after deploy:
+  1. Run a WatchFacts search that generates a result page.
+  2. Open the result page and open one result's More detail modal.
+  3. Submit a report issue and verify it appears through `list_issues` or
+     `get_issue`.
+  4. If OpenWA is enabled, create a draft and verify the returned dashboard link.
+  5. Check browser console for CSP/connect-src errors.
+- Rollback options:
+  - Disable OpenWA handoff with `ENABLE_OPENWA_CHAT_HANDOFF=false` if draft
+    creation fails.
+  - Hide real action buttons and keep copy utilities if action UI fails.
+  - Disable result pages with `RESULT_PAGE_PUBLIC_BASE_URL=` if page generation
+    or sidecar storage is unsafe.
+
 ## Docker Build
 
 ```bash

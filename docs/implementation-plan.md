@@ -1120,3 +1120,115 @@ Acceptance:
 - [x] Product images are passed through as `image_url` when available.
 - [x] Hermes instructions tell the agent to use `next_offset` for "load more"
   and not invent image links.
+
+## Phase 13: Result Page Real Actions
+
+Status: planned.
+
+Follow [Result Page Real Actions Plan](result-page-actions-plan.md) and
+[ADR-007](decisions/007-result-page-server-side-actions.md). Implement one task
+at a time. After each task, run verification, self-review the diff, commit, and
+only then continue.
+
+### Task 13.1: Add Result Page Action Sidecar
+
+Acceptance:
+
+- [ ] Result page generation writes `{token}.html` and `{token}.json`.
+- [ ] Sidecar contains sanitized result payload plus random `action_nonce`.
+- [ ] Existing `GET /results/{token}` behavior remains unchanged.
+- [ ] Cleanup removes expired HTML and JSON files together.
+- [ ] Missing, invalid, and expired sidecars are covered by tests.
+
+Verify:
+
+```bash
+python -m pytest tests/test_result_pages.py
+python -m compileall app
+```
+
+Commit gate:
+
+- Self-review that no secrets, browser state, or raw WatchFacts HTML are written.
+- Commit before starting Task 13.2.
+
+### Task 13.2: Add Server-Side Action Routes
+
+Acceptance:
+
+- [ ] `POST /results/{token}/actions/openwa-draft` validates token, TTL,
+  `action_nonce`, and `result_id`.
+- [ ] `POST /results/{token}/actions/report` validates token, TTL,
+  `action_nonce`, `result_id`, reason, and notes.
+- [ ] OpenWA draft creation uses server-side OpenWA config only.
+- [ ] Report action records a feedback issue and returns a safe `issue_ref`.
+- [ ] Action routes are rate-limited by client IP and token/action.
+- [ ] All errors return safe structured JSON.
+
+Verify:
+
+```bash
+python -m pytest tests/test_mcp_server.py tests/test_result_pages.py tests/test_openwa_handoff.py tests/test_db.py
+python -m compileall app
+```
+
+Commit gate:
+
+- Self-review nonce checks, rate limit behavior, and error payloads.
+- Commit before starting Task 13.3.
+
+### Task 13.3: Wire Modal UI To Real Actions
+
+Acceptance:
+
+- [ ] `Copy OpenWA` becomes `Create OpenWA draft`.
+- [ ] `Copy Report` becomes an in-modal report form with reason and optional
+  notes.
+- [ ] UI shows loading, success, and retryable error states.
+- [ ] `Copy URL`, `Copy ID`, and similar-list toggle remain available as
+  utility actions.
+- [ ] Modal layout remains responsive at 320, 390, 768, 1024, and 1440 px.
+- [ ] CSP allows same-origin action POSTs without console errors.
+
+Verify:
+
+```bash
+python -m pytest tests/test_result_pages.py tests/test_mcp_server.py
+python -m compileall app
+```
+
+Browser verify:
+
+- Open the generated result page locally.
+- Test action layout at 320, 390, 768, 1024, and 1440 px.
+- Confirm keyboard access and no horizontal overflow.
+- Confirm success/error states do not break modal layout.
+
+Commit gate:
+
+- Self-review accessibility labels, action hierarchy, and failure states.
+- Commit before starting Task 13.4.
+
+### Task 13.4: Final Docs And Production Verification
+
+Acceptance:
+
+- [ ] Operations docs explain result page actions, OpenWA config, smoke checks,
+  and rollback.
+- [ ] Security docs explain public-token action risk and nonce/rate-limit
+  controls.
+- [ ] Technical spec documents route contracts and sidecar behavior.
+- [ ] Production deploy checklist includes OpenWA draft and report issue smoke
+  checks.
+
+Verify:
+
+```bash
+git diff --check
+python -m pytest tests/test_result_pages.py tests/test_mcp_server.py
+```
+
+Commit gate:
+
+- Self-review docs against implemented route names and response shapes.
+- Commit before deploy.

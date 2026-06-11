@@ -19,6 +19,7 @@ Hermes.
 | [Continuous Improvement Spec](continuous-improvement.md) | Feedback buttons, issue storage, suspicious-result detection, and regression loop |
 | [Result Quality Scoring Spec](result-quality-scoring.md) | Next-phase ranking, matcher diagnostics, score reasons, and refactor guardrails |
 | [Production Quality Audit Spec](production-quality-audit.md) | Production query audit loop, issue classification, ambiguous price policy, and deploy verification |
+| [Result Page Real Actions Plan](result-page-actions-plan.md) | Phase plan for turning result-page modal buttons into real OpenWA and issue actions |
 | [Implementation Plan](implementation-plan.md) | Ordered implementation phases and verifiable tasks |
 | [Roadmap](roadmap.md) | Milestones from foundation to production hardening |
 | [Post-Subdomain Upgrade Plan](post-subdomain-upgrade-plan.md) | Recommended upgrade sequence after moving result templates to dedicated public subdomain |
@@ -38,6 +39,7 @@ Architecture Decision Records live in [decisions/](decisions/):
 | [ADR-004](decisions/004-docker-compose-runtime.md) | Use Docker Compose and Makefile as the primary runtime wrapper |
 | [ADR-005](decisions/005-controlled-hybrid-ai-refinement.md) | Use OpenAI controlled AI for result refinement |
 | [ADR-006](decisions/006-result-identity-and-followup-caching.md) | Separate short-lived follow-up `result_id` from durable `stable_listing_id` identity |
+| [ADR-007](decisions/007-result-page-server-side-actions.md) | Use server-side result page actions with page nonces |
 
 ## Agent Usage
 
@@ -53,6 +55,7 @@ Agents should read documents selectively:
 - For search quality improvement work: read `search-quality-improvement-plan.md`, `system-design-review.md`, `production-quality-audit.md`, and `result-quality-scoring.md`.
 - For production query audits or quality gate changes: read `production-quality-audit.md`, `result-quality-scoring.md`, and `operations.md`.
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.
+- For result page modal actions: read `result-page-actions-plan.md`, `technical-spec.md`, `security-compliance.md`, and ADR-007.
 - For OpenAI controlled refinement: read `roadmap.md` Milestone 7, `implementation-plan.md` Phase 7, `technical-spec.md`, `security-compliance.md`, and ADR-005.
 - For deploys: use `make deploy` on the server unless the task is explicitly about the legacy Telegram bot or requires a Hermes/MCP config/schema reload.
 - For commits: follow `AGENTS.md` and the workflow in `contributing.md`.

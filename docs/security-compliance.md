@@ -93,6 +93,30 @@ Logs must not include:
   `search`: `result_id`, `stable_listing_id`, or explicit `rank`.
 - Do not invent or normalize seller phone numbers outside the data returned by WatchFacts/runtime.
 
+## Result Page Action Safety
+
+Generated result pages are public token URLs while they are valid. Treat every
+browser action POST as untrusted, even if the page was opened by the operator.
+
+Rules:
+
+- Require token validation, page TTL validation, `action_nonce` validation, and
+  rate limiting before any result-page action side effect.
+- Keep OpenWA draft creation server-side. Browser code must never receive
+  `OPENWA_API_KEY`, internal OpenWA URLs, `.env` values, cookies, browser state,
+  or database paths.
+- Store only sanitized result-page payloads in action sidecars. Do not store raw
+  WatchFacts HTML, full browser responses, cookies, CSRF tokens, or
+  `data/watchfacts_state.json`.
+- Result page action errors must be safe for public display and must not include
+  stack traces or config details.
+- Anyone with a live result page can use the embedded nonce. Keep result page TTL
+  and action rate limits meaningful, and disable OpenWA handoff if public-link
+  action risk becomes unacceptable.
+- Report issue actions may record displayed listing fields and optional operator
+  notes only. They must not claim access to hidden WatchFacts data that was not
+  present in the result page payload.
+
 ## Web Scraping Boundary
 
 The scraper should act like an authenticated browser controlled by the operator.
