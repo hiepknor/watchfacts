@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -17,8 +18,8 @@ from app.config import load_search_settings
 from app.db import Database
 from app.issues import detect_suspicious_result
 from app.result_scoring import score_result
-from app.search import WatchFactsSearchWorkflow
-from app.search_result import SearchResult
+from app.search import WatchFactsSearchWorkflow, _search_cache_key
+from app.search_result import SearchResult, stable_listing_id
 
 
 DEFAULT_AUDIT_QUERIES = (
@@ -36,6 +37,29 @@ DEFAULT_AUDIT_QUERIES = (
 DEFAULT_LIMIT = 5
 DEFAULT_SNIPPET_CHARS = 220
 ReportFormat = Literal["text", "json"]
+PRODUCT_REFERENCE_RE = re.compile(
+    r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
+    re.IGNORECASE,
+)
+SENSITIVE_CONTEXT_RE = re.compile(
+    r"\b(?:cookie|authorization|bearer|api[_-]?key|token|password|secret)\b\s*[:=]\s*\S+",
+    re.IGNORECASE,
+)
+SENSITIVE_CONTEXT_PATH_RE = re.compile(
+    r"(?:data/)?(?:\.env|watchfacts_state\.json)",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class AuditQuerySummary:
+    audited_result_count: int
+    image_missing_count: int
+    image_missing_rate: float
+    server_filtered_result_count: int
+    scoped_stock_list_count: int
+    suspicious_reason_counts: dict[str, int]
+    image_reason_counts: dict[str, int]
 
 
 @dataclass(frozen=True)
@@ -49,6 +73,12 @@ class AuditResultRow:
     price_evidence_score: int
     score_reasons: tuple[str, ...]
     suspicious_reasons: tuple[str, ...]
+    has_image: bool
+    image_reason: str
+    scope_reason: str
+    server_filtered: bool
+    raw_listing_preview: str | None
+    stable_listing_id: str
     listing_text: str
     seller: str | None
     source_url: str | None
@@ -59,6 +89,7 @@ class AuditQueryReport:
     query: str
     result_count: int
     top_quality_groups: tuple[int, ...]
+    summary: AuditQuerySummary
     rows: tuple[AuditResultRow, ...]
 
 
@@ -68,6 +99,7 @@ def build_query_report(
     *,
     limit: int = DEFAULT_LIMIT,
     snippet_chars: int = DEFAULT_SNIPPET_CHARS,
+    server_filtered: bool = False,
 ) -> AuditQueryReport:
     rows: list[AuditResultRow] = []
     for index, result in enumerate(results[:limit], start=1):
@@ -76,6 +108,8 @@ def build_query_report(
             listing_text=result.listing_text,
             raw_listing_text=result.raw_listing_text,
         )
+        scope_reason = _scope_reason(result)
+        image_reason = _image_reason(result, scope_reason=scope_reason)
         rows.append(
             AuditResultRow(
                 rank=index,
@@ -87,6 +121,12 @@ def build_query_report(
                 price_evidence_score=score.price_evidence_score,
                 score_reasons=score.reasons,
                 suspicious_reasons=tuple(issue.reason for issue in suspicious),
+                has_image=bool(result.image_url),
+                image_reason=image_reason,
+                scope_reason=scope_reason,
+                server_filtered=server_filtered,
+                raw_listing_preview=_raw_listing_preview(result, snippet_chars),
+                stable_listing_id=stable_listing_id(result),
                 listing_text=_snippet(result.listing_text, snippet_chars),
                 seller=_snippet(result.seller, 80) if result.seller else None,
                 source_url=_snippet(result.source_url, 160) if result.source_url else None,
@@ -96,6 +136,7 @@ def build_query_report(
         query=query,
         result_count=len(results),
         top_quality_groups=tuple(row.quality_group for row in rows),
+        summary=_query_summary(rows),
         rows=tuple(rows),
     )
 
@@ -107,6 +148,30 @@ def format_text_report(reports: list[AuditQueryReport]) -> str:
             f"=== {report.query} count={report.result_count} "
             f"top_qg={list(report.top_quality_groups)} ==="
         )
+        lines.append(
+            "summary="
+            f"audited_result_count:{report.summary.audited_result_count} "
+            f"image_missing_count:{report.summary.image_missing_count} "
+            f"image_missing_rate:{report.summary.image_missing_rate:.4f} "
+            f"server_filtered_results:{report.summary.server_filtered_result_count} "
+            f"scoped_stock_list:{report.summary.scoped_stock_list_count}"
+        )
+        if report.summary.suspicious_reason_counts:
+            lines.append(
+                " suspicious_counts="
+                + ",".join(
+                    f"{reason}:{count}"
+                    for reason, count in sorted(report.summary.suspicious_reason_counts.items())
+                )
+            )
+        if report.summary.image_reason_counts:
+            lines.append(
+                " image_reason_counts="
+                + ",".join(
+                    f"{reason}:{count}"
+                    for reason, count in sorted(report.summary.image_reason_counts.items())
+                )
+            )
         if not report.rows:
             lines.append("no_results=true")
             lines.append("")
@@ -118,10 +183,17 @@ def format_text_report(reports: list[AuditQueryReport]) -> str:
                 f"#{row.rank} qg={row.quality_group} sev={row.quality_severity} "
                 f"date={row.posted_date!r} ref={row.exact_reference_score} "
                 f"desc={row.descriptor_score} price={row.price_evidence_score} "
-                f"suspicious={suspicious}"
+                f"suspicious={suspicious} image={row.has_image}"
             )
             lines.append(f" reasons={reasons}")
+            lines.append(
+                f" diagnostics=image_reason:{row.image_reason} "
+                f"scope_reason:{row.scope_reason} server_filtered:{row.server_filtered} "
+                f"stable_listing_id:{row.stable_listing_id}"
+            )
             lines.append(f" text={row.listing_text}")
+            if row.raw_listing_preview:
+                lines.append(f" raw_preview={row.raw_listing_preview}")
             if row.seller:
                 lines.append(f" seller={row.seller}")
             if row.source_url:
@@ -165,7 +237,17 @@ async def run_audit(queries: list[str], *, limit: int) -> list[AuditQueryReport]
     reports: list[AuditQueryReport] = []
     for query in queries:
         results = await workflow.search(query)
-        reports.append(build_query_report(query, results, limit=limit))
+        cache_metrics = database.get_search_cache_quality_metrics(
+            _search_cache_key(query, settings)
+        )
+        reports.append(
+            build_query_report(
+                query,
+                results,
+                limit=limit,
+                server_filtered=cache_metrics["server_filtered_hit_count"] > 0,
+            )
+        )
     return reports
 
 
@@ -223,6 +305,84 @@ def _snippet(value: str | None, limit: int) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[: max(limit - 3, 0)].rstrip() + "..."
+
+
+def _raw_listing_preview(result: SearchResult, limit: int) -> str | None:
+    raw_text = result.raw_listing_text
+    if not raw_text:
+        return None
+    if " ".join(raw_text.split()) == " ".join(result.listing_text.split()):
+        return None
+    return _redacted_snippet(raw_text, limit)
+
+
+def _redacted_snippet(value: str, limit: int) -> str:
+    redacted = SENSITIVE_CONTEXT_RE.sub("[REDACTED]", value)
+    redacted = SENSITIVE_CONTEXT_PATH_RE.sub("[REDACTED_PATH]", redacted)
+    return _snippet(redacted, limit)
+
+
+def _scope_reason(result: SearchResult) -> str:
+    raw_text = " ".join((result.raw_listing_text or "").split())
+    listing_text = " ".join(result.listing_text.split())
+    if not raw_text or raw_text == listing_text:
+        return "scope.full_listing"
+    if _looks_like_stock_list(raw_text):
+        return "scope.stock_list"
+    return "scope.scoped"
+
+
+def _image_reason(result: SearchResult, *, scope_reason: str) -> str:
+    if result.image_url:
+        return "image.present"
+    if scope_reason == "scope.stock_list":
+        return "image.missing_scoped_stock_list"
+    return "image.missing_source"
+
+
+def _looks_like_stock_list(value: str) -> bool:
+    references = {
+        token.casefold()
+        for token in PRODUCT_REFERENCE_RE.findall(value)
+        if _looks_like_product_reference(token)
+    }
+    return len(references) > 1
+
+
+def _looks_like_product_reference(token: str) -> bool:
+    normalized = token.casefold()
+    if normalized.isdigit() and len(normalized) == 4:
+        year = int(normalized)
+        if 1900 <= year <= 2099:
+            return False
+    if len(normalized) < 4 and "/" not in normalized:
+        return False
+    if any(currency in normalized for currency in ("hkd", "usd", "eur", "aed")):
+        return False
+    if re.fullmatch(r"\d+(?:\.\d+)?[km]", normalized):
+        return False
+    return True
+
+
+def _query_summary(rows: list[AuditResultRow]) -> AuditQuerySummary:
+    image_missing_count = sum(1 for row in rows if not row.has_image)
+    suspicious_counts: dict[str, int] = {}
+    image_counts: dict[str, int] = {}
+    for row in rows:
+        image_counts[row.image_reason] = image_counts.get(row.image_reason, 0) + 1
+        for reason in row.suspicious_reasons:
+            suspicious_counts[reason] = suspicious_counts.get(reason, 0) + 1
+    return AuditQuerySummary(
+        audited_result_count=len(rows),
+        image_missing_count=image_missing_count,
+        image_missing_rate=image_missing_count / len(rows) if rows else 0.0,
+        server_filtered_result_count=sum(1 for row in rows if row.server_filtered),
+        scoped_stock_list_count=sum(
+            1 for row in rows if row.scope_reason == "scope.stock_list"
+        ),
+        suspicious_reason_counts=suspicious_counts,
+        image_reason_counts=image_counts,
+    )
 
 
 if __name__ == "__main__":

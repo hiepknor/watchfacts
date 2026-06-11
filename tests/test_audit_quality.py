@@ -65,13 +65,18 @@ def test_format_text_report_includes_bounded_score_summary() -> None:
         posted_date="May 18, 2026",
         seller="seller name",
         source_url="https://example.test/listing/123",
+        image_url="https://example.test/image.jpg",
     )
     report = build_query_report("5712r", [result], limit=1, snippet_chars=60)
 
     output = format_text_report([report])
 
     assert "=== 5712r count=1 top_qg=[0] ===" in output
+    assert "summary=audited_result_count:1 image_missing_count:0 image_missing_rate:0.0000" in output
     assert "#1 qg=0 sev=0 date='May 18, 2026' ref=1 desc=0 price=1" in output
+    assert "image=True" in output
+    assert "diagnostics=image_reason:image.present scope_reason:scope.full_listing" in output
+    assert "stable_listing_id:watchfacts-listing:" in output
     assert "quality.clean" in output
     assert "text=5712R long long" in output
     assert "..." in output
@@ -92,6 +97,10 @@ def test_build_query_report_marks_karat_gold_without_price_as_missing_price() ->
     assert row.quality_group == 1
     assert row.price_evidence_score == 0
     assert row.suspicious_reasons == ("missing_price_evidence",)
+    assert row.has_image is False
+    assert row.image_reason == "image.missing_source"
+    assert report.summary.image_missing_count == 1
+    assert report.summary.image_missing_rate == 1.0
 
 
 def test_format_json_report_is_machine_readable() -> None:
@@ -105,5 +114,35 @@ def test_format_json_report_is_machine_readable() -> None:
 
     assert payload[0]["query"] == "5205r green"
     assert payload[0]["result_count"] == 1
+    assert payload[0]["summary"]["audited_result_count"] == 1
+    assert payload[0]["summary"]["image_reason_counts"] == {"image.missing_source": 1}
     assert payload[0]["rows"][0]["quality_group"] == 0
+    assert payload[0]["rows"][0]["has_image"] is False
+    assert payload[0]["rows"][0]["image_reason"] == "image.missing_source"
+    assert payload[0]["rows"][0]["scope_reason"] == "scope.full_listing"
+    assert payload[0]["rows"][0]["stable_listing_id"].startswith("watchfacts-listing:")
     assert payload[0]["rows"][0]["score_reasons"]
+
+
+def test_build_query_report_marks_stock_list_scope_and_redacts_raw_preview() -> None:
+    result = SearchResult(
+        "5712g new 2024 -> 115k",
+        raw_listing_text=(
+            "HK STOCK LIST 116505 rainbow 284k 5712g new 2024 -> 115k "
+            "cookie=session data/watchfacts_state.json"
+        ),
+    )
+
+    report = build_query_report("5712g", [result], limit=1, server_filtered=True)
+    row = report.rows[0]
+
+    assert row.scope_reason == "scope.stock_list"
+    assert row.image_reason == "image.missing_scoped_stock_list"
+    assert row.server_filtered is True
+    assert row.raw_listing_preview is not None
+    assert "cookie=session" not in row.raw_listing_preview
+    assert "watchfacts_state.json" not in row.raw_listing_preview
+    assert "[REDACTED]" in row.raw_listing_preview
+    assert "[REDACTED_PATH]" in row.raw_listing_preview
+    assert report.summary.server_filtered_result_count == 1
+    assert report.summary.scoped_stock_list_count == 1
