@@ -122,11 +122,11 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert 'return iso[3] + "/" + iso[2] + "/" + iso[1];' in html
     assert 'return padDatePart(monthMatch[2]) + "/" + padDatePart(monthNumber) + "/" + monthMatch[3];' in html
     assert "january: 1, jan: 1" in html
-    assert 'copyPrefix: "🏷️  "' in html
+    assert 'copyPrefix: "Listing: "' in html
     assert 'value: copyField(item.listing_text, "No listing text")' in html
-    assert 'copyPrefix: "👤 "' in html
+    assert 'copyPrefix: "Seller: "' in html
     assert "value: copyField(item.seller)" in html
-    assert 'copyPrefix: "📅 "' in html
+    assert 'copyPrefix: "Date: "' in html
     assert "value: formatCopyDate(item.posted_date)" in html
     assert 'join("\\n");' in html
     assert "function makeFormattedCopyButton(item)" in html
@@ -141,10 +141,15 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert 'label.setAttribute("aria-hidden", "true");' in html
     assert "primary.appendChild(makeFormattedCopyButton(item));" in html
     assert 'makeButton("Copy ID", "Copy result_id"' in html
+    assert "Professional results workspace consolidated layer" in html
+    assert "--workspace-main" in html
+    assert "--modal-width" in html
     assert "--title-box" in html
     assert "grid-template-rows: var(--title-box) var(--meta-box)" in html
     assert "grid-template-rows: minmax(0, 1fr) auto" in html
-    assert "grid-template-columns: auto minmax(0, 1fr) auto" in html
+    assert "grid-template-columns: minmax(0, 1fr) auto" in html
+    assert 'idWrap.setAttribute("aria-label", "ID: " + text(item.result_id, "No result_id"));' in html
+    assert 'chip.setAttribute("aria-label", value.label + value.value);' in html
     assert ".listing-display-card" in html
     assert ".listing-display-card .listing-line" in html
     assert ".listing-display-card .listing-icon" in html
@@ -153,11 +158,11 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "padding: 0;" in html
     assert "position: relative;" in html
     assert ".thumb img {\n      position: absolute;\n      inset: 0;" in html
-    assert "grid-template-columns: clamp(5.75rem, 28vw, 7rem) minmax(0, 1fr)" in html
+    assert "--result-media-mobile" in html
+    assert "grid-template-columns: var(--result-media-mobile) minmax(0, 1fr)" in html
     assert ".result-actions-primary,\n      .results.density-dense .result-actions-primary {\n        display: grid;" in html
     assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
     assert ".result-id-icon" in html
-    assert ".detail-icon" in html
     assert ".modal-heading" in html
     assert ".modal-section" in html
     assert ".modal-listing-section" in html
@@ -170,6 +175,8 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert ".listing-line-title .listing-value" in html
     assert ".listing-display-detail .listing-line-title" in html
     assert ".listing-display-detail .listing-line-title .listing-icon" in html
+    assert "grid-template-columns: minmax(4.55rem, auto) minmax(0, 1fr)" in html
+    assert "grid-template-columns: minmax(3.7rem, auto) minmax(0, 1fr)" in html
     assert ".listing-display-detail .listing-line-meta" in html
     assert "border-radius: 999px" in html
     assert "box-shadow: 0 1px 0 rgba(17, 24, 23, 0.03)" in html
@@ -193,9 +200,12 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "function primaryMeta(item)" not in html
     assert 'primary.appendChild(makeButton("ID"' not in html
     assert 'primary.appendChild(makeButton("Text"' not in html
-    assert '"🆔Copy ID"' not in html
-    assert '"☎️OpenWA"' not in html
-    assert '"🔗Copy URL"' not in html
+    assert "\U0001f194" not in html
+    assert "\u260e" not in html
+    assert "\U0001f517" not in html
+    assert "\U0001f3f7" not in html
+    assert "\U0001f464" not in html
+    assert "\U0001f4c5" not in html
     assert 'const title = createNode("h2", "listing-title", titleFromListing(item));' not in html
     assert 'details.appendChild(createNode("p", "detail-listing", text(item.listing_text, "No listing text")));' not in html
     assert '"copy-label-full"' not in html
@@ -252,13 +262,11 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert 'makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft"' in html
     assert 'makeButton("Copy Report", "Copy prompt to report this result"' in html
     assert '"reason: wrong_result | missing_info | other"' in html
-    assert 'const idIcon = createNode("span", "result-id-icon", "🆔");' in html
+    assert 'const idIcon = createNode("span", "result-id-icon", "ID: ");' in html
     assert 'idWrap.append(idIcon, idText, idCopy);' in html
-    assert 'icon: "☎️"' in html
-    assert 'icon: "🔗"' in html
-    assert 'const icon = createNode("span", "detail-icon", value.icon);' in html
-    assert '"☎️ Phone: " + similarItem.seller_phone' in html
-    assert '"🔗 Source: " + hostName(similarItem.source_url)' in html
+    assert 'copyLabel: "Source URL"' in html
+    assert '"Phone: " + similarItem.seller_phone' in html
+    assert '"Source: " + hostName(similarItem.source_url)' in html
     assert 'const listingSection = createNode("section", "modal-section modal-listing-section");' in html
     assert 'const metaSection = createNode("section", "modal-section modal-meta-section");' in html
     assert 'metaSection.appendChild(idWrap);' in html
@@ -434,20 +442,20 @@ def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
         "cardCount": 3,
         "query": "116500 panda",
         "copied": (
-            "🏷️  5980/1R Like New. Full set NEW BUCKLE 2022 $210.000\n"
-            "👤 Richie\n"
-            "📅 02/06/2026"
+            "Listing: 5980/1R Like New. Full set NEW BUCKLE 2022 $210.000\n"
+            "Seller: Richie\n"
+            "Date: 02/06/2026"
         ),
         "modalVisible": True,
         "modalTitle": "Result #2 details",
         "similarButton": "Hide similar",
         "similarText": (
             "Similar listings"
-            "🏷️Similar 116500 panda alternate listing"
-            "👤Similar Seller"
-            "📅17/05/2026"
-            "☎️ Phone: +1 555 9000"
-            "🔗 Source: watchfacts.example"
+            "Listing: Similar 116500 panda alternate listing"
+            "Seller: Similar Seller"
+            "Date: 17/05/2026"
+            "Phone: +1 555 9000"
+            "Source: watchfacts.example"
         ),
         "sortedFirstRank": "#2",
         "filteredCount": 1,

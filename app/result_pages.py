@@ -457,6 +457,23 @@ _HTML_TEMPLATE = """<!doctype html>
       --danger: #b42318;
       --shadow: 0 1px 2px rgba(17, 24, 23, 0.06);
       --radius: 8px;
+      --workspace-main: min(1080px, calc(100% - 2rem));
+      --workspace-main-wide: min(1120px, calc(100% - 2rem));
+      --workspace-main-tablet: min(920px, calc(100% - 1.5rem));
+      --workspace-main-mobile: min(calc(100% - 1rem), 44rem);
+      --result-media-desktop: clamp(8.5rem, 18vw, 11.5rem);
+      --result-media-tablet: clamp(8rem, 20vw, 10rem);
+      --result-media-mobile: clamp(6rem, 29vw, 7.5rem);
+      --result-media-narrow: clamp(5.5rem, 28vw, 6.5rem);
+      --result-card-min-height: 10.25rem;
+      --result-card-mobile-height: 8.75rem;
+      --dense-media: 5.25rem;
+      --dense-media-mobile: 4.65rem;
+      --dense-card-height: 7.25rem;
+      --dense-card-mobile-height: 6.75rem;
+      --modal-width: min(62rem, calc(100vw - 2rem));
+      --modal-width-wide: min(66rem, calc(100vw - 2rem));
+      --modal-width-tablet: min(46rem, calc(100vw - 1.5rem));
     }
 
     * { box-sizing: border-box; }
@@ -909,18 +926,23 @@ _HTML_TEMPLATE = """<!doctype html>
       min-width: 0;
       margin: 0;
       display: grid;
-      grid-template-columns: 1.25rem minmax(0, 1fr);
-      gap: 0.28rem;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 0.42rem;
       align-items: start;
     }
 
     .listing-icon {
-      display: inline-block;
-      width: 1.25rem;
-      color: var(--listing-strong);
-      font-size: 0.86rem;
-      line-height: 1.24;
-      text-align: center;
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      width: auto;
+      color: var(--subtle);
+      font-size: 0.68rem;
+      font-weight: 820;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      text-transform: uppercase;
+      white-space: nowrap;
     }
 
     .listing-value {
@@ -1070,7 +1092,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .listing-display-detail .listing-line-title {
-      grid-template-columns: 1.55rem minmax(0, 1fr);
+      grid-template-columns: minmax(4.55rem, auto) minmax(0, 1fr);
       gap: 0.48rem;
       align-items: start;
       border-bottom: 1px solid var(--surface-soft);
@@ -1078,16 +1100,17 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .listing-display-detail .listing-line-title .listing-icon {
-      width: 1.35rem;
+      width: auto;
       min-height: 1.35rem;
-      border: 1px solid #f2d6a8;
-      border-radius: 5px;
-      background: #fff8ec;
-      color: #7a4d00;
-      display: grid;
-      place-items: center;
-      font-size: 0.76rem;
-      line-height: 1;
+      border: 1px solid var(--listing-border);
+      border-radius: 999px;
+      background: var(--listing-soft);
+      color: var(--listing-strong);
+      display: inline-flex;
+      justify-content: center;
+      padding: 0.24rem 0.42rem;
+      font-size: 0.66rem;
+      line-height: 1.1;
       margin-top: 0.08rem;
     }
 
@@ -1104,16 +1127,17 @@ _HTML_TEMPLATE = """<!doctype html>
     .listing-display-detail .listing-line-meta {
       height: auto;
       min-width: 0;
-      grid-template-columns: 1.55rem minmax(0, 1fr);
+      grid-template-columns: minmax(4.55rem, auto) minmax(0, 1fr);
       gap: 0.48rem;
       align-items: start;
     }
 
     .listing-display-detail .listing-line-meta .listing-icon {
-      width: 1.35rem;
-      color: var(--listing-strong);
-      font-size: 0.82rem;
-      line-height: 1;
+      width: auto;
+      color: var(--subtle);
+      font-size: 0.66rem;
+      line-height: 1.2;
+      padding-top: 0.12rem;
     }
 
     .listing-display-detail .listing-line-meta .listing-value {
@@ -1128,13 +1152,14 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .listing-display-similar .listing-line {
-      grid-template-columns: 1.1rem minmax(0, 1fr);
-      gap: 0.22rem;
+      grid-template-columns: minmax(3.7rem, auto) minmax(0, 1fr);
+      gap: 0.34rem;
     }
 
     .listing-display-similar .listing-icon {
-      width: 1.1rem;
-      font-size: 0.76rem;
+      width: auto;
+      font-size: 0.62rem;
+      padding-top: 0.1rem;
     }
 
     .listing-display-similar .listing-line-title .listing-value {
@@ -1158,19 +1183,23 @@ _HTML_TEMPLATE = """<!doctype html>
       border: 1px solid var(--border);
       border-radius: 8px;
       background: var(--surface);
-      padding: 0.52rem 0.58rem;
+      padding: 0.58rem 0.62rem;
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 0.45rem;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.18rem 0.5rem;
       align-items: center;
       color: var(--muted);
     }
 
     .result-id-icon {
       flex: 0 0 auto;
-      color: var(--listing-strong);
-      font-size: 0.86rem;
-      line-height: 1.25;
+      color: var(--subtle);
+      font-size: 0.68rem;
+      font-weight: 820;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      text-transform: uppercase;
+      grid-column: 1 / -1;
     }
 
     .result-id {
@@ -1294,10 +1323,10 @@ _HTML_TEMPLATE = """<!doctype html>
       border: 1px solid var(--border);
       border-radius: 8px;
       background: var(--surface);
-      padding: 0.52rem 0.58rem;
+      padding: 0.58rem 0.62rem;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 0.12rem;
+      gap: 0.18rem 0.5rem;
       align-items: center;
     }
 
@@ -1313,12 +1342,6 @@ _HTML_TEMPLATE = """<!doctype html>
       align-items: center;
     }
 
-    .detail-icon {
-      color: var(--listing-strong);
-      font-size: 0.78rem;
-      line-height: 1;
-    }
-
     .detail-value {
       min-width: 0;
       overflow: hidden;
@@ -1326,6 +1349,7 @@ _HTML_TEMPLATE = """<!doctype html>
       white-space: nowrap;
       color: var(--text);
       font-size: 0.8rem;
+      line-height: 1.25;
     }
 
     .result-actions-secondary {
@@ -2480,7 +2504,7 @@ _HTML_TEMPLATE = """<!doctype html>
       }
     }
 
-    /* Professional results workspace redesign overrides. */
+    /* Professional results workspace consolidated layer. */
     body {
       background:
         radial-gradient(circle at top left, rgba(15, 118, 110, 0.09), transparent 24rem),
@@ -2530,7 +2554,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     main.wrap {
-      width: min(1080px, calc(100% - 2rem));
+      width: var(--workspace-main);
       padding-top: 1rem;
     }
 
@@ -2541,10 +2565,10 @@ _HTML_TEMPLATE = """<!doctype html>
 
     .result-card,
     .results.density-dense .result-card {
-      grid-template-columns: clamp(8.5rem, 18vw, 11.5rem) minmax(0, 1fr);
+      grid-template-columns: var(--result-media-desktop) minmax(0, 1fr);
       grid-template-rows: auto;
       grid-template-areas: "media body";
-      min-height: 10.25rem;
+      min-height: var(--result-card-min-height);
       border-radius: 14px;
       background: rgba(255, 255, 255, 0.94);
       box-shadow: 0 10px 28px rgba(17, 24, 23, 0.055);
@@ -2563,7 +2587,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .thumb,
     .results.density-dense .thumb {
       height: 100%;
-      min-height: 10.25rem;
+      min-height: var(--result-card-min-height);
       aspect-ratio: auto;
       border-right: 1px solid var(--border);
       border-bottom: 0;
@@ -2572,7 +2596,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .no-image .thumb {
-      min-height: 10.25rem;
+      min-height: var(--result-card-min-height);
     }
 
     .result-body,
@@ -2645,8 +2669,78 @@ _HTML_TEMPLATE = """<!doctype html>
       padding: 0.34rem 0.52rem;
     }
 
+    .results.density-dense {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.55rem;
+    }
+
+    .results.density-dense .result-card {
+      grid-template-columns: var(--dense-media) minmax(0, 1fr);
+      min-height: var(--dense-card-height);
+      border-radius: 12px;
+    }
+
+    .results.density-dense .result-media {
+      min-height: 100%;
+    }
+
+    .results.density-dense .thumb,
+    .results.density-dense .no-image .thumb {
+      min-height: var(--dense-card-height);
+      height: 100%;
+      border-right: 1px solid var(--border);
+      border-bottom: 0;
+    }
+
+    .results.density-dense .rank-badge {
+      top: 0.42rem;
+      left: 0.42rem;
+      padding: 0.24rem 0.34rem;
+      font-size: 0.68rem;
+    }
+
+    .results.density-dense .result-body {
+      padding: 0.48rem 0.52rem;
+      gap: 0.32rem;
+    }
+
+    .results.density-dense .listing-display-card {
+      gap: 0.12rem;
+    }
+
+    .results.density-dense .listing-line-title .listing-value {
+      -webkit-line-clamp: 2;
+      font-size: 0.82rem;
+      line-height: 1.22;
+    }
+
+    .results.density-dense .listing-line-meta {
+      font-size: 0.7rem;
+      line-height: 1.18;
+    }
+
+    .results.density-dense .result-actions {
+      grid-template-columns: minmax(0, 1fr) minmax(4.4rem, auto);
+      gap: 0.28rem;
+    }
+
+    .results.density-dense .result-actions-primary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.28rem;
+    }
+
+    .results.density-dense .action-button,
+    .results.density-dense .source-link,
+    .results.density-dense .details-toggle {
+      min-height: 1.65rem;
+      padding: 0.18rem 0.34rem;
+      font-size: 0.7rem;
+      border-radius: 7px;
+    }
+
     .modal-panel {
-      width: min(62rem, calc(100vw - 2rem));
+      width: var(--modal-width);
       max-height: calc(100vh - 2rem);
       border-radius: 18px;
       box-shadow: 0 24px 72px rgba(17, 24, 23, 0.28);
@@ -2753,17 +2847,21 @@ _HTML_TEMPLATE = """<!doctype html>
 
     @media (min-width: 1180px) {
       main.wrap {
-        width: min(1120px, calc(100% - 2rem));
+        width: var(--workspace-main-wide);
+      }
+
+      .results.density-dense {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .modal-panel {
-        width: min(66rem, calc(100vw - 2rem));
+        width: var(--modal-width-wide);
       }
     }
 
     @media (min-width: 761px) and (max-width: 1024px) {
       main.wrap {
-        width: min(920px, calc(100% - 1.5rem));
+        width: var(--workspace-main-tablet);
       }
 
       .results,
@@ -2771,13 +2869,22 @@ _HTML_TEMPLATE = """<!doctype html>
         grid-template-columns: 1fr;
       }
 
+      .results.density-dense {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .result-card,
       .results.density-dense .result-card {
-        grid-template-columns: clamp(8rem, 20vw, 10rem) minmax(0, 1fr);
+        grid-template-columns: var(--result-media-tablet) minmax(0, 1fr);
+      }
+
+      .results.density-dense .result-card {
+        grid-template-columns: var(--dense-media) minmax(0, 1fr);
+        min-height: var(--dense-card-height);
       }
 
       .modal-panel {
-        width: min(46rem, calc(100vw - 1.5rem));
+        width: var(--modal-width-tablet);
       }
 
       .modal-hero {
@@ -2792,7 +2899,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
     @media (max-width: 760px) {
       main.wrap {
-        width: min(calc(100% - 1rem), 44rem);
+        width: var(--workspace-main-mobile);
       }
 
       .header-inner {
@@ -2810,21 +2917,36 @@ _HTML_TEMPLATE = """<!doctype html>
 
       .result-card,
       .results.density-dense .result-card {
-        grid-template-columns: clamp(6rem, 29vw, 7.5rem) minmax(0, 1fr);
-        min-height: 8.75rem;
+        grid-template-columns: var(--result-media-mobile) minmax(0, 1fr);
+        min-height: var(--result-card-mobile-height);
         border-radius: 12px;
+      }
+
+      .results.density-dense .result-card {
+        grid-template-columns: var(--dense-media-mobile) minmax(0, 1fr);
+        min-height: var(--dense-card-mobile-height);
       }
 
       .thumb,
       .results.density-dense .thumb,
       .no-image .thumb {
-        min-height: 8.75rem;
+        min-height: var(--result-card-mobile-height);
+      }
+
+      .results.density-dense .thumb,
+      .results.density-dense .no-image .thumb {
+        min-height: var(--dense-card-mobile-height);
       }
 
       .result-body,
       .results.density-dense .result-body {
         padding: 0.55rem 0.6rem;
         gap: 0.42rem;
+      }
+
+      .results.density-dense .result-body {
+        padding: 0.42rem 0.48rem;
+        gap: 0.24rem;
       }
 
       .listing-line-title .listing-value,
@@ -2834,10 +2956,37 @@ _HTML_TEMPLATE = """<!doctype html>
         line-height: 1.28;
       }
 
+      .results.density-dense .listing-line-title .listing-value {
+        -webkit-line-clamp: 2;
+        font-size: 0.78rem;
+        line-height: 1.2;
+      }
+
+      .listing-display-detail .listing-line-title,
+      .listing-display-detail .listing-line-meta {
+        grid-template-columns: minmax(4.35rem, auto) minmax(0, 1fr);
+      }
+
+      .listing-display-detail .listing-line-title .listing-icon,
+      .listing-display-detail .listing-line-meta .listing-icon {
+        width: auto;
+      }
+
+      .listing-display-detail .listing-line-title .listing-icon {
+        min-height: 1.25rem;
+        padding: 0.2rem 0.38rem;
+        font-size: 0.62rem;
+      }
+
       .result-actions,
       .results.density-dense .result-actions {
         grid-template-columns: 1fr;
         gap: 0.3rem;
+      }
+
+      .results.density-dense .result-actions {
+        grid-template-columns: minmax(0, 1fr) minmax(4.35rem, auto);
+        gap: 0.24rem;
       }
 
       .result-actions-primary,
@@ -2846,9 +2995,18 @@ _HTML_TEMPLATE = """<!doctype html>
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      .results.density-dense .result-actions-primary {
+        grid-template-columns: 1fr;
+      }
+
       .result-actions .details-toggle,
       .results.density-dense .result-actions .details-toggle {
         width: 100%;
+      }
+
+      .results.density-dense .source-link,
+      .results.density-dense .result-actions-primary .action-button[disabled] {
+        display: none;
       }
 
       .modal-panel {
@@ -2878,7 +3036,11 @@ _HTML_TEMPLATE = """<!doctype html>
     @media (max-width: 420px) {
       .result-card,
       .results.density-dense .result-card {
-        grid-template-columns: clamp(5.5rem, 28vw, 6.5rem) minmax(0, 1fr);
+        grid-template-columns: var(--result-media-narrow) minmax(0, 1fr);
+      }
+
+      .results.density-dense .result-card {
+        grid-template-columns: var(--dense-media-mobile) minmax(0, 1fr);
       }
 
       .toolbar-actions {
@@ -2892,6 +3054,19 @@ _HTML_TEMPLATE = """<!doctype html>
       .result-actions-primary,
       .results.density-dense .result-actions-primary {
         grid-template-columns: 1fr;
+      }
+
+      .result-actions,
+      .results.density-dense .result-actions {
+        grid-template-columns: minmax(0, 1fr) minmax(4.75rem, auto);
+        align-items: stretch;
+      }
+
+      .result-actions-primary .source-link,
+      .result-actions-primary .action-button[disabled],
+      .results.density-dense .result-actions-primary .source-link,
+      .results.density-dense .result-actions-primary .action-button[disabled] {
+        display: none;
       }
 
       .modal-section,
@@ -3311,22 +3486,22 @@ _HTML_TEMPLATE = """<!doctype html>
       return [
         {
           label: "Listing",
-          icon: "🏷️",
-          copyPrefix: "🏷️  ",
+          icon: "Listing: ",
+          copyPrefix: "Listing: ",
           className: "listing-line-title",
           value: copyField(item.listing_text, "No listing text")
         },
         {
           label: "Seller",
-          icon: "👤",
-          copyPrefix: "👤 ",
+          icon: "Seller: ",
+          copyPrefix: "Seller: ",
           className: "listing-line-meta listing-line-seller",
           value: copyField(item.seller)
         },
         {
           label: "Posted",
-          icon: "📅",
-          copyPrefix: "📅 ",
+          icon: "Date: ",
+          copyPrefix: "Date: ",
           className: "listing-line-meta listing-line-date",
           value: formatCopyDate(item.posted_date)
         }
@@ -3376,9 +3551,9 @@ _HTML_TEMPLATE = """<!doctype html>
 
     function detailMeta(item) {
       const values = [];
-      if (item.seller_phone) values.push({ label: "Phone", icon: "☎️", value: text(item.seller_phone) });
+      if (item.seller_phone) values.push({ label: "Phone: ", value: text(item.seller_phone) });
       const source = hostName(item.source_url);
-      if (source) values.push({ label: "Source", icon: "🔗", value: source, copyValue: text(item.source_url), copyLabel: "Source URL" });
+      if (source) values.push({ label: "Source: ", value: source, copyValue: text(item.source_url), copyLabel: "Source URL" });
       return values;
     }
 
@@ -3386,10 +3561,9 @@ _HTML_TEMPLATE = """<!doctype html>
       const meta = createNode("div", "result-details-meta");
       for (const value of detailMeta(item)) {
         const chip = createNode("div", "detail-chip");
+        chip.setAttribute("aria-label", value.label + value.value);
         const label = createNode("span", "detail-label");
-        const icon = createNode("span", "detail-icon", value.icon);
-        icon.setAttribute("aria-hidden", "true");
-        label.append(icon, createNode("span", "", value.label));
+        label.appendChild(createNode("span", "", value.label));
         const content = createNode("span", "detail-value", value.value);
         content.title = value.value;
         chip.append(label, content);
@@ -3444,8 +3618,8 @@ _HTML_TEMPLATE = """<!doctype html>
         const row = createNode("div", "similar-item");
         row.appendChild(createFormattedListingDisplay(similarItem, "listing-display-similar", "div"));
         const rowMeta = createNode("div", "similar-meta");
-        if (similarItem.seller_phone) rowMeta.appendChild(createNode("span", "", "☎️ Phone: " + similarItem.seller_phone));
-        if (similarItem.source_url) rowMeta.appendChild(createNode("span", "", "🔗 Source: " + hostName(similarItem.source_url)));
+        if (similarItem.seller_phone) rowMeta.appendChild(createNode("span", "", "Phone: " + similarItem.seller_phone));
+        if (similarItem.source_url) rowMeta.appendChild(createNode("span", "", "Source: " + hostName(similarItem.source_url)));
         if (rowMeta.childElementCount) row.appendChild(rowMeta);
         panel.appendChild(row);
       }
@@ -3655,10 +3829,11 @@ _HTML_TEMPLATE = """<!doctype html>
 
       const metaSection = createNode("section", "modal-section modal-meta-section");
       const idWrap = createNode("div", "result-id-wrap");
-      const idIcon = createNode("span", "result-id-icon", "🆔");
+      const idIcon = createNode("span", "result-id-icon", "ID: ");
       idIcon.setAttribute("aria-hidden", "true");
       const idText = createNode("span", "result-id", text(item.result_id, "No result_id"));
       const idCopy = makeButton("Copy ID", "Copy result_id", () => copyText(item.result_id, "Result ID"), "mini-copy");
+      idWrap.setAttribute("aria-label", "ID: " + text(item.result_id, "No result_id"));
       idWrap.append(idIcon, idText, idCopy);
       metaSection.appendChild(idWrap);
 
