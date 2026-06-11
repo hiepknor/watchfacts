@@ -27,20 +27,23 @@ Non-goals:
 
 ## Current Baseline
 
-The current runtime already has:
+Implementation status: phases 1 through 5 are implemented as diagnostics-only
+runtime changes. Fuzzy, weak/ambiguous, and dedupe evidence signals do not
+change final result eligibility or ranking.
+
+The current runtime now has:
 
 - deterministic parsing and matching;
 - dedupe by stable listing identity/text;
 - result quality scoring and similarity grouping;
 - suspicious-result detection;
 - MCP payload diagnostics through `search_diagnostics`;
-- `scripts/diagnostics/audit_quality.py` for bounded production/local audits;
+- `scripts/diagnostics/audit_quality.py` for bounded production/local audits,
+  JSONL audit exports, and DuckDB JSONL summaries;
+- lightweight search payload and diagnostics contract validation;
+- RapidFuzz-backed fuzzy diagnostics with a standard-library fallback;
+- weak/ambiguous candidate diagnostics in audit events only;
 - docs for production quality audit and result scoring.
-
-The remaining gap is that the audit view is mostly final-result oriented. It does
-not yet provide a durable, query-level data funnel showing exactly what existed
-before parsing, what was parsed, what matched, what dedupe dropped, and what
-reached the user.
 
 ## Design Principles
 
@@ -117,7 +120,8 @@ Extend `search_diagnostics` with additional optional fields:
 | `unique_text_count` | Count after text-level dedupe |
 | `deduped_drop_count` | Number of candidate/result records removed by dedupe |
 | `final_count` | Number of final user-facing results |
-| `weak_match_count` | Number of candidates classified as weak or ambiguous in diagnostics |
+| `weak_match_count` | Number of deterministic matches with low/conflicting confidence signals |
+| `ambiguous_candidate_count` | Number of non-final candidates with strong diagnostic-only fuzzy evidence |
 | `fuzzy_score_min` | Lowest fuzzy diagnostics score among audited final results |
 | `fuzzy_score_avg` | Average fuzzy diagnostics score among audited final results |
 | `rejection_reasons` | Stage-level reason code counts for rejected/dropped candidates |
@@ -188,7 +192,9 @@ Recommended commands:
 
 ```bash
 python -m compileall app scripts
-python -m pytest tests/test_audit_quality.py
+python -m pytest tests/test_search.py tests/test_audit_quality.py
+python scripts/diagnostics/audit_quality.py "5712g" --format jsonl --limit 1
+python scripts/diagnostics/audit_quality.py --summarize-jsonl audit-report.jsonl
 make quality-audit
 ```
 
@@ -234,7 +240,7 @@ Recommended commands:
 
 ```bash
 python -m compileall app scripts
-python -m pytest tests/test_search.py tests/test_tool_runtime.py tests/test_audit_quality.py
+python -m pytest tests/test_audit_quality.py tests/test_mcp_smoke.py
 ```
 
 ## Phase 3: RapidFuzz Diagnostics
@@ -285,7 +291,7 @@ Recommended commands:
 
 ```bash
 python -m compileall app scripts
-python -m pytest tests/test_matcher.py tests/test_result_scoring.py tests/test_audit_quality.py
+python -m pytest tests/test_fuzzy_diagnostics.py tests/test_search.py tests/test_audit_quality.py
 make quality-audit
 ```
 
@@ -360,15 +366,13 @@ make quality-audit
 
 ## Rollout Strategy
 
-Recommended rollout order:
+Implemented rollout order:
 
-1. Ship phase 1 without changing final search behavior.
-2. Run the default audit set and one focused real query set.
-3. Ship phase 2 validators in audit/test mode.
-4. Ship phase 3 RapidFuzz diagnostics without gating behavior.
-5. Review audit artifacts and decide whether phase 4 should remain diagnostics
-   only or become a guarded behavior change.
-6. Consider phase 5 only after dedupe issues are proven by audit evidence.
+1. Phase 1 shipped audit events, JSONL export, and DuckDB summary support.
+2. Phase 2 shipped shared search payload/diagnostics contract validators.
+3. Phase 3 shipped RapidFuzz fuzzy diagnostics without gating behavior.
+4. Phase 4 shipped weak/ambiguous diagnostics as audit-only evidence.
+5. Phase 5 shipped dedupe drop events with kept-result audit references.
 
 Cache policy:
 
@@ -466,7 +470,7 @@ Acceptance:
 Suggested tests:
 
 ```bash
-python -m pytest tests/test_matcher.py tests/test_result_scoring.py tests/test_audit_quality.py
+python -m pytest tests/test_fuzzy_diagnostics.py tests/test_search.py tests/test_audit_quality.py
 ```
 
 ### Task 6: Add weak/ambiguous diagnostics bucket
@@ -481,6 +485,20 @@ Suggested tests:
 
 ```bash
 python -m pytest tests/test_audit_quality.py tests/test_search.py
+```
+
+### Task 7: Add dedupe keep/drop audit references
+
+Acceptance:
+
+- Dedupe drop events include a redacted dedupe key hash.
+- Dedupe drop events include the kept result audit id when available.
+- Production dedupe behavior is unchanged.
+
+Suggested tests:
+
+```bash
+python -m pytest tests/test_search.py
 ```
 
 ## Documentation Updates
@@ -498,7 +516,7 @@ When implementing phases, keep these docs synchronized:
 
 ## Open Decisions
 
-No implementation-blocking decision remains for phase 1 through phase 3.
+No implementation-blocking decision remains for diagnostics-only phases.
 
 Before phase 4 becomes user-facing behavior, explicitly decide whether
 `weak/ambiguous` candidates should:

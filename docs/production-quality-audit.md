@@ -81,7 +81,9 @@ Minimum capabilities:
   - score reason codes
   - suspicious reason codes
 - Support `--limit` for top-N results.
-- Support `--format text` and optionally `--format json`.
+- Support `--format text`, `--format json`, and `--format jsonl`.
+- Support `--summarize-jsonl <path>` for DuckDB-backed stage-count summaries
+  over saved audit artifacts.
 - Return non-zero only on runtime failures, not on quality warnings.
 
 The script should use the existing app modules instead of duplicating scraping,
@@ -182,6 +184,10 @@ Fixture sources:
 
 - Use `scripts/diagnostics/audit_quality.py --format json` for ranking, quality-group,
   missing-price, and suspicious-result fixtures.
+- Use `scripts/diagnostics/audit_quality.py --format jsonl` when the review
+  needs raw -> parsed -> matched -> dedupe -> final stage evidence.
+- Use `scripts/diagnostics/audit_quality.py --summarize-jsonl <path>` to
+  summarize saved JSONL artifacts without WatchFacts credentials.
 - Use `/issues_export` plus `scripts/fixtures/generate_issue_fixtures.py` for extraction
   fixtures that require full raw listing text.
 - Use [docs/templates/audit-issue-fixture.json](templates/audit-issue-fixture.json)

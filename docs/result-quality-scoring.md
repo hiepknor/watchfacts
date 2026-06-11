@@ -129,6 +129,25 @@ Owner-visible diagnostics should show:
 Diagnostics must not include cookies, tokens, browser state, `.env`, full page
 HTML, or raw secrets.
 
+Current diagnostics also include fuzzy confidence signals. RapidFuzz is used
+when installed, with a standard-library fallback for local development. These
+scores are diagnostics-only: they do not accept, reject, rank, or demote final
+results.
+
+Fuzzy diagnostics include:
+
+| Field | Purpose |
+| --- | --- |
+| `query_text_score` | Similarity between normalized query and listing text |
+| `reference_score` | Similarity between query reference and listing reference-like tokens |
+| `descriptor_overlap_score` | Query descriptor coverage in listing text |
+| `fuzzy_reason_codes` | Short reason codes such as `exact_reference_match` or `descriptor_overlap_low` |
+
+Search-level diagnostics expose aggregate `fuzzy_score_min` and
+`fuzzy_score_avg`. Audit events may also expose `weak_match` and
+`ambiguous_candidate` records, but those records remain outside the final
+user-facing result set.
+
 ### 3. Regression Fixtures
 
 Every production ranking or extraction bug should become a fixture with:
