@@ -192,8 +192,8 @@ Responsibilities:
   `list_issues`.
 - Use `include_raw_context` for `get_issue` when Hermes needs a bounded,
   redacted raw snippet for triage.
-- Let follow-up tools accept either the short-lived `result_id` from search or
-  absolute `rank` when the user refers to a result number.
+- Let follow-up tools accept the short-lived `result_id`, the returned
+  `stable_listing_id`, or absolute `rank` when the user refers to a result number.
 - Return structured JSON-like payloads without Telegram formatting concerns.
 - Avoid leaking raw listings unless a specific safe diagnostic path explicitly
   requests bounded, redacted context.
@@ -206,7 +206,11 @@ Responsibilities:
 - Reuse the same scraper, parser, matcher, dedupe, scoring, cache, suspicious,
   OpenAI, and SQLite behavior as the Telegram workflow.
 - Support offset-based pagination with `has_more` and `next_offset`.
-- Return short-lived `result_id` cache handles for later handoff or issue reporting.
+- Return short-lived `result_id` cache handles and durable `stable_listing_id`
+  values for later handoff or issue reporting.
+- Resolve follow-up references from in-memory cache first, then SQLite
+  `result_reference_cache` by `result_id`, `stable_listing_id`, or rank before
+  re-running a search.
 - Include product `image_url` when available.
 
 ### `search_result.py`
@@ -215,6 +219,10 @@ Responsibilities:
 
 - Hold the shared result dataclass used across Telegram, MCP, and diagnostics.
 - Keep product fields stable enough for ranking, formatting, OpenWA handoff, and issue storage.
+- Generate short-lived `result_id` values from query/rank/listing snapshots.
+- Generate `stable_listing_id` values from source URL plus normalized listing
+  text, falling back to normalized listing payload fields when no source URL is
+  available.
 
 ### `scraper.py`
 

@@ -53,9 +53,9 @@ are consistent in deployed runtime.
   variant groupings. This remains a core data-quality gap.
 - `result_id` is stable for query/rank/listing snapshot but is not a durable
   listing identity suitable for long-lived replay scenarios.
-- In-memory `_RESULT_CACHE` provides fast follow-up lookup, but restart semantics
-  still depend on process lifetime; after restart, follow-up flows may fallback to
-  re-search.
+- In-memory `_RESULT_CACHE` provides fast follow-up lookup. Restart resilience is
+  improved by SQLite `result_reference_cache`, which can now resolve by
+  `result_id`, `stable_listing_id`, or rank before falling back to re-search.
 
 ### Quick Validation
 
@@ -79,8 +79,8 @@ are consistent in deployed runtime.
    group.
 2. Reduce image-missing rate for color-specific result groups, especially where
    parent-level image context should propagate to sub-listing variants.
-3. Consider an internal `stable_listing_id` derived from `source_url` for long-lived
-   follow-up/issue workflows, while preserving MCP short-lived `result_id` contract.
+3. Continue monitoring `stable_listing_id` follow-up resolution in Hermes/OpenWA
+   flows and add regressions for any stale-reference edge case.
 4. Expand health/quality alerting so unusual `result image missing` spikes by query
    class trigger early investigation.
 5. Add cache-hit trend tracking by query class so regressions hidden by cache

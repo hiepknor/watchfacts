@@ -14,7 +14,7 @@ The runtime currently exposes `result_id` in MCP payloads to support follow-up a
 
 `result_id` is generated from query/rank and listing snapshot fields. This makes it stable for short-lived cache references inside one search session, but it changes when ranking or extracted text changes. In operational flows, Hermes/TG can request follow-up a short time after search, then process may span restarts.
 
-At the same time, the runtime already keeps SQLite `result_reference_cache` for replayability and already computes a normalized `stable_listing_id` based on source URL + normalized listing text.
+At the same time, the runtime keeps SQLite `result_reference_cache` for replayability and computes a normalized `stable_listing_id` based on source URL + normalized listing text.
 
 ## Decision
 
@@ -22,7 +22,10 @@ Adopt a split identity model:
 
 1. Keep `result_id` as a short-lived follow-up handle tied to the current runtime payload.
 2. Continue persisting result references to SQLite by `search_cache` and `result_reference_cache` for operational continuity.
-3. Use stable listing identity (`stable_listing_id`) for long-lived follow-up and durable issue tracing, derived from listing source URL and normalized text (with fallback to full normalized payload fields if source URL is unavailable).
+3. Return `stable_listing_id` in search and generated result-page payloads.
+4. Resolve follow-up references by in-memory cache, SQLite `result_id`,
+   SQLite `stable_listing_id`, or absolute rank before re-running a search.
+5. Use stable listing identity (`stable_listing_id`) for long-lived follow-up and durable issue tracing, derived from listing source URL and normalized text (with fallback to full normalized payload fields if source URL is unavailable).
 
 ## Alternatives Considered
 
@@ -61,7 +64,7 @@ Rejected to avoid breaking MCP flow and Hermes assumptions.
 
 ## Consequences
 
-- Follow-up flows remain backward-compatible (`result_id`, rank, query) while adding a stronger internal anchor for durable workflows.
+- Follow-up flows remain backward-compatible (`result_id`, rank, query) while adding a stronger returned anchor for durable workflows.
 - Restart resilience improves because follow-up resolution can pivot to stable identity stored in `result_reference_cache`.
 - Quality investigations can cluster issues by listing source rather than only current page/rank.
 - The trade-off is added complexity in reference management, which must remain constrained to internal persistence APIs.

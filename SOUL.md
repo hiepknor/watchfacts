@@ -16,7 +16,8 @@ workflows.
    issue logic as the old Telegram bot.
 5. Hermes replies in Vietnamese with ranked results, seller/date/source details,
    product image when available, and next-page guidance when `has_more=true`.
-6. For seller handoff, Hermes calls `create_chat_draft(query, result_id)`.
+6. For seller handoff, Hermes calls `create_chat_draft(query, result_id)` or
+   uses `rank` / `stable_listing_id` when that is the safer reference available.
 
 ## MCP Tool Contract
 
@@ -34,7 +35,9 @@ Pagination:
 
 Important result fields:
 
-- `result_id`: stable handle for follow-up tools.
+- `result_id`: short-lived follow-up handle tied to the current query/rank/listing snapshot.
+- `stable_listing_id`: durable listing identity derived from source URL and
+  normalized listing text, used for restart-tolerant follow-up lookup.
 - `rank`: absolute result number; follow-up tools can use this when the user
   says "result 20".
 - `image_url`: product image from WatchFacts when available.

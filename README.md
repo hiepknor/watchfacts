@@ -6,7 +6,8 @@ and the legacy Telegram bot.
 The project keeps WatchFacts search logic in a non-Telegram runtime. Hermes calls
 that runtime through the `watchfacts-mcp` service, receives structured ranked
 results, paginates with `offset` / `next_offset`, uses `image_url` for product
-photos, and can create OpenWA chat drafts from short-lived `result_id` handles.
+photos, and can create OpenWA chat drafts from `result_id`, `stable_listing_id`,
+or absolute rank references returned by search.
 
 The Telegram bot still exists as a supported legacy channel, but the current
 production integration target is Hermes over MCP.
@@ -23,7 +24,7 @@ production integration target is Hermes over MCP.
 - Regex and token-based matching
 - Duplicate listing filtering
 - Structured MCP tools for search, health, chat draft handoff, issue review, and suspicious QA
-- Offset-based MCP pagination with stable result ranks and short-lived `result_id` handles
+- Offset-based MCP pagination with stable result ranks, short-lived `result_id` handles, and durable `stable_listing_id` references
 - Product image propagation via `image_url`
 - Summary-first Telegram pagination with "Show results" / "Load more"
 - Telegram message length guards for long listings
@@ -320,18 +321,19 @@ mcp_servers:
 `search(query, limit=5, offset=0, include_similar=true)` returns ranked results,
 `has_more`, and `next_offset`. Hermes should reuse the original query and pass
 `offset=next_offset` for "load more" follow-ups. Search results include a
-short-lived `result_id` cache handle and absolute `rank` for later
-handoff/feedback. Follow-up tools accept `result_id` when available, or `rank`
-when the user says "result 20".
+short-lived `result_id` cache handle, durable `stable_listing_id`, and absolute
+`rank` for later handoff/feedback. Follow-up tools accept the returned
+`result_id`, the returned `stable_listing_id`, or `rank` when the user says
+"result 20".
 Results include `image_url` for product photos when WatchFacts provides one.
 
 Tool catalog:
 
 | Tool | Purpose |
 | --- | --- |
-| `search` | Search WatchFacts and return paginated ranked results with short-lived `result_id` handles |
+| `search` | Search WatchFacts and return paginated ranked results with `result_id`, `stable_listing_id`, and absolute `rank` references |
 | `health` | Check WatchFacts session, database, OpenWA, and search readiness |
-| `create_chat_draft` | Create an OpenWA chat draft from a prior `search` result by `result_id` or `rank` |
+| `create_chat_draft` | Create an OpenWA chat draft from a prior `search` result by `result_id`, `stable_listing_id`, or `rank` |
 | `report_issue` | Record result feedback for owner review |
 | `list_issues` | List feedback and suspicious QA issues by `status=open/fixed/ignored/all` |
 | `get_issue` | Read one feedback or suspicious issue by `F<id>` or `S<id>` with bounded raw context |
@@ -530,6 +532,7 @@ Used for:
 - Query history
 - Listing history
 - Dedupe
+- Search result reference cache for `result_id`, `stable_listing_id`, and rank follow-ups
 
 ## Docker Deployment
 

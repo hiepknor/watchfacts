@@ -78,7 +78,9 @@ Logs must not include:
   stored listing. They must not return full HTML, `.env`,
   `data/watchfacts_state.json`, cookies, or unbounded raw listings.
 - Do not let Hermes invent seller contact, source links, prices, product images, result ids, or OpenWA links.
-- Use the short-lived `result_id` from `search` for follow-up tools such as `create_chat_draft` and `report_issue`.
+- Use only references returned by `search` for follow-up tools such as
+  `create_chat_draft` and `report_issue`: short-lived `result_id`, returned
+  `stable_listing_id`, or explicit `rank`.
 - Use `offset` / `next_offset` for pagination instead of hidden Telegram callback state.
 - `watchfacts_prefill.json` may contain operating instructions, but must not contain secrets.
 
@@ -87,7 +89,8 @@ Logs must not include:
 - Store `OPENWA_API_KEY` only in `.env` or deployment secret storage.
 - Use the internal OpenWA API URL for server-to-server calls.
 - Return only safe dashboard/draft links intended for operators.
-- Do not create chat drafts without a prior WatchFacts `result_id` from the current search cache.
+- Do not create chat drafts without a prior WatchFacts result reference from
+  `search`: `result_id`, `stable_listing_id`, or explicit `rank`.
 - Do not invent or normalize seller phone numbers outside the data returned by WatchFacts/runtime.
 
 ## Web Scraping Boundary

@@ -12,8 +12,8 @@ search WatchFacts trading listings through Hermes, for example:
 Hermes calls the WatchFacts MCP tools. The runtime uses an authenticated browser
 session, extracts listings from WatchFacts JSON/HTML responses, matches listings
 deterministically, deduplicates latest reposts, and returns structured ranked
-results with seller, date, source link, product image, and short-lived result
-handles.
+results with seller, date, source link, product image, short-lived result
+handles, and stable listing identities for more durable follow-up lookup.
 
 The legacy Telegram bot remains available, but new business automation should
 use the non-Telegram runtime and MCP bridge instead of reimplementing search.
@@ -29,7 +29,7 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 - As a Hermes user, I can send a model/reference query and receive relevant WatchFacts listings.
 - As a Hermes user, I can ask for more results and receive the next page without losing the original query context.
 - As a Hermes user, I can see product images when WatchFacts provides `image_url`.
-- As a Hermes user, I can ask to contact a seller and let Hermes create an OpenWA chat draft from a selected `result_id`.
+- As a Hermes user, I can ask to contact a seller and let Hermes create an OpenWA chat draft from a selected `result_id`, `stable_listing_id`, or result rank.
 - As a Telegram user, I can include multiple terms and get listings that contain all required tokens.
 - As an operator, I can log in to WatchFacts manually once and let the bot reuse the saved session.
 - As an operator, I can run the bot locally or through Docker Compose.
@@ -54,8 +54,8 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 9. Runtime scores eligible listings by quality first, then newest posted date inside the same quality group.
 10. If OpenAI controlled intelligence is enabled, runtime may record or apply a guarded suggestion only after strict validation.
 11. Runtime stores query/cache/dedupe/issue data in SQLite.
-12. MCP payload returns ranked results with `result_id`, `rank`, `image_url`, `has_more`, and `next_offset`.
-13. Hermes answers in Vietnamese and preserves the short-lived `result_id` for contact/feedback follow-ups.
+12. MCP payload returns ranked results with `result_id`, `stable_listing_id`, `rank`, `image_url`, `has_more`, and `next_offset`.
+13. Hermes answers in Vietnamese and preserves the short-lived `result_id`; it may also use `stable_listing_id` or absolute `rank` for contact/feedback follow-ups.
 14. For "load more", Hermes calls the same query with `offset=next_offset`.
 
 ## Functional Requirements
@@ -63,10 +63,11 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 - Expose MCP tool `search(query, limit=5, offset=0, include_similar=true)`.
 - Search payload must include pagination fields `offset`, `limit`, `has_more`, `next_offset`, and stable absolute `rank`.
 - Search payload must include a short-lived `result_id` for follow-up actions.
+- Search payload must include `stable_listing_id` when a listing identity can be computed, so restart-tolerant follow-up lookup does not depend only on process memory.
 - Search payload should include `image_url` when WatchFacts provides a product image.
 - Expose MCP tool `health` for WatchFacts session, database, OpenWA, and search readiness.
-- Expose MCP tool `create_chat_draft(query, result_id=None, rank=None)` for seller handoff through OpenWA.
-- Expose MCP issue tools `report_issue`, `list_issues`, `get_issue`, `update_issue`, and `suspicious_summary`; issue reporting should accept `result_id` or `rank`.
+- Expose MCP tool `create_chat_draft(query, result_id=None, rank=None)` for seller handoff through OpenWA; `result_id` may be either the short-lived `result_id` or the returned `stable_listing_id`.
+- Expose MCP issue tools `report_issue`, `list_issues`, `get_issue`, `update_issue`, and `suspicious_summary`; issue reporting should accept `result_id`, `stable_listing_id`, or `rank`.
 - Accept plain-text Telegram messages as search queries in the legacy bot.
 - Support `/start`, `/help`, `/settings`, and `/cancel`.
 - Support `/health` for checking whether the saved WatchFacts session is valid.

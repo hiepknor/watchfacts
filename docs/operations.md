@@ -140,8 +140,10 @@ Hermes/MCP behavior:
 - Initial search should call `search(query=<full user text>, limit=5, offset=0, include_similar=true)`.
 - "Load more" should call `search` again with the same query and previous
   `next_offset`.
-- Use the short-lived `result_id` for `create_chat_draft` and issue reporting
-  when available. If the user says "result 20", pass `rank=20`.
+- Use the returned `result_id` for immediate `create_chat_draft` and issue
+  reporting. Use the returned `stable_listing_id` when the follow-up may cross a
+  restart or when Hermes preserved that field instead. If the user says
+  "result 20", pass `rank=20`.
 - Use `image_url` as the product image when present.
 - Do not invent seller contact, result ids, source links, prices, image links, or OpenWA links.
 
