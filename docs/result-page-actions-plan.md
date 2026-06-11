@@ -7,21 +7,37 @@ surface. The modal should let an operator create an OpenWA chat draft and report
 a result issue directly from the generated result page, without exposing server
 secrets or reimplementing WatchFacts search in browser code.
 
-This plan is intentionally written before implementation. Implement phase by
-phase. After each phase, run the listed checks, perform a self-review, commit the
-phase, then continue to the next phase.
+This plan was written before implementation and now records the first production
+version. Future changes should preserve the server-side action boundary unless a
+new ADR supersedes ADR-007.
+
+Implementation status as of 2026-06-11:
+
+- Phase 1 complete: generated pages write `{token}.html` plus `{token}.json`
+  sidecars with a page-scoped `action_nonce`.
+- Phase 2 complete: the MCP server exposes OpenWA draft and report action POST
+  routes with token, expiry, nonce, result identity, and rate-limit validation.
+- Phase 3 complete: the detail modal calls the action routes directly and keeps
+  copy/source/similar controls as utilities.
+- Phase 4 complete: operations and technical docs document the deployed behavior
+  and smoke-test expectations.
 
 ## Current State
 
 Generated result pages are static HTML served by `GET /results/{token}` from the
-MCP service. The modal currently provides these actions:
+MCP service. Each page has a sidecar JSON file used only by server-side action
+routes. The modal provides these actions:
 
-- `Copy OpenWA`: copies a prompt that asks Hermes to create an OpenWA draft.
-- `Copy Report`: copies a prompt that asks Hermes to report an issue.
+- `Create OpenWA draft`: posts to the MCP server and creates an OpenWA draft
+  server-side when OpenWA handoff is enabled.
+- `Report issue`: posts to the MCP server and records a feedback issue.
 - `Copy URL`: copies the WatchFacts source URL when present.
 - `+N similar`: toggles similar listings in the modal.
 
-The real server-side capabilities already exist through MCP/runtime code:
+Fallback copy buttons are still present only when an older page payload does not
+include action URLs or a page nonce.
+
+The server-side capabilities are reused from MCP/runtime code:
 
 - `create_chat_draft` / `watchfacts_create_chat_draft_payload()` creates OpenWA
   chat drafts server-side.
@@ -43,7 +59,7 @@ WatchFacts cookies, database paths, raw browser state, or `.env` values.
 
 ## Public HTTP Action Contract
 
-Add two result-page action routes to the MCP server:
+The MCP server exposes two result-page action routes:
 
 ```text
 POST /results/{token}/actions/openwa-draft
@@ -115,8 +131,8 @@ Error responses should be structured and non-secret-bearing:
 
 ## Data Model And Storage
 
-Add a result-page sidecar JSON file next to the generated HTML file. The sidecar
-is the action source of truth.
+Generated pages write a result-page sidecar JSON file next to the HTML file. The
+sidecar is the action source of truth.
 
 Recommended file layout:
 
@@ -223,6 +239,8 @@ Layout rules:
 
 ### Phase 1: Sidecar And Action Read Model
 
+Status: complete.
+
 Goal: make result-page action data loadable server-side without adding side
 effects yet.
 
@@ -257,6 +275,8 @@ Self-review before commit:
 Commit after this phase before continuing.
 
 ### Phase 2: HTTP Action Routes Without UI Wiring
+
+Status: complete.
 
 Goal: add server-side POST routes and test them with mocked OpenWA/report flows.
 
@@ -298,6 +318,8 @@ Self-review before commit:
 Commit after this phase before continuing.
 
 ### Phase 3: Modal UI Wiring
+
+Status: complete.
 
 Goal: replace copy-helper actions in the modal with real browser actions.
 
@@ -346,6 +368,8 @@ Self-review before commit:
 Commit after this phase before continuing.
 
 ### Phase 4: Docs, Operations, And Production Verification
+
+Status: complete.
 
 Goal: finish operator-facing docs and prepare safe deployment.
 

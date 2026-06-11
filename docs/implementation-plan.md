@@ -309,6 +309,9 @@ git diff --check
 
 Each item needs a focused spec before implementation:
 
+- Result page action hardening beyond v1, such as operator login, CSRF cookies,
+  or per-result action audit logs if public-token action risk becomes
+  unacceptable.
 - Multi-page crawling beyond the current search response.
 - Scheduled refresh jobs and proactive alerts.
 - Dealer/seller filters.

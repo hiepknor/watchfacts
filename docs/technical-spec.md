@@ -113,9 +113,9 @@ Configuration rules:
 - Keep `WATCHFACTS_HTTP_CLIENT_ENABLED=true` for normal Telegram/MCP search; disabling it disables query search instead of falling back to Playwright.
 - Use `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to reduce repeated WatchFacts form GETs while still refreshing on CSRF/auth failures.
 - Set `RESULT_PAGE_PUBLIC_BASE_URL` only when the MCP service is reachable through a public reverse proxy path for `/results/`; leave it empty to preserve legacy responses without page links.
-- Result page actions, when implemented, must use the existing page token, page
-  TTL, a page-scoped `action_nonce`, and action rate limits. Browser code must
-  call only same-origin result-page action routes.
+- Result page actions use the existing page token, page TTL, a page-scoped
+  `action_nonce`, and action rate limits. Browser code calls only same-origin
+  result-page action routes.
 - Reuse the process-level HTTPX client for connection pooling; reload cookies and clear form cache when `data/watchfacts_state.json` changes.
 - Cap HTTPX read time so slow HTTPX attempts fail fast without launching Playwright.
 - Expose only safe HTTPX status metadata in `health`: enabled flag, form-cache freshness, error type, coarse timings, HTTP version, cooldown state, and timestamps.
@@ -234,15 +234,14 @@ Responsibilities:
 Responsibilities:
 
 - Generate static HTML result pages from sanitized result payloads.
-- Generate and clean up sidecar JSON for result-page actions when real modal
-  actions are implemented.
+- Generate and clean up sidecar JSON for result-page actions.
 - Keep embedded payloads bounded and script-safe.
 - Normalize image/source URLs against the configured WatchFacts URL.
 - Redact sensitive-looking text before embedding or storing page payloads.
 - Provide server helpers for loading action sidecars by token without changing
   normal HTML page serving.
 
-Planned result-page action contract:
+Result-page action contract:
 
 ```text
 POST /results/{token}/actions/openwa-draft
