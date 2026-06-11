@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -38,6 +39,19 @@ def chrome_executable() -> str | None:
         shutil.which("chromium-browser"),
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     ]
+    for root in (
+        Path("/ms-playwright"),
+        Path.home() / ".cache" / "ms-playwright",
+    ):
+        candidates.extend(
+            str(path)
+            for pattern in (
+                "chromium-*/chrome-linux/chrome",
+                "chromium-*/chrome-linux64/chrome",
+                "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell",
+            )
+            for path in sorted(root.glob(pattern))
+        )
     return next((candidate for candidate in candidates if candidate and os.path.exists(candidate)), None)
 
 
