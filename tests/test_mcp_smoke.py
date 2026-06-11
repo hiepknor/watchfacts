@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.search_contracts import validate_search_diagnostics
 from scripts.diagnostics.mcp_smoke import validate_search_payload
 
 
@@ -116,6 +117,65 @@ def test_validate_search_payload_reports_invalid_types_and_pagination() -> None:
     assert "results[0].posted_date must be a string or null" in errors
     assert "results[0].source_url must be a string or null" in errors
     assert "results[0].image_url must be a string or null" in errors
+
+
+def test_validate_search_payload_reports_duplicate_result_ids_and_bad_source_url() -> None:
+    payload = {
+        "query": "5712g",
+        "total_count": 2,
+        "offset": 0,
+        "limit": 2,
+        "result_count": 2,
+        "has_more": False,
+        "next_offset": None,
+        "results": [
+            {
+                "result_id": "watchfacts:abc",
+                "stable_listing_id": "watchfacts-listing:def",
+                "rank": 1,
+                "listing_text": "5712G Used 2015 76k usdt",
+                "seller": None,
+                "posted_date": None,
+                "source_url": "javascript:alert(1)",
+                "image_url": None,
+            },
+            {
+                "result_id": "watchfacts:abc",
+                "stable_listing_id": "watchfacts-listing:ghi",
+                "rank": 2,
+                "listing_text": "5712G Used 2016 80k usdt",
+                "seller": None,
+                "posted_date": None,
+                "source_url": "/flash-sales/1",
+                "image_url": None,
+            },
+        ],
+    }
+
+    errors = validate_search_payload(payload)
+
+    assert (
+        "results[0].source_url must be an http(s), relative, or root-relative URL"
+        in errors
+    )
+    assert "results[1].result_id must be unique" in errors
+
+
+def test_validate_search_diagnostics_reports_bad_counts() -> None:
+    errors = validate_search_diagnostics(
+        {
+            "cache_hit": False,
+            "matched_count": 1,
+            "final_count": 2,
+            "deduped_drop_count": -1,
+        }
+    )
+
+    assert (
+        "search_diagnostics.deduped_drop_count must be a non-negative integer"
+        in errors
+    )
+    assert "search_diagnostics.final_count must not exceed matched_count" in errors
 
 
 def test_validate_search_payload_requires_next_offset_when_has_more() -> None:

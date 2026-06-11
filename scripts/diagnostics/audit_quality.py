@@ -19,6 +19,7 @@ from app.db import Database
 from app.issues import detect_suspicious_result
 from app.result_scoring import score_result
 from app.search import SearchAuditEvent, WatchFactsSearchWorkflow, _search_cache_key
+from app.search_contracts import validate_search_diagnostics, validate_search_payload
 from app.search_result import SearchResult, stable_listing_id
 
 
@@ -58,6 +59,7 @@ class AuditQuerySummary:
     image_missing_rate: float
     server_filtered_result_count: int
     scoped_stock_list_count: int
+    validation_error_count: int
     suspicious_reason_counts: dict[str, int]
     image_reason_counts: dict[str, int]
 
@@ -92,6 +94,7 @@ class AuditQueryReport:
     summary: AuditQuerySummary
     rows: tuple[AuditResultRow, ...]
     audit_events: tuple[SearchAuditEvent, ...] = ()
+    validation_errors: tuple[str, ...] = ()
 
 
 def build_query_report(
@@ -102,6 +105,7 @@ def build_query_report(
     snippet_chars: int = DEFAULT_SNIPPET_CHARS,
     server_filtered: bool = False,
     audit_events: tuple[SearchAuditEvent, ...] = (),
+    validation_errors: tuple[str, ...] = (),
 ) -> AuditQueryReport:
     rows: list[AuditResultRow] = []
     for index, result in enumerate(results[:limit], start=1):
@@ -134,13 +138,15 @@ def build_query_report(
                 source_url=_snippet(result.source_url, 160) if result.source_url else None,
             )
         )
+    summary = _query_summary(rows, validation_errors=validation_errors)
     return AuditQueryReport(
         query=query,
         result_count=len(results),
         top_quality_groups=tuple(row.quality_group for row in rows),
-        summary=_query_summary(rows),
+        summary=summary,
         rows=tuple(rows),
         audit_events=audit_events,
+        validation_errors=validation_errors,
     )
 
 
@@ -174,6 +180,11 @@ def format_text_report(reports: list[AuditQueryReport]) -> str:
                     f"{reason}:{count}"
                     for reason, count in sorted(report.summary.image_reason_counts.items())
                 )
+            )
+        if report.validation_errors:
+            lines.append(
+                " validation_errors="
+                + json.dumps(list(report.validation_errors), ensure_ascii=False)
             )
         if not report.rows:
             lines.append("no_results=true")
@@ -283,6 +294,11 @@ async def run_audit(queries: list[str], *, limit: int) -> list[AuditQueryReport]
     reports: list[AuditQueryReport] = []
     for query in queries:
         results = await workflow.search(query)
+        validation_errors = _validate_audit_payload(
+            query=query,
+            results=results,
+            diagnostics=getattr(workflow, "last_search_diagnostics", None),
+        )
         cache_metrics = database.get_search_cache_quality_metrics(
             _search_cache_key(query, settings)
         )
@@ -293,6 +309,7 @@ async def run_audit(queries: list[str], *, limit: int) -> list[AuditQueryReport]
                 limit=limit,
                 server_filtered=cache_metrics["server_filtered_hit_count"] > 0,
                 audit_events=getattr(workflow, "last_search_audit_events", ()),
+                validation_errors=tuple(validation_errors),
             )
         )
     return reports
@@ -387,6 +404,44 @@ def _query_summary_event(report: AuditQueryReport) -> dict[str, object]:
     }
 
 
+def _validate_audit_payload(
+    *,
+    query: str,
+    results: list[SearchResult],
+    diagnostics: object,
+) -> list[str]:
+    payload: dict[str, object] = {
+        "query": query,
+        "total_count": len(results),
+        "offset": 0,
+        "limit": None,
+        "result_count": len(results),
+        "has_more": False,
+        "next_offset": None,
+        "results": [
+            {
+                "result_id": f"watchfacts:audit-{index}",
+                "stable_listing_id": stable_listing_id(result),
+                "rank": index,
+                "listing_text": result.listing_text,
+                "seller": result.seller,
+                "posted_date": result.posted_date,
+                "source_url": result.source_url,
+                "image_url": result.image_url,
+            }
+            for index, result in enumerate(results, start=1)
+        ],
+    }
+    errors = validate_search_payload(payload, allow_empty=True)
+    to_payload = getattr(diagnostics, "to_payload", None)
+    diagnostics_payload = to_payload() if callable(to_payload) else diagnostics
+    if isinstance(diagnostics_payload, dict):
+        errors.extend(validate_search_diagnostics(diagnostics_payload))
+    elif diagnostics is not None:
+        errors.append("search_diagnostics must be an object")
+    return errors
+
+
 def _audit_event_payload(event: SearchAuditEvent) -> dict[str, object]:
     return {
         "type": "audit_event",
@@ -470,7 +525,11 @@ def _looks_like_product_reference(token: str) -> bool:
     return True
 
 
-def _query_summary(rows: list[AuditResultRow]) -> AuditQuerySummary:
+def _query_summary(
+    rows: list[AuditResultRow],
+    *,
+    validation_errors: tuple[str, ...] = (),
+) -> AuditQuerySummary:
     image_missing_count = sum(1 for row in rows if not row.has_image)
     suspicious_counts: dict[str, int] = {}
     image_counts: dict[str, int] = {}
@@ -486,6 +545,7 @@ def _query_summary(rows: list[AuditResultRow]) -> AuditQuerySummary:
         scoped_stock_list_count=sum(
             1 for row in rows if row.scope_reason == "scope.stock_list"
         ),
+        validation_error_count=len(validation_errors),
         suspicious_reason_counts=suspicious_counts,
         image_reason_counts=image_counts,
     )

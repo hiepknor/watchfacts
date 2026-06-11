@@ -90,6 +90,21 @@ def test_format_text_report_includes_bounded_score_summary() -> None:
     assert "raw_listing_text" not in output
 
 
+def test_format_text_report_includes_validation_errors() -> None:
+    report = build_query_report(
+        "5712r",
+        [SearchResult("5712R HKD 100000")],
+        limit=1,
+        validation_errors=("results[0].result_id must be unique",),
+    )
+
+    output = format_text_report([report])
+
+    assert "validation_errors=" in output
+    assert "results[0].result_id must be unique" in output
+    assert report.summary.validation_error_count == 1
+
+
 def test_build_query_report_marks_karat_gold_without_price_as_missing_price() -> None:
     result = SearchResult(
         "5712R Patek original movement customized 18k rose gold case reservation",
