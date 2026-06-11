@@ -57,17 +57,31 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
     assert results[0].image_url == "https://watchfacts.example/images/228253a.jpg"
     assert workflow.last_search_diagnostics is not None
     assert workflow.last_search_diagnostics.to_payload() == {
+        "raw_candidate_count": 1,
         "parsed_count": 2,
         "matched_count": 1,
         "search_result_count": 1,
         "unique_latest_count": 1,
         "unique_text_count": 1,
+        "deduped_drop_count": 0,
         "final_count": 1,
         "server_filtered": False,
         "playwright_fallback": False,
         "cache_hit": False,
         "source_truncation_suspected": False,
+        "rejection_reasons": {
+            "dedupe.latest_listing": 0,
+            "dedupe.text": 0,
+        },
     }
+    assert [event.stage for event in workflow.last_search_audit_events] == [
+        "raw",
+        "parsed",
+        "parsed",
+        "matched",
+        "converted",
+        "final",
+    ]
 
     with sqlite3.connect(settings.db_path) as connection:
         query_row = connection.execute(
@@ -203,6 +217,7 @@ def test_search_workflow_serves_repeated_query_from_cache(tmp_path) -> None:
     assert workflow.last_search_diagnostics.final_count == len(second)
     assert workflow.last_search_diagnostics.parsed_count is None
     assert workflow.last_search_diagnostics.source_truncation_suspected is None
+    assert workflow.last_search_audit_events == ()
     with sqlite3.connect(settings.db_path) as connection:
         query_count = connection.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
         cache_count = connection.execute("SELECT COUNT(*) FROM search_cache").fetchone()[0]

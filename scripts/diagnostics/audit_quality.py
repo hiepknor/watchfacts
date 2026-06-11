@@ -18,7 +18,7 @@ from app.config import load_search_settings
 from app.db import Database
 from app.issues import detect_suspicious_result
 from app.result_scoring import score_result
-from app.search import WatchFactsSearchWorkflow, _search_cache_key
+from app.search import SearchAuditEvent, WatchFactsSearchWorkflow, _search_cache_key
 from app.search_result import SearchResult, stable_listing_id
 
 
@@ -36,7 +36,7 @@ DEFAULT_AUDIT_QUERIES = (
 )
 DEFAULT_LIMIT = 5
 DEFAULT_SNIPPET_CHARS = 220
-ReportFormat = Literal["text", "json"]
+ReportFormat = Literal["text", "json", "jsonl"]
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -91,6 +91,7 @@ class AuditQueryReport:
     top_quality_groups: tuple[int, ...]
     summary: AuditQuerySummary
     rows: tuple[AuditResultRow, ...]
+    audit_events: tuple[SearchAuditEvent, ...] = ()
 
 
 def build_query_report(
@@ -100,6 +101,7 @@ def build_query_report(
     limit: int = DEFAULT_LIMIT,
     snippet_chars: int = DEFAULT_SNIPPET_CHARS,
     server_filtered: bool = False,
+    audit_events: tuple[SearchAuditEvent, ...] = (),
 ) -> AuditQueryReport:
     rows: list[AuditResultRow] = []
     for index, result in enumerate(results[:limit], start=1):
@@ -138,6 +140,7 @@ def build_query_report(
         top_quality_groups=tuple(row.quality_group for row in rows),
         summary=_query_summary(rows),
         rows=tuple(rows),
+        audit_events=audit_events,
     )
 
 
@@ -203,7 +206,50 @@ def format_text_report(reports: list[AuditQueryReport]) -> str:
 
 
 def format_json_report(reports: list[AuditQueryReport]) -> str:
-    return json.dumps([asdict(report) for report in reports], ensure_ascii=False, indent=2)
+    payload = []
+    for report in reports:
+        report_payload = asdict(report)
+        report_payload.pop("audit_events", None)
+        payload.append(report_payload)
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def format_jsonl_report(reports: list[AuditQueryReport]) -> str:
+    lines: list[str] = []
+    for report in reports:
+        lines.append(json.dumps(_query_summary_event(report), ensure_ascii=False))
+        for event in report.audit_events:
+            lines.append(json.dumps(_audit_event_payload(event), ensure_ascii=False))
+        for row in report.rows:
+            lines.append(json.dumps(_final_row_event(report.query, row), ensure_ascii=False))
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def summarize_jsonl_report(path: Path) -> str:
+    try:
+        import duckdb
+    except ImportError as exc:
+        raise RuntimeError(
+            "DuckDB is required for JSONL summaries. Install requirements.txt first."
+        ) from exc
+
+    quoted_path = str(path).replace("'", "''")
+    with duckdb.connect(database=":memory:") as connection:
+        rows = connection.execute(
+            f"""
+            SELECT
+              query,
+              COALESCE(stage, type) AS stage,
+              COUNT(*) AS row_count
+            FROM read_json_auto('{quoted_path}')
+            GROUP BY query, COALESCE(stage, type)
+            ORDER BY query, stage
+            """
+        ).fetchall()
+
+    lines = ["query,stage,row_count"]
+    lines.extend(f"{query},{stage},{row_count}" for query, stage, row_count in rows)
+    return "\n".join(lines) + "\n"
 
 
 def load_queries(args: argparse.Namespace) -> list[str]:
@@ -246,6 +292,7 @@ async def run_audit(queries: list[str], *, limit: int) -> list[AuditQueryReport]
                 results,
                 limit=limit,
                 server_filtered=cache_metrics["server_filtered_hit_count"] > 0,
+                audit_events=getattr(workflow, "last_search_audit_events", ()),
             )
         )
     return reports
@@ -260,14 +307,21 @@ def main() -> int:
         "--queries-file",
         help="Text file with one query per line. Blank lines and # comments are ignored.",
     )
+    parser.add_argument(
+        "--summarize-jsonl",
+        help="Read an audit JSONL artifact and print DuckDB stage-count summary.",
+    )
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="Top results per query.")
     parser.add_argument(
         "--format",
-        choices=("text", "json"),
+        choices=("text", "json", "jsonl"),
         default="text",
         help="Report format.",
     )
     args = parser.parse_args()
+    if args.summarize_jsonl:
+        print(summarize_jsonl_report(Path(args.summarize_jsonl)), end="")
+        return 0
     if args.limit <= 0:
         parser.error("--limit must be a positive integer")
 
@@ -275,6 +329,8 @@ def main() -> int:
     reports = asyncio.run(run_audit(queries, limit=args.limit))
     if args.format == "json":
         print(format_json_report(reports))
+    elif args.format == "jsonl":
+        print(format_jsonl_report(reports), end="")
     else:
         print(format_text_report(reports), end="")
     return 0
@@ -320,6 +376,56 @@ def _redacted_snippet(value: str, limit: int) -> str:
     redacted = SENSITIVE_CONTEXT_RE.sub("[REDACTED]", value)
     redacted = SENSITIVE_CONTEXT_PATH_RE.sub("[REDACTED_PATH]", redacted)
     return _snippet(redacted, limit)
+
+
+def _query_summary_event(report: AuditQueryReport) -> dict[str, object]:
+    return {
+        "type": "query_summary",
+        "query": report.query,
+        "result_count": report.result_count,
+        "summary": asdict(report.summary),
+    }
+
+
+def _audit_event_payload(event: SearchAuditEvent) -> dict[str, object]:
+    return {
+        "type": "audit_event",
+        "query": event.query,
+        "stage": event.stage,
+        "candidate_id": event.candidate_id,
+        "rank": event.rank,
+        "seller": _redacted_snippet(event.seller, 80) if event.seller else None,
+        "posted_date": event.posted_date,
+        "source_url": _redacted_snippet(event.source_url, 160)
+        if event.source_url
+        else None,
+        "has_image": event.has_image,
+        "text_snippet": _redacted_snippet(event.text, DEFAULT_SNIPPET_CHARS)
+        if event.text
+        else None,
+        "reason_codes": list(event.reason_codes),
+    }
+
+
+def _final_row_event(query: str, row: AuditResultRow) -> dict[str, object]:
+    return {
+        "type": "final_result",
+        "query": query,
+        "stage": "final",
+        "candidate_id": row.stable_listing_id,
+        "rank": row.rank,
+        "seller": row.seller,
+        "posted_date": row.posted_date,
+        "source_url": row.source_url,
+        "has_image": row.has_image,
+        "text_snippet": row.listing_text,
+        "reason_codes": [
+            *row.score_reasons,
+            *row.suspicious_reasons,
+            row.image_reason,
+            row.scope_reason,
+        ],
+    }
 
 
 def _scope_reason(result: SearchResult) -> str:

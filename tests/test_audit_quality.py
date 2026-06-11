@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from argparse import Namespace
 import asyncio
+import importlib.util
 import json
+
+import pytest
 
 from app.config import load_search_settings
 from app.search_result import SearchResult
@@ -11,8 +14,10 @@ from scripts.diagnostics.audit_quality import (
     DEFAULT_AUDIT_QUERIES,
     build_query_report,
     format_json_report,
+    format_jsonl_report,
     format_text_report,
     load_queries,
+    summarize_jsonl_report,
 )
 
 
@@ -122,6 +127,59 @@ def test_format_json_report_is_machine_readable() -> None:
     assert payload[0]["rows"][0]["scope_reason"] == "scope.full_listing"
     assert payload[0]["rows"][0]["stable_listing_id"].startswith("watchfacts-listing:")
     assert payload[0]["rows"][0]["score_reasons"]
+    assert "audit_events" not in payload[0]
+
+
+def test_format_jsonl_report_includes_stage_events_and_redacts_text() -> None:
+    report = build_query_report(
+        "5712g",
+        [SearchResult("5712G Used 2015 - 76k usdt")],
+        limit=1,
+        audit_events=(
+            audit_quality.SearchAuditEvent(
+                query="5712g",
+                stage="raw",
+                candidate_id="raw:1",
+                source_url="https://watchfacts.example/result",
+                text="html_chars=100 cookie=session data/watchfacts_state.json",
+                reason_codes=("client_filtered",),
+            ),
+        ),
+    )
+
+    lines = [json.loads(line) for line in format_jsonl_report([report]).splitlines()]
+
+    assert lines[0]["type"] == "query_summary"
+    assert lines[1]["type"] == "audit_event"
+    assert lines[1]["stage"] == "raw"
+    assert "cookie=session" not in lines[1]["text_snippet"]
+    assert "watchfacts_state.json" not in lines[1]["text_snippet"]
+    assert lines[2]["type"] == "final_result"
+
+
+def test_summarize_jsonl_report_uses_duckdb(tmp_path) -> None:
+    if importlib.util.find_spec("duckdb") is None:
+        pytest.skip("duckdb is not installed in the local test environment")
+
+    jsonl_path = tmp_path / "audit.jsonl"
+    jsonl_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"type": "audit_event", "query": "5712g", "stage": "raw"}),
+                json.dumps({"type": "audit_event", "query": "5712g", "stage": "parsed"}),
+                json.dumps({"type": "final_result", "query": "5712g", "stage": "final"}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output = summarize_jsonl_report(jsonl_path)
+
+    assert "query,stage,row_count" in output
+    assert "5712g,final,1" in output
+    assert "5712g,parsed,1" in output
+    assert "5712g,raw,1" in output
 
 
 def test_build_query_report_marks_stock_list_scope_and_redacts_raw_preview() -> None:

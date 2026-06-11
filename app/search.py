@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from app.config import Settings
 from app.db import Database
-from app.dedupe import unique_latest_by_text, unique_latest_listings
+from app.dedupe import latest_dedupe_key, unique_latest_by_text, unique_latest_listings
 from app.ai_refiner import evaluate_refinement_suggestion
 from app.issues import detect_suspicious_result
 from app.matcher_token_classification import parse_query_terms
@@ -62,20 +62,40 @@ class SearchDiagnostics:
     playwright_fallback: bool
     cache_hit: bool
     source_truncation_suspected: bool | None
+    raw_candidate_count: int | None = None
+    deduped_drop_count: int | None = None
+    rejection_reasons: dict[str, int] | None = None
 
     def to_payload(self) -> dict[str, object]:
         return {
+            "raw_candidate_count": self.raw_candidate_count,
             "parsed_count": self.parsed_count,
             "matched_count": self.matched_count,
             "search_result_count": self.search_result_count,
             "unique_latest_count": self.unique_latest_count,
             "unique_text_count": self.unique_text_count,
+            "deduped_drop_count": self.deduped_drop_count,
             "final_count": self.final_count,
             "server_filtered": self.server_filtered,
             "playwright_fallback": self.playwright_fallback,
             "cache_hit": self.cache_hit,
             "source_truncation_suspected": self.source_truncation_suspected,
+            "rejection_reasons": self.rejection_reasons or {},
         }
+
+
+@dataclass(frozen=True)
+class SearchAuditEvent:
+    query: str
+    stage: str
+    candidate_id: str
+    rank: int | None = None
+    seller: str | None = None
+    posted_date: str | None = None
+    source_url: str | None = None
+    has_image: bool | None = None
+    text: str | None = None
+    reason_codes: tuple[str, ...] = ()
 
 
 class WatchFactsSearchWorkflow:
@@ -92,6 +112,7 @@ class WatchFactsSearchWorkflow:
         self.fetch_html = fetch_html or fetch_watchfacts_html
         self.refine_results = refine_results
         self.last_search_diagnostics: SearchDiagnostics | None = None
+        self.last_search_audit_events: tuple[SearchAuditEvent, ...] = ()
 
     async def search(self, query: str) -> list[SearchResult]:
         logger.info("event=query.start query_length=%d", len(query))
@@ -101,6 +122,7 @@ class WatchFactsSearchWorkflow:
             cached_results = self._get_cached_results(cache_key)
             if cached_results is not None:
                 results, cache_metrics = cached_results
+                self.last_search_audit_events = ()
                 self.last_search_diagnostics = SearchDiagnostics(
                     parsed_count=None,
                     matched_count=None,
@@ -141,6 +163,7 @@ class WatchFactsSearchWorkflow:
             if not owner:
                 cache_metrics = self.database.get_search_cache_quality_metrics(cache_key)
                 if self.last_search_diagnostics is None:
+                    self.last_search_audit_events = ()
                     self.last_search_diagnostics = SearchDiagnostics(
                         parsed_count=None,
                         matched_count=None,
@@ -181,13 +204,32 @@ class WatchFactsSearchWorkflow:
         cache_key: str,
     ) -> list[SearchResult]:
         scrape_result = await self.fetch_html(self.settings, query=query)
+        audit_events: list[SearchAuditEvent] = []
+        self._audit_raw_scrape(
+            audit_events,
+            query=query,
+            scrape_result=scrape_result,
+            candidate_id="raw:1",
+        )
         server_filtered_hit_count = int(scrape_result.server_filtered)
         playwright_fallback_count = int(scrape_result.used_playwright_fallback)
         parsed = parse_listings(scrape_result.html)
+        self._audit_listing_candidates(
+            audit_events,
+            query=query,
+            stage="parsed",
+            listings=parsed,
+        )
         matched = (
             _filter_server_filtered_listings(query, parsed)
             if scrape_result.server_filtered
             else filter_matching_listings(query, parsed)
+        )
+        self._audit_listing_candidates(
+            audit_events,
+            query=query,
+            stage="matched",
+            listings=matched,
         )
         parsed_count = len(parsed)
         if _should_expand_year_query(query, len(matched)):
@@ -197,25 +239,84 @@ class WatchFactsSearchWorkflow:
                     self.settings,
                     query=expanded_query,
                 )
+                self._audit_raw_scrape(
+                    audit_events,
+                    query=query,
+                    scrape_result=expanded_scrape_result,
+                    candidate_id="raw:expanded",
+                    reason_codes=("expanded_year_query",),
+                )
                 server_filtered_hit_count += int(expanded_scrape_result.server_filtered)
                 playwright_fallback_count += int(
                     expanded_scrape_result.used_playwright_fallback
                 )
                 expanded_parsed = parse_listings(expanded_scrape_result.html)
-                parsed_count += len(expanded_parsed)
-                matched = _merge_listing_candidates(
-                    matched,
-                    filter_matching_listings(query, expanded_parsed),
+                self._audit_listing_candidates(
+                    audit_events,
+                    query=query,
+                    stage="parsed",
+                    listings=expanded_parsed,
+                    candidate_prefix="expanded-parsed",
                 )
+                parsed_count += len(expanded_parsed)
+                expanded_matched = filter_matching_listings(query, expanded_parsed)
+                self._audit_listing_candidates(
+                    audit_events,
+                    query=query,
+                    stage="matched",
+                    listings=expanded_matched,
+                    candidate_prefix="expanded-matched",
+                )
+                matched = _merge_listing_candidates(matched, expanded_matched)
         results = [_to_search_result(query, listing) for listing in matched]
+        self._audit_search_results(
+            audit_events,
+            query=query,
+            stage="converted",
+            results=results,
+        )
         unique = unique_latest_listings(results)
+        latest_drop_count = self._audit_dedupe_drops(
+            audit_events,
+            query=query,
+            before=results,
+            after=unique,
+            key_for_result=lambda result: latest_dedupe_key(
+                result.listing_text,
+                seller=result.seller,
+            ),
+            reason_code="dedupe.latest_listing",
+        )
         unique_latest_count = len(unique)
         if self.refine_results is not None and self.settings.hybrid_ai_mode != "off":
             unique = await self._handle_hybrid_refinement(query, unique)
+            self._audit_search_results(
+                audit_events,
+                query=query,
+                stage="refined",
+                results=unique,
+            )
+        before_text_dedupe = list(unique)
         unique = unique_latest_by_text(unique)
+        text_drop_count = self._audit_dedupe_drops(
+            audit_events,
+            query=query,
+            before=before_text_dedupe,
+            after=unique,
+            key_for_result=lambda result: normalize_text(result.listing_text),
+            reason_code="dedupe.text",
+        )
         unique_text_count = len(unique)
         unique = rank_results_by_quality(unique, query=query)
         unique = group_similar_results(unique, query=query)
+        self._audit_search_results(
+            audit_events,
+            query=query,
+            stage="final",
+            results=unique,
+        )
+        deduped_drop_count = latest_drop_count + text_drop_count
+        self.last_search_audit_events = tuple(audit_events)
         self.last_search_diagnostics = SearchDiagnostics(
             parsed_count=parsed_count,
             matched_count=len(matched),
@@ -229,6 +330,14 @@ class WatchFactsSearchWorkflow:
             source_truncation_suspected=(
                 parsed_count >= WATCHFACTS_SOURCE_TRUNCATION_THRESHOLD
             ),
+            raw_candidate_count=sum(
+                1 for event in audit_events if event.stage == "raw"
+            ),
+            deduped_drop_count=deduped_drop_count,
+            rejection_reasons={
+                "dedupe.latest_listing": latest_drop_count,
+                "dedupe.text": text_drop_count,
+            },
         )
 
         self.database.record_query_results(
@@ -258,6 +367,116 @@ class WatchFactsSearchWorkflow:
     @staticmethod
     def _count_missing_images(results: list[SearchResult]) -> int:
         return sum(1 for result in results if not result.image_url)
+
+    @staticmethod
+    def _audit_raw_scrape(
+        audit_events: list[SearchAuditEvent],
+        *,
+        query: str,
+        scrape_result: ScrapeResult,
+        candidate_id: str,
+        reason_codes: tuple[str, ...] = (),
+    ) -> None:
+        reasons = [
+            *reason_codes,
+            "server_filtered" if scrape_result.server_filtered else "client_filtered",
+        ]
+        if scrape_result.used_playwright_fallback:
+            reasons.append("playwright_fallback")
+        audit_events.append(
+            SearchAuditEvent(
+                query=query,
+                stage="raw",
+                candidate_id=candidate_id,
+                source_url=scrape_result.final_url,
+                text=f"html_chars={len(scrape_result.html)}",
+                reason_codes=tuple(reasons),
+            )
+        )
+
+    @staticmethod
+    def _audit_listing_candidates(
+        audit_events: list[SearchAuditEvent],
+        *,
+        query: str,
+        stage: str,
+        listings: list[ListingCandidate],
+        candidate_prefix: str | None = None,
+    ) -> None:
+        prefix = candidate_prefix or stage
+        for index, listing in enumerate(listings, start=1):
+            audit_events.append(
+                SearchAuditEvent(
+                    query=query,
+                    stage=stage,
+                    candidate_id=f"{prefix}:{index}",
+                    rank=index,
+                    seller=listing.seller,
+                    posted_date=listing.posted_date,
+                    source_url=listing.source_url,
+                    has_image=bool(listing.image_url),
+                    text=listing.listing_text,
+                )
+            )
+
+    @staticmethod
+    def _audit_search_results(
+        audit_events: list[SearchAuditEvent],
+        *,
+        query: str,
+        stage: str,
+        results: list[SearchResult],
+    ) -> None:
+        for index, result in enumerate(results, start=1):
+            audit_events.append(
+                SearchAuditEvent(
+                    query=query,
+                    stage=stage,
+                    candidate_id=f"{stage}:{index}",
+                    rank=index,
+                    seller=result.seller,
+                    posted_date=result.posted_date,
+                    source_url=result.source_url,
+                    has_image=bool(result.image_url),
+                    text=result.raw_listing_text or result.listing_text,
+                    reason_codes=(f"stable_audit_id:{_stable_audit_id(result)}",),
+                )
+            )
+
+    @staticmethod
+    def _audit_dedupe_drops(
+        audit_events: list[SearchAuditEvent],
+        *,
+        query: str,
+        before: list[SearchResult],
+        after: list[SearchResult],
+        key_for_result: Callable[[SearchResult], str],
+        reason_code: str,
+    ) -> int:
+        kept_result_ids = {id(result) for result in after}
+        dropped = 0
+        for index, result in enumerate(before, start=1):
+            if id(result) in kept_result_ids:
+                continue
+            dropped += 1
+            audit_events.append(
+                SearchAuditEvent(
+                    query=query,
+                    stage="dedupe_drop",
+                    candidate_id=f"dedupe_drop:{reason_code}:{index}",
+                    rank=index,
+                    seller=result.seller,
+                    posted_date=result.posted_date,
+                    source_url=result.source_url,
+                    has_image=bool(result.image_url),
+                    text=result.raw_listing_text or result.listing_text,
+                    reason_codes=(
+                        reason_code,
+                        f"dedupe_key_hash:{_short_hash(key_for_result(result))}",
+                    ),
+                )
+            )
+        return dropped
 
     def _get_cached_results(
         self, cache_key: str
@@ -788,6 +1007,21 @@ def _search_cache_key(query: str, settings: Settings) -> str:
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _stable_audit_id(result: SearchResult) -> str:
+    payload = {
+        "listing_text": result.listing_text,
+        "seller": result.seller,
+        "posted_date": result.posted_date,
+        "source_url": result.source_url,
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _short_hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
 
 def _search_concurrency_semaphore(settings: Settings) -> asyncio.Semaphore | None:
