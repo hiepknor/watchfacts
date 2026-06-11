@@ -34,6 +34,51 @@ class FakeWorkflow:
         return self.results
 
 
+def test_watchfacts_search_payload_includes_hybrid_refiner_when_enabled(tmp_path, monkeypatch) -> None:
+    settings = load_search_settings(
+        env={
+            "HYBRID_AI_MODE": "guarded",
+            "OPENAI_API_KEY": "test-key",
+        },
+        project_root=tmp_path,
+    )
+    captured_refiners: list[object] = []
+
+    class FakeRefinedWorkflow:
+        def __init__(
+            self,
+            settings_arg,
+            *,
+            database=None,
+            fetch_html=None,
+            refine_results=None,
+        ) -> None:
+            self.settings = settings_arg
+            self.refine_results = refine_results
+
+        async def search(self, query: str) -> list[SearchResult]:
+            assert self.refine_results is not None
+            captured_refiners.append(self.refine_results)
+            return [SearchResult("5712G Used")]
+
+    monkeypatch.setattr(
+        "app.tool_runtime.WatchFactsSearchWorkflow",
+        FakeRefinedWorkflow,
+    )
+
+    payload = asyncio.run(
+        watchfacts_search_payload(
+            "5712g",
+            settings=settings,
+        )
+    )
+
+    assert payload["query"] == "5712g"
+    assert payload["results"][0]["listing_text"] == "5712G Used"
+    assert len(captured_refiners) == 1
+    assert captured_refiners[0] is not None
+
+
 def test_watchfacts_search_payload_serializes_results_for_tool_runtime(tmp_path) -> None:
     settings = load_search_settings(env={}, project_root=tmp_path)
     workflow = FakeWorkflow(

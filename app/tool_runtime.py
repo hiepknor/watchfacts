@@ -71,6 +71,28 @@ class StoredResult:
 _RESULT_CACHE: dict[str, StoredResult] = {}
 
 
+def _build_search_refiner(
+    settings: Settings,
+) -> Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]] | None:
+    if settings.hybrid_ai_mode == "off":
+        return None
+
+    from app.ai_refiner import refine_search_results
+
+    async def refine(
+        query: str,
+        results: list[SearchResult],
+    ) -> list[SearchResult]:
+        return await refine_search_results(
+            query,
+            results,
+            settings,
+            database=Database(settings.db_path),
+        )
+
+    return refine
+
+
 async def watchfacts_search_payload(
     query: str,
     *,
@@ -91,7 +113,14 @@ async def watchfacts_search_payload(
         if active_settings is not None
         else RESULT_CACHE_TTL_SECONDS
     )
-    active_workflow = workflow or WatchFactsSearchWorkflow(active_settings)
+    active_workflow = (
+        workflow
+        if workflow is not None
+        else WatchFactsSearchWorkflow(
+            active_settings,
+            refine_results=_build_search_refiner(active_settings),
+        )
+    )
     results = await active_workflow.search(normalized_query)
     _store_results(
         normalized_query,
