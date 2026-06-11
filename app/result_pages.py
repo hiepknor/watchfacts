@@ -1046,13 +1046,11 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .modal-actions-section {
-      position: sticky;
-      bottom: 0;
-      z-index: 1;
+      position: static;
       min-width: 0;
       padding: 0.7rem 1rem;
       border-top: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.96);
+      background: linear-gradient(180deg, var(--surface), var(--surface-raised));
       box-shadow: 0 -6px 18px rgba(17, 24, 23, 0.05);
     }
 
@@ -1066,15 +1064,12 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 8px;
       background: var(--surface);
       padding: 0.78rem 0.85rem;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.52rem 0.5rem;
-      align-items: center;
+      display: grid;
+      gap: 0.52rem;
       box-shadow: 0 1px 0 rgba(17, 24, 23, 0.03);
     }
 
     .listing-display-detail .listing-line-title {
-      flex: 1 0 100%;
       grid-template-columns: 1.55rem minmax(0, 1fr);
       gap: 0.48rem;
       align-items: start;
@@ -1107,28 +1102,25 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .listing-display-detail .listing-line-meta {
-      flex: 0 1 auto;
       height: auto;
       min-width: 0;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      background: var(--surface-raised);
-      padding: 0.2rem 0.5rem 0.2rem 0.36rem;
-      grid-template-columns: auto minmax(0, 1fr);
-      gap: 0.28rem;
-      align-items: center;
+      grid-template-columns: 1.55rem minmax(0, 1fr);
+      gap: 0.48rem;
+      align-items: start;
     }
 
     .listing-display-detail .listing-line-meta .listing-icon {
-      width: 1rem;
+      width: 1.35rem;
       color: var(--listing-strong);
-      font-size: 0.78rem;
+      font-size: 0.82rem;
       line-height: 1;
     }
 
     .listing-display-detail .listing-line-meta .listing-value {
-      font-size: 0.78rem;
-      line-height: 1.2;
+      white-space: normal;
+      font-size: 0.86rem;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
     }
 
     .listing-display-similar {
@@ -1204,6 +1196,88 @@ _HTML_TEMPLATE = """<!doctype html>
       gap: 0.35rem;
     }
 
+    .modal-hero {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(9.5rem, 0.58fr) minmax(0, 1fr);
+      gap: 0.7rem;
+      align-items: stretch;
+    }
+
+    .modal-media-card {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background:
+        linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 86%, var(--listing-soft)), var(--surface));
+      padding: 0.55rem;
+      display: grid;
+      gap: 0.45rem;
+      align-content: start;
+    }
+
+    .modal-media-card .thumb {
+      width: 100%;
+      min-height: 0;
+      aspect-ratio: 4 / 3;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      padding: 0;
+      position: relative;
+      overflow: hidden;
+      align-self: start;
+    }
+
+    .modal-quick-facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.28rem;
+      align-content: start;
+    }
+
+    .modal-fact {
+      max-width: 100%;
+      min-height: 1.45rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      padding: 0.18rem 0.44rem;
+      display: inline-flex;
+      gap: 0.22rem;
+      align-items: center;
+      font-size: 0.72rem;
+      font-weight: 760;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+
+    .modal-fact strong {
+      color: var(--text);
+      font-weight: 820;
+    }
+
+    .modal-listing-copy {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      padding: 0.65rem;
+      display: grid;
+      gap: 0.5rem;
+      align-content: start;
+    }
+
+    .modal-section-label,
+    .action-card-title {
+      color: var(--subtle);
+      font-size: 0.69rem;
+      font-weight: 840;
+      letter-spacing: 0.04em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
     .detail-chip {
       min-width: 0;
       border: 1px solid var(--border);
@@ -1211,10 +1285,13 @@ _HTML_TEMPLATE = """<!doctype html>
       background: var(--surface);
       padding: 0.52rem 0.58rem;
       display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 0.12rem;
+      align-items: center;
     }
 
     .detail-label {
+      grid-column: 1 / -1;
       color: var(--subtle);
       font-size: 0.68rem;
       font-weight: 800;
@@ -1252,18 +1329,14 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     .modal-actions {
-      justify-content: flex-end;
-    }
-
-    .modal-actions {
       display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-      gap: 0.45rem;
-      align-items: stretch;
+      grid-template-columns: minmax(13rem, 0.86fr) minmax(16rem, 1.14fr);
+      gap: 0.55rem;
+      align-items: start;
     }
 
     .modal-actions .action-button {
-      min-height: 2rem;
+      min-height: 2.15rem;
       background: var(--surface);
     }
 
@@ -1272,14 +1345,14 @@ _HTML_TEMPLATE = """<!doctype html>
     .modal-utility-actions {
       min-width: 0;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       background: var(--surface);
-      padding: 0.55rem;
+      padding: 0.65rem;
     }
 
     .modal-primary-action {
       display: grid;
-      gap: 0.35rem;
+      gap: 0.42rem;
       align-content: start;
     }
 
@@ -1287,7 +1360,8 @@ _HTML_TEMPLATE = """<!doctype html>
       width: 100%;
       align-self: start;
       border-color: var(--listing-border);
-      background: var(--listing-soft);
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--listing-soft) 78%, white), var(--listing-soft));
       color: var(--listing-strong);
       font-weight: 750;
     }
@@ -1315,7 +1389,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
     .report-form {
       display: grid;
-      gap: 0.4rem;
+      gap: 0.45rem;
     }
 
     .report-form label {
@@ -1349,6 +1423,7 @@ _HTML_TEMPLATE = """<!doctype html>
       flex-wrap: wrap;
       gap: 0.35rem;
       justify-content: flex-end;
+      align-items: center;
     }
 
     .similar-panel {
@@ -1550,6 +1625,21 @@ _HTML_TEMPLATE = """<!doctype html>
       min-width: 0;
       display: grid;
       gap: 0.22rem;
+    }
+
+    @media (min-width: 1100px) {
+      .modal-panel {
+        width: min(58rem, calc(100vw - 2rem));
+        max-height: calc(100vh - 2rem);
+      }
+
+      .modal-hero {
+        grid-template-columns: minmax(11.5rem, 0.48fr) minmax(0, 1fr);
+      }
+
+      .modal-actions {
+        grid-template-columns: minmax(14rem, 0.75fr) minmax(18rem, 1.25fr);
+      }
     }
 
     .modal-kicker {
@@ -1814,6 +1904,11 @@ _HTML_TEMPLATE = """<!doctype html>
         white-space: normal;
       }
 
+      .modal-hero {
+        grid-template-columns: minmax(0, 0.78fr) minmax(0, 1fr);
+        gap: 0.55rem;
+      }
+
       .result-details-meta {
         grid-template-columns: minmax(0, 1fr);
       }
@@ -1924,14 +2019,122 @@ _HTML_TEMPLATE = """<!doctype html>
         padding-right: 0.75rem;
       }
 
+      .modal-actions-section {
+        padding-top: 0.55rem;
+        padding-bottom: 0.55rem;
+      }
+
       .modal-meta-section {
         grid-template-columns: 1fr;
-        gap: 0.45rem;
+        gap: 0.4rem;
+      }
+
+      .result-id-wrap,
+      .detail-chip {
+        padding: 0.48rem 0.52rem;
+      }
+
+      .modal-hero {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+      }
+
+      .modal-media-card {
+        grid-template-columns: minmax(6.25rem, 0.42fr) minmax(0, 1fr);
+        align-items: start;
+      }
+
+      .modal-media-card,
+      .modal-listing-copy,
+      .modal-primary-action,
+      .report-form,
+      .modal-utility-actions {
+        border-radius: 9px;
+      }
+
+      .modal-media-card .thumb {
+        aspect-ratio: 1;
+      }
+
+      .modal-listing-copy {
+        padding: 0.58rem;
+        gap: 0.4rem;
+      }
+
+      .modal-primary-action,
+      .report-form,
+      .modal-utility-actions {
+        padding: 0.5rem;
+      }
+
+      .modal-primary-action,
+      .report-form {
+        gap: 0.3rem;
+      }
+
+      .modal-section-label,
+      .action-card-title {
+        font-size: 0.66rem;
+      }
+
+      .listing-display-detail {
+        padding: 0.62rem;
+        gap: 0.42rem;
+      }
+
+      .listing-display-detail .listing-line-title {
+        grid-template-columns: 1.22rem minmax(0, 1fr);
+        gap: 0.36rem;
+        padding-bottom: 0.45rem;
+      }
+
+      .listing-display-detail .listing-line-title .listing-icon {
+        width: 1.08rem;
+        min-height: 1.08rem;
+        border-radius: 4px;
+        font-size: 0.66rem;
+        margin-top: 0.03rem;
+      }
+
+      .listing-display-detail .listing-line-title .listing-value {
+        font-size: 0.88rem;
+        font-weight: 780;
+        line-height: 1.28;
+      }
+
+      .listing-display-detail .listing-line-meta {
+        grid-template-columns: 1.22rem minmax(0, 1fr);
+        gap: 0.36rem;
+      }
+
+      .listing-display-detail .listing-line-meta .listing-icon {
+        width: 1.08rem;
+        font-size: 0.72rem;
+      }
+
+      .listing-display-detail .listing-line-meta .listing-value {
+        font-size: 0.8rem;
+        line-height: 1.26;
+      }
+
+      .report-form textarea {
+        min-height: 2rem;
+        padding-top: 0.38rem;
+        padding-bottom: 0.38rem;
+      }
+
+      .report-form select {
+        min-height: 2rem;
+      }
+
+      .modal-action-status {
+        min-height: 0.9rem;
+        font-size: 0.72rem;
       }
 
       .modal-actions {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(5.75rem, 1fr));
+        grid-template-columns: 1fr;
         gap: 0.35rem;
       }
 
@@ -2742,7 +2945,7 @@ _HTML_TEMPLATE = """<!doctype html>
       const values = [];
       if (item.seller_phone) values.push({ label: "Phone", icon: "☎️", value: text(item.seller_phone) });
       const source = hostName(item.source_url);
-      if (source) values.push({ label: "Source", icon: "🔗", value: source });
+      if (source) values.push({ label: "Source", icon: "🔗", value: source, copyValue: text(item.source_url), copyLabel: "Source URL" });
       return values;
     }
 
@@ -2757,9 +2960,25 @@ _HTML_TEMPLATE = """<!doctype html>
         const content = createNode("span", "detail-value", value.value);
         content.title = value.value;
         chip.append(label, content);
+        if (value.copyValue) {
+          chip.appendChild(makeButton("Copy", "Copy " + value.copyLabel, () => copyText(value.copyValue, value.copyLabel), "mini-copy"));
+        }
         meta.appendChild(chip);
       }
       return meta;
+    }
+
+    function createModalFact(label, value) {
+      const fact = createNode("span", "modal-fact");
+      fact.append(createNode("span", "", label), createNode("strong", "", value));
+      return fact;
+    }
+
+    function createModalQuickFacts(item) {
+      const facts = createNode("div", "modal-quick-facts");
+      if (similarCount(item)) facts.appendChild(createModalFact("Similar", String(similarCount(item))));
+      facts.appendChild(createModalFact("Media", hasImage(item) ? "Image" : "No image"));
+      return facts;
     }
 
     function createThumb(item) {
@@ -2840,6 +3059,7 @@ _HTML_TEMPLATE = """<!doctype html>
     function createOpenWaDraftAction(item) {
       const actions = resultActionConfig();
       const container = createNode("div", "modal-primary-action");
+      container.appendChild(createNode("div", "action-card-title", "OpenWA handoff"));
       const status = createActionStatus();
       if (!actions.openwa_draft_url || !actions.action_nonce) {
         container.appendChild(makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft", () => copyText(openWaPrompt(item), "OpenWA prompt")));
@@ -2879,6 +3099,7 @@ _HTML_TEMPLATE = """<!doctype html>
     function createReportIssueForm(item) {
       const actions = resultActionConfig();
       const form = createNode("form", "report-form");
+      form.appendChild(createNode("div", "action-card-title", "Quality feedback"));
       const status = createActionStatus();
       if (!actions.report_url || !actions.action_nonce) {
         form.appendChild(makeButton("Copy Report", "Copy prompt to report this result", () => copyText(reportPrompt(item), "Report prompt")));
@@ -2915,6 +3136,8 @@ _HTML_TEMPLATE = """<!doctype html>
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         submit.disabled = true;
+        reason.disabled = true;
+        notes.disabled = true;
         submit.textContent = "Submitting...";
         setActionStatus(status, "Submitting report...");
         try {
@@ -2922,11 +3145,11 @@ _HTML_TEMPLATE = """<!doctype html>
             reason: reason.value,
             notes: notes.value
           });
-          reason.disabled = true;
-          notes.disabled = true;
           submit.textContent = payload.issue_ref ? "Reported as " + payload.issue_ref : "Reported";
           setActionStatus(status, "Issue recorded for review.", "success");
         } catch (error) {
+          reason.disabled = false;
+          notes.disabled = false;
           submit.disabled = false;
           submit.textContent = "Submit report";
           setActionStatus(status, error.message || "Report failed.", "error");
@@ -2943,10 +3166,6 @@ _HTML_TEMPLATE = """<!doctype html>
       secondary.appendChild(createOpenWaDraftAction(item));
       secondary.appendChild(createReportIssueForm(item));
       const utilities = createNode("div", "modal-utility-actions");
-      const sourceUrl = text(item.source_url).trim();
-      if (sourceUrl) {
-        utilities.appendChild(makeButton("Copy URL", "Copy source URL", () => copyText(sourceUrl, "Source URL")));
-      }
       const count = similarCount(item);
       if (count) {
         const similarButton = makeButton("+" + String(count) + " similar", "Show similar listings", () => {
@@ -2967,10 +3186,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }
 
     function modalKicker(item) {
-      const values = ["#" + text(item.rank, "-")];
-      if (item.seller) values.push("👤 " + text(item.seller));
-      if (item.posted_date) values.push("📅 " + formatCopyDate(item.posted_date));
-      return values.join(" | ");
+      return "WatchFacts listing";
     }
 
     function modalTitle(item) {
@@ -2980,8 +3196,24 @@ _HTML_TEMPLATE = """<!doctype html>
     function createResultDetailsContent(item) {
       const details = createNode("section", "result-details");
       const listingSection = createNode("section", "modal-section modal-listing-section");
-      listingSection.appendChild(createFormattedListingDisplay(item, "listing-display-detail", "div"));
+      const hero = createNode("div", "modal-hero");
+      const mediaCard = createNode("div", "modal-media-card");
+      mediaCard.append(createThumb(item), createModalQuickFacts(item));
+      const listingCopy = createNode("div", "modal-listing-copy");
+      listingCopy.append(
+        createNode("div", "modal-section-label", "Listing snapshot"),
+        createFormattedListingDisplay(item, "listing-display-detail", "div")
+      );
+      hero.append(mediaCard, listingCopy);
+      listingSection.appendChild(hero);
       details.appendChild(listingSection);
+
+      const similar = createNode("section", "similar-panel");
+      similar.hidden = true;
+      similar.id = "modal-similar-" + text(item.rank, "result").replace(/[^a-zA-Z0-9_-]/g, "-");
+      const actionsSection = createNode("section", "modal-actions-section");
+      actionsSection.appendChild(createOverflowActions(item, similar, "modal-actions"));
+      details.appendChild(actionsSection);
 
       const metaSection = createNode("section", "modal-section modal-meta-section");
       const idWrap = createNode("div", "result-id-wrap");
@@ -2996,17 +3228,11 @@ _HTML_TEMPLATE = """<!doctype html>
       if (detailsMeta.childElementCount) metaSection.appendChild(detailsMeta);
       details.appendChild(metaSection);
 
-      const similar = createNode("section", "similar-panel");
-      similar.hidden = true;
-      similar.id = "modal-similar-" + text(item.rank, "result").replace(/[^a-zA-Z0-9_-]/g, "-");
       if (similarCount(item)) {
         const similarSection = createNode("section", "modal-section modal-similar-section");
         similarSection.appendChild(similar);
         details.appendChild(similarSection);
       }
-      const actionsSection = createNode("section", "modal-actions-section");
-      actionsSection.appendChild(createOverflowActions(item, similar, "modal-actions"));
-      details.appendChild(actionsSection);
       return details;
     }
 

@@ -173,7 +173,9 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert ".listing-display-detail .listing-line-meta" in html
     assert "border-radius: 999px" in html
     assert "box-shadow: 0 1px 0 rgba(17, 24, 23, 0.03)" in html
-    assert 'listingSection.appendChild(createFormattedListingDisplay(item, "listing-display-detail", "div"));' in html
+    assert 'listingSection.appendChild(hero);' in html
+    assert 'mediaCard.append(createThumb(item), createModalQuickFacts(item));' in html
+    assert 'createFormattedListingDisplay(item, "listing-display-detail", "div")' in html
     assert 'row.appendChild(createFormattedListingDisplay(similarItem, "listing-display-similar", "div"));' in html
     assert 'const listingDisplay = createFormattedListingDisplay(item, "listing-display-card");' in html
     assert "lead.appendChild(listingDisplay);" in html
@@ -219,8 +221,8 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert "focusWithoutScroll(els.modalClose);" in html
     assert "unlockModalScroll();" in html
     assert "focusWithoutScroll(lastModalTrigger);" in html
-    assert 'values.push("👤 " + text(item.seller));' in html
-    assert 'values.push("📅 " + formatCopyDate(item.posted_date));' in html
+    assert 'return "WatchFacts listing";' in html
+    assert 'createModalFact("Media", hasImage(item) ? "Image" : "No image")' in html
     assert 'function createOpenWaDraftAction(item)' in html
     assert 'function createReportIssueForm(item)' in html
     assert 'function postResultAction(url, item, extra = {})' in html
@@ -228,9 +230,19 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert 'submit.textContent = "Submitting...";' in html
     assert '"Create OpenWA draft"' in html
     assert '"Submit report"' in html
+    assert 'function createModalQuickFacts(item)' in html
+    assert 'const hero = createNode("div", "modal-hero");' in html
+    assert 'const mediaCard = createNode("div", "modal-media-card");' in html
+    assert 'const listingCopy = createNode("div", "modal-listing-copy");' in html
+    assert ".modal-media-card .thumb" in html
+    assert "position: relative;" in html
+    assert 'createNode("div", "modal-section-label", "Listing snapshot")' in html
+    assert 'createNode("div", "action-card-title", "OpenWA handoff")' in html
+    assert 'createNode("div", "action-card-title", "Quality feedback")' in html
     assert '"wrong_result", "Wrong result"' in html
     assert '"missing_info", "Missing info"' in html
-    assert 'makeButton("Copy URL", "Copy source URL"' in html
+    assert 'copyValue: text(item.source_url)' in html
+    assert 'makeButton("Copy", "Copy " + value.copyLabel' in html
     assert 'makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft"' in html
     assert 'makeButton("Copy Report", "Copy prompt to report this result"' in html
     assert '"reason: wrong_result | missing_info | other"' in html
@@ -246,7 +258,8 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert 'metaSection.appendChild(idWrap);' in html
     assert 'const actionsSection = createNode("section", "modal-actions-section");' in html
     assert 'actionsSection.appendChild(createOverflowActions(item, similar, "modal-actions"));' in html
-    assert html.index('const similarSection = createNode("section", "modal-section modal-similar-section");') < html.index('const actionsSection = createNode("section", "modal-actions-section");')
+    assert html.index('const actionsSection = createNode("section", "modal-actions-section");') < html.index('const metaSection = createNode("section", "modal-section modal-meta-section");')
+    assert html.index('const metaSection = createNode("section", "modal-section modal-meta-section");') < html.index('const similarSection = createNode("section", "modal-section modal-similar-section");')
     assert 'const similarSection = createNode("section", "modal-section modal-similar-section");' in html
     assert 'document.body.classList.add("modal-open");' in html
     assert 'document.body.classList.remove("modal-open");' in html
