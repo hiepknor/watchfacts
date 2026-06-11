@@ -185,6 +185,28 @@ def test_rank_results_by_quality_prefers_visible_price_after_quality_date_and_re
     assert ranked == [with_price, without_price]
 
 
+def test_rank_results_by_quality_demotes_short_model_suffix_phrase_miss() -> None:
+    broad_stock_list = SearchResult(
+        "1,163,000 145.032 Zeitwerk, Used Full set | HKD 821,000 Lange Zeitwerk",
+        posted_date="May 28, 2026",
+        raw_listing_text=(
+            "Rolex and others 336938 green Jub 540000 hkd "
+            "1,163,000 145.032 Zeitwerk, Used Full set | HKD 821,000 Lange Zeitwerk"
+        ),
+    )
+    clear_lange_1 = SearchResult(
+        "A. Lange & Söhne LANGE 1 Series 139.032 watch only 28900usd",
+        posted_date="May 14, 2026",
+    )
+
+    broad_score = score_result(broad_stock_list, original_rank=0, query="Lange 1")
+    ranked = rank_results_by_quality([broad_stock_list, clear_lange_1], query="Lange 1")
+
+    assert broad_score.quality_group == 1
+    assert "guardrail.brand_model_phrase_missing" in broad_score.reasons
+    assert ranked == [clear_lange_1, broad_stock_list]
+
+
 def test_score_result_detects_split_thousands_price_evidence() -> None:
     result = SearchResult(
         "PP 7118/1200A grey N1/2026 790 000HKD",

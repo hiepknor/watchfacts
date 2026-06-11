@@ -161,6 +161,8 @@ def _guardrail_score(
     if not query:
         return 0, ()
     intent = classify_query_intent(query)
+    if _missing_short_model_suffix_phrase(intent.required_descriptor_tokens, result):
+        return 1, ("guardrail.brand_model_phrase_missing",)
     if intent.kind not in {"reference_with_descriptor", "reference_with_year"}:
         return 0, ()
     if not intent.required_descriptor_tokens:
@@ -173,6 +175,28 @@ def _guardrail_score(
     ):
         return 1, ("guardrail.descriptor_conflict",)
     return 0, ()
+
+
+def _missing_short_model_suffix_phrase(
+    required_descriptor_tokens: tuple[str, ...],
+    result: SearchResult,
+) -> bool:
+    numeric_suffixes = tuple(
+        token for token in required_descriptor_tokens if token.isdigit() and len(token) == 1
+    )
+    if not numeric_suffixes:
+        return False
+    model_tokens = tuple(
+        token for token in required_descriptor_tokens if not token.isdigit()
+    )
+    if not model_tokens:
+        return False
+    normalized_listing = normalize_text(result.listing_text)
+    return not any(
+        re.search(rf"\b{re.escape(model_token)}\s+{re.escape(suffix)}\b", normalized_listing)
+        for model_token in model_tokens
+        for suffix in numeric_suffixes
+    )
 
 
 def _has_required_descriptor_conflict(
