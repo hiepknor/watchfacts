@@ -413,6 +413,39 @@ def test_attribute_product_image_omits_color_scoped_bundle_when_reference_preced
     assert attribution.reason == "image.omitted_bundle_ambiguous"
 
 
+def test_attribute_product_image_omits_repeated_reference_variant_after_first_item() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(
+            listing_text=(
+                "126500LN Black N2/2026 HK$235,000 "
+                "126500LN White N3/2026 HK$279,000"
+            ),
+            image_url="https://watchfacts.example/daytona-parent.jpg",
+        ),
+        listing_text="126500LN White N3/2026 HK$279,000",
+        query="126500ln white 2026",
+    )
+
+    assert attribution.image_url is None
+    assert attribution.reason == "image.omitted_bundle_ambiguous"
+
+
+def test_attribute_product_image_keeps_full_listing_with_repeated_reference() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(
+            listing_text=(
+                "LANGE 1 Series 101.031 Watch LANGE 1 101.031 "
+                "38.5 mm watch only 24500usd"
+            ),
+            image_url="https://watchfacts.example/lange.jpg",
+        ),
+        query="Lange 1",
+    )
+
+    assert attribution.image_url == "https://watchfacts.example/lange.jpg"
+    assert attribution.reason == "image.direct"
+
+
 def test_attribute_product_image_omits_bundle_when_other_reference_precedes_item() -> None:
     attribution = search_module.attribute_product_image(
         ListingCandidate(

@@ -35,7 +35,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v17"
+SEARCH_CACHE_VERSION = "search-v18"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -1005,6 +1005,8 @@ def attribute_product_image(
         return ImageAttribution(None, "image.missing_source")
 
     candidate_text = listing_text or listing.listing_text
+    if normalize_text(candidate_text) == normalize_text(listing.listing_text):
+        return ImageAttribution(listing.image_url, "image.direct")
     if _looks_like_multi_listing_for_image(listing.listing_text):
         if _is_first_scoped_listing_for_image(
             raw_text=listing.listing_text,
@@ -1043,14 +1045,14 @@ def _is_first_scoped_listing_for_image(*, raw_text: str, candidate_text: str) ->
 
 
 def _looks_like_multi_listing_for_image(listing_text: str) -> bool:
-    references = {
+    references = [
         token.casefold()
         for token in PRODUCT_REFERENCE_RE.findall(listing_text)
         if (
             _looks_like_product_reference(token)
             and not _looks_like_bundle_year_reference(token)
         )
-    }
+    ]
     return len(references) > MULTI_LIST_REFERENCE_THRESHOLD
 
 
