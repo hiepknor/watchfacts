@@ -11,7 +11,8 @@ from starlette.testclient import TestClient
 
 from app.config import load_search_settings
 from app import mcp_server
-from app.result_pages import generate_result_page
+from app.openwa_handoff import OpenWAChatDraftResponse
+from app.result_pages import generate_result_page, read_result_page_action_payload
 from app.search_result import SearchResult
 
 
@@ -223,3 +224,216 @@ def test_result_page_route_is_disabled_without_public_base_url(
     response = TestClient(mcp_server.app.streamable_http_app()).get(f"/results/{token}")
 
     assert response.status_code == 404
+
+
+def test_result_page_openwa_action_uses_sidecar_payload(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    settings = load_search_settings(
+        env={
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results",
+            "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
+            "RESULT_PAGE_TTL_SECONDS": "60",
+            "OPENWA_BASE_URL": "http://openwa-api:2785",
+            "OPENWA_API_KEY": "test-key",
+            "OPENWA_DASHBOARD_URL": "https://openwa.example",
+            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
+        },
+        project_root=tmp_path,
+    )
+    page = generate_result_page(
+        "5712g",
+        [
+            SearchResult(
+                "5712G blue 2015 full set",
+                seller="Seller One",
+                seller_phone="+15550001",
+                image_url="/images/5712g.jpg",
+                source_url="/listing/5712g",
+            )
+        ],
+        settings=settings,
+        now=datetime.now(timezone.utc),
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+    action_page = read_result_page_action_payload(token, settings=settings)
+    assert action_page.payload is not None
+    result_id = action_page.payload["results"][0]["result_id"]
+    calls: list[dict[str, object]] = []
+
+    async def fake_create_openwa_chat_draft(config, payload):
+        calls.append(payload)
+        return OpenWAChatDraftResponse(
+            draft_id="draft-1",
+            chat_id=None,
+            dashboard_url="https://openwa.example/chats/drafts/draft-1",
+        )
+
+    monkeypatch.setattr(mcp_server, "load_search_settings", lambda: settings)
+    monkeypatch.setattr(
+        mcp_server,
+        "create_openwa_chat_draft",
+        fake_create_openwa_chat_draft,
+    )
+
+    response = TestClient(mcp_server.app.streamable_http_app()).post(
+        f"/results/{token}/actions/openwa-draft",
+        json={"action_nonce": action_page.action_nonce, "result_id": result_id},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "status": "created",
+        "result_id": result_id,
+        "draft_id": "draft-1",
+        "chat_id": None,
+        "dashboard_url": "https://openwa.example/chats/drafts/draft-1",
+    }
+    assert calls[0]["sourceResultId"] == result_id
+    assert calls[0]["sourceUrl"] == "https://watchfacts.com/listing/5712g"
+    assert calls[0]["listingText"] == "5712G blue 2015 full set"
+    assert calls[0]["rawListingText"] is None
+    assert calls[0]["seller"] == {
+        "name": "Seller One",
+        "phone": "+15550001",
+        "watchfactsId": None,
+        "profileUrl": None,
+    }
+    assert calls[0]["product"]["imageUrl"] == "https://watchfacts.com/images/5712g.jpg"
+
+
+def test_result_page_report_action_records_feedback_issue(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    settings = load_search_settings(
+        env={
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results",
+            "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
+            "RESULT_PAGE_TTL_SECONDS": "60",
+            "DB_PATH": str(tmp_path / "bot.db"),
+        },
+        project_root=tmp_path,
+    )
+    page = generate_result_page(
+        "5712g",
+        [
+            SearchResult(
+                "5712G blue 2015 full set",
+                seller="Seller One",
+                posted_date="June 1, 2026",
+                source_url="/listing/5712g",
+            )
+        ],
+        settings=settings,
+        now=datetime.now(timezone.utc),
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+    action_page = read_result_page_action_payload(token, settings=settings)
+    assert action_page.payload is not None
+    result_id = action_page.payload["results"][0]["result_id"]
+    monkeypatch.setattr(mcp_server, "load_search_settings", lambda: settings)
+
+    response = TestClient(mcp_server.app.streamable_http_app()).post(
+        f"/results/{token}/actions/report",
+        json={
+            "action_nonce": action_page.action_nonce,
+            "result_id": result_id,
+            "reason": "wrong_result",
+            "notes": "bad reference",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["status"] == "recorded"
+    assert payload["result_id"] == result_id
+    assert payload["issue_ref"] == "F1"
+    assert payload["issue"] == {
+        "id": 1,
+        "issue_type": "feedback",
+        "status": "open",
+        "reason": "wrong_result",
+    }
+
+
+def test_result_page_action_rejects_invalid_nonce(monkeypatch, tmp_path) -> None:
+    settings = load_search_settings(
+        env={
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results",
+            "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
+            "RESULT_PAGE_TTL_SECONDS": "60",
+        },
+        project_root=tmp_path,
+    )
+    page = generate_result_page(
+        "5712g",
+        [SearchResult("5712G")],
+        settings=settings,
+        now=datetime.now(timezone.utc),
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+    action_page = read_result_page_action_payload(token, settings=settings)
+    assert action_page.payload is not None
+    result_id = action_page.payload["results"][0]["result_id"]
+    monkeypatch.setattr(mcp_server, "load_search_settings", lambda: settings)
+
+    response = TestClient(mcp_server.app.streamable_http_app()).post(
+        f"/results/{token}/actions/report",
+        json={
+            "action_nonce": "wrong",
+            "result_id": result_id,
+            "reason": "wrong_result",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "ok": False,
+        "error": "invalid_nonce",
+        "message": "Invalid result page action nonce.",
+    }
+
+
+def test_result_page_action_is_rate_limited(monkeypatch, tmp_path) -> None:
+    settings = load_search_settings(
+        env={
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results",
+            "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
+            "RESULT_PAGE_TTL_SECONDS": "60",
+            "RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS": "1",
+            "RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS": "60",
+            "RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS": "30",
+        },
+        project_root=tmp_path,
+    )
+    page = generate_result_page(
+        "5712g",
+        [SearchResult("5712G")],
+        settings=settings,
+        now=datetime.now(timezone.utc),
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+    action_page = read_result_page_action_payload(token, settings=settings)
+    assert action_page.payload is not None
+    result_id = action_page.payload["results"][0]["result_id"]
+    monkeypatch.setattr(mcp_server, "load_search_settings", lambda: settings)
+    client = TestClient(mcp_server.app.streamable_http_app())
+    body = {
+        "action_nonce": action_page.action_nonce,
+        "result_id": result_id,
+        "reason": "wrong_result",
+    }
+
+    assert client.post(f"/results/{token}/actions/report", json=body).status_code == 200
+    limited = client.post(f"/results/{token}/actions/report", json=body)
+
+    assert limited.status_code == 429
+    assert limited.json()["error"] == "rate_limited"
