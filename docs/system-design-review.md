@@ -2,7 +2,65 @@
 
 Date: 2026-06-11 (latest review update)
 
-Status: review snapshot updated after production validation.
+Status: review snapshot updated after search-quality Phase 1-4 validation.
+
+## Search Quality Phase Evidence (2026-06-11)
+
+The search-quality improvement plan has shipped the first deterministic slices:
+
+- Phase 1 audit visibility: quality audit rows now expose `has_image`,
+  `image_reason`, `scope_reason`, `server_filtered`, bounded/redacted
+  `raw_listing_preview`, and `stable_listing_id`.
+- Phase 2 image attribution: image decisions use explicit reason codes such as
+  `image.direct`, `image.inherited_parent_color`,
+  `image.omitted_bundle_ambiguous`, and `image.missing_source`.
+- Phase 3 stock-list QA: incomplete scoped stock-list segments and
+  reference-only fragments are flagged/demoted instead of hidden.
+- Phase 4 local verification: repository checks and authorized HTTPX smoke pass
+  against the current runtime.
+
+Latest local verification:
+
+```text
+make check
+499 passed, 1 warning
+
+make mcp-smoke
+WARMUP ok=true elapsed_ms=4952 form_ms=4900 http_version=HTTP/1.1
+HTTPX run=1 ok=true elapsed_ms=6033 status_elapsed_ms=6033 form_ms=0 post_ms=6032 http_version=HTTP/1.1 html_bytes=336595 server_filtered=True
+SUMMARY httpx_passed=1/1
+```
+
+Latest quality-audit sample, `--limit 5`, uses live WatchFacts runtime data and
+shows the new diagnostics are actionable:
+
+| Query | Audited Results | Missing Images | Missing Rate | Scoped Stock List | Dominant Image Reasons |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `5205r 2026` | 5 | 1 | 20% | 1 | `image.direct`, `image.omitted_bundle_ambiguous` |
+| `126500ln white 2026` | 3 | 0 | 0% | 1 | `image.direct` |
+| `7118/1200a grey` | 5 | 1 | 20% | 1 | `image.direct`, `image.omitted_bundle_ambiguous` |
+| `Fpj Elegante Titanium` | 5 | 5 | 100% | 5 | `image.omitted_bundle_ambiguous` |
+| `228235a choco` | 5 | 2 | 40% | 3 | `image.direct`, `image.missing_source`, `image.omitted_bundle_ambiguous` |
+| `5712r` | 5 | 2 | 40% | 1 | `image.direct`, `image.missing_source`, `image.omitted_bundle_ambiguous` |
+| `5205r green` | 5 | 0 | 0% | 1 | `image.direct` |
+| `5726/1a` | 5 | 1 | 20% | 0 | `image.direct`, `image.missing_source` |
+| `RM65-01 Lebron` | 5 | 4 | 80% | 4 | `image.direct`, `image.omitted_bundle_ambiguous` |
+| `116500 panda` | 5 | 0 | 0% | 0 | `image.direct` |
+
+Interpretation:
+
+- The audit now distinguishes missing source images from intentionally omitted
+  bundle images. This keeps the safety posture intact: ambiguous bundle images
+  are omitted rather than attached to the wrong product.
+- Stock-list image gaps remain concentrated in broad stock-list cards, notably
+  `Fpj Elegante Titanium` and `RM65-01 Lebron`.
+- Scoped stock-list segments that keep visible price evidence score as clean;
+  incomplete scoped fragments are now routed to suspicious QA with specific
+  reasons.
+- `116500 panda` still needs future alias/descriptor refinement: the sample is
+  image-complete, but top results include black Daytona listings because `panda`
+  is currently treated as an alias/pass-through descriptor in some server-filtered
+  flows.
 
 ## Current Operational Snapshot (2026-06-11)
 
@@ -235,13 +293,15 @@ MCP contract change and verified against Hermes behavior.
 Review-time verification:
 
 ```text
-python -m pytest -q
+make check
+make mcp-smoke
 ```
 
 Result:
 
 ```text
-478 passed
+499 passed, 1 warning
+SUMMARY httpx_passed=1/1
 ```
 
 The stale rank follow-up issue described above is fixed by
