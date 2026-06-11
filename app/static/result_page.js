@@ -36,6 +36,7 @@
     };
 
     let lastModalTrigger = null;
+    const openWaDraftStateByResultId = new Map();
 
     function text(value, fallback = "") {
       if (value === null || value === undefined || value === "") return fallback;
@@ -491,12 +492,135 @@
       status.textContent = message;
     }
 
+    function openWaResultKey(item) {
+      return text(item && item.result_id) || "rank:" + text(item && item.rank);
+    }
+
+    function getOpenWaDraftState(item) {
+      return openWaDraftStateByResultId.get(openWaResultKey(item)) || { status: "idle" };
+    }
+
+    function setOpenWaDraftState(key, state) {
+      openWaDraftStateByResultId.set(key, state);
+      updateOpenWaDraftControls(key);
+    }
+
+    function applyOpenWaButtonState(button, stateValue) {
+      button.classList.toggle("is-loading", stateValue.status === "loading");
+      button.classList.toggle("is-success", stateValue.status === "success");
+      button.classList.toggle("is-error", stateValue.status === "error");
+      button.disabled = stateValue.status === "loading" || button.dataset.openwaUnavailable === "true";
+      if (button.dataset.openwaUnavailable === "true") {
+        button.textContent = "OpenWA";
+        button.title = "OpenWA draft creation is not available on this page";
+        button.setAttribute("aria-label", "OpenWA draft creation is not available on this page");
+      } else if (stateValue.status === "loading") {
+        button.textContent = "Creating...";
+        button.title = "Creating an OpenWA chat draft";
+        button.setAttribute("aria-label", "Creating an OpenWA chat draft");
+      } else if (stateValue.status === "success") {
+        button.textContent = stateValue.dashboardUrl ? "Open draft" : "Drafted";
+        button.title = stateValue.dashboardUrl ? "Open OpenWA draft" : "OpenWA draft created";
+        button.setAttribute("aria-label", stateValue.dashboardUrl ? "Open OpenWA draft" : "OpenWA draft created");
+      } else if (stateValue.status === "error") {
+        button.textContent = "Retry OpenWA";
+        button.title = "Retry creating an OpenWA chat draft";
+        button.setAttribute("aria-label", "Retry creating an OpenWA chat draft");
+      } else {
+        button.textContent = "OpenWA";
+        button.title = "Create an OpenWA chat draft";
+        button.setAttribute("aria-label", "Create an OpenWA chat draft");
+      }
+    }
+
+    function updateOpenWaDraftControls(key) {
+      const stateValue = openWaDraftStateByResultId.get(key) || { status: "idle" };
+      const buttons = document.querySelectorAll("[data-openwa-action-button='true']");
+      buttons.forEach(button => {
+        if (button.dataset.openwaResultId !== key) return;
+        applyOpenWaButtonState(button, stateValue);
+      });
+
+      const statuses = document.querySelectorAll("[data-openwa-status-result-id]");
+      statuses.forEach(status => {
+        if (status.dataset.openwaStatusResultId !== key) return;
+        const message = stateValue.message || "";
+        status.className = "modal-action-status" + (
+          stateValue.status === "success" ? " success" : stateValue.status === "error" ? " error" : ""
+        );
+        status.textContent = message;
+        if (stateValue.status === "success" && stateValue.dashboardUrl) {
+          const link = document.createElement("a");
+          link.className = "draft-link";
+          link.href = stateValue.dashboardUrl;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = "Open draft";
+          status.append(" ");
+          status.appendChild(link);
+        }
+      });
+    }
+
+    async function handleOpenWaDraft(item) {
+      const actions = resultActionConfig();
+      const key = openWaResultKey(item);
+      const current = getOpenWaDraftState(item);
+      if (current.status === "loading") return;
+      if (current.status === "success" && current.dashboardUrl) {
+        window.open(current.dashboardUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (!actions.openwa_draft_url || !actions.action_nonce) {
+        await copyText(openWaPrompt(item), "OpenWA prompt");
+        return;
+      }
+
+      setOpenWaDraftState(key, { status: "loading", message: "Creating draft..." });
+      try {
+        const payload = await postResultAction(actions.openwa_draft_url, item);
+        const nextState = {
+          status: "success",
+          message: "Draft created.",
+          dashboardUrl: payload.dashboard_url || ""
+        };
+        setOpenWaDraftState(key, nextState);
+        showToast(payload.dashboard_url ? "Draft created. Open draft from the button." : "Draft created");
+      } catch (error) {
+        const message = error.message || "OpenWA draft failed.";
+        setOpenWaDraftState(key, { status: "error", message });
+        showToast(message);
+      }
+    }
+
+    function createOpenWaDraftButton(item, options = {}) {
+      const actions = resultActionConfig();
+      const button = makeButton("OpenWA", "Create an OpenWA chat draft", () => handleOpenWaDraft(item), "action-button openwa-action");
+      const key = openWaResultKey(item);
+      button.dataset.openwaActionButton = "true";
+      button.dataset.openwaResultId = key;
+      if (options.compact) {
+        button.classList.add("openwa-action-compact");
+      }
+      if (!actions.openwa_draft_url || !actions.action_nonce) {
+        button.dataset.openwaUnavailable = "true";
+        button.disabled = true;
+        button.title = "OpenWA draft creation is not available on this page";
+        button.setAttribute("aria-label", "OpenWA draft creation is not available on this page");
+      }
+      applyOpenWaButtonState(button, getOpenWaDraftState(item));
+      updateOpenWaDraftControls(key);
+      return button;
+    }
+
     function createOpenWaDraftAction(item) {
       const actions = resultActionConfig();
       const container = createNode("div", "modal-primary-action");
       container.appendChild(createNode("div", "action-card-title", "OpenWA handoff"));
       container.appendChild(createNode("p", "action-card-description", "Create a seller chat draft from this exact result_id."));
       const status = createActionStatus();
+      const key = openWaResultKey(item);
+      status.dataset.openwaStatusResultId = key;
       if (!actions.openwa_draft_url || !actions.action_nonce) {
         container.appendChild(makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft", () => copyText(openWaPrompt(item), "OpenWA prompt")));
         container.appendChild(status);
@@ -504,31 +628,9 @@
         return container;
       }
 
-      const button = makeButton("Create OpenWA draft", "Create an OpenWA chat draft", async () => {
-        button.disabled = true;
-        button.textContent = "Creating...";
-        setActionStatus(status, "Creating draft...");
-        try {
-          const payload = await postResultAction(actions.openwa_draft_url, item);
-          button.textContent = "Draft created";
-          setActionStatus(status, "Draft created.", "success");
-          if (payload.dashboard_url) {
-            const link = document.createElement("a");
-            link.className = "draft-link";
-            link.href = payload.dashboard_url;
-            link.target = "_blank";
-            link.rel = "noopener noreferrer";
-            link.textContent = "Open draft";
-            status.append(" ");
-            status.appendChild(link);
-          }
-        } catch (error) {
-          button.disabled = false;
-          button.textContent = "Create OpenWA draft";
-          setActionStatus(status, error.message || "OpenWA draft failed.", "error");
-        }
-      });
+      const button = createOpenWaDraftButton(item);
       container.append(button, status);
+      updateOpenWaDraftControls(key);
       return container;
     }
 
@@ -762,6 +864,7 @@
         sourceButton.disabled = true;
         primary.appendChild(sourceButton);
       }
+      primary.appendChild(createOpenWaDraftButton(item, { compact: true }));
 
       const detailsToggle = makeButton("More", "Show result details", () => {
         openDetailsModal(item, detailsToggle);

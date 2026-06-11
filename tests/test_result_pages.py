@@ -273,7 +273,7 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert 'function postResultAction(url, item, extra = {})' in html
     assert 'button.textContent = "Creating...";' in html
     assert 'submit.textContent = "Submitting...";' in html
-    assert '"Create OpenWA draft"' in html
+    assert 'makeButton("OpenWA", "Create an OpenWA chat draft"' in html
     assert '"Submit report"' in html
     assert 'function createModalQuickFacts(item)' in html
     assert 'const hero = createNode("div", "modal-hero");' in html
@@ -289,6 +289,14 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert 'createNode("div", "modal-section-label", "Listing snapshot")' in html
     assert 'createNode("div", "action-card-title", "OpenWA handoff")' in html
     assert 'createNode("div", "action-card-title", "Quality feedback")' in html
+    assert "const openWaDraftStateByResultId = new Map();" in html
+    assert "function createOpenWaDraftButton(item, options = {})" in html
+    assert "function handleOpenWaDraft(item)" in html
+    assert 'primary.appendChild(createOpenWaDraftButton(item, { compact: true }));' in html
+    assert 'button.dataset.openwaActionButton = "true";' in html
+    assert 'status.dataset.openwaStatusResultId = key;' in html
+    assert 'status: "success",' in html
+    assert ".openwa-action" in html
     assert '"wrong_result", "Wrong result"' in html
     assert '"missing_info", "Missing info"' in html
     assert 'copyValue: text(item.source_url)' in html
