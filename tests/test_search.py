@@ -377,6 +377,40 @@ def test_attribute_product_image_inherits_parent_image_for_color_scoped_listing(
     assert attribution.reason == "image.inherited_parent_color"
 
 
+def test_attribute_product_image_inherits_parent_image_for_first_scoped_item() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(
+            listing_text=(
+                "Panerai Luminor PAM01033 2023 Fullset 38100HKD "
+                "Panerai Luminor PAM01312 2018 Fullset 27900HKD"
+            ),
+            image_url="https://watchfacts.example/panerai-first.jpg",
+        ),
+        listing_text="Panerai Luminor PAM01033 2023 Fullset 38100HKD",
+        query="Panerai Luminor",
+    )
+
+    assert attribution.image_url == "https://watchfacts.example/panerai-first.jpg"
+    assert attribution.reason == "image.inherited_parent_first_item"
+
+
+def test_attribute_product_image_omits_bundle_when_other_reference_precedes_item() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(
+            listing_text=(
+                "5712/1r 2025 1,975m 5990/1 2021 1,98m "
+                "FPJ Elegante titanium 48mm 2019 fullset HKD785K"
+            ),
+            image_url="https://watchfacts.example/bundle-cover.jpg",
+        ),
+        listing_text="FPJ Elegante titanium 48mm 2019 fullset HKD785K",
+        query="FPJ Elegante Titanium",
+    )
+
+    assert attribution.image_url is None
+    assert attribution.reason == "image.omitted_bundle_ambiguous"
+
+
 def test_attribute_product_image_omits_ambiguous_bundle_image() -> None:
     attribution = search_module.attribute_product_image(
         ListingCandidate(

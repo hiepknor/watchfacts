@@ -35,7 +35,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v12"
+SEARCH_CACHE_VERSION = "search-v13"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -896,8 +896,40 @@ def attribute_product_image(
             and _query_is_color_specific(query)
         ):
             return ImageAttribution(listing.image_url, "image.inherited_parent_color")
+        if _is_first_scoped_listing_for_image(
+            raw_text=listing.listing_text,
+            candidate_text=candidate_text,
+        ):
+            return ImageAttribution(
+                listing.image_url,
+                "image.inherited_parent_first_item",
+            )
         return ImageAttribution(None, "image.omitted_bundle_ambiguous")
     return ImageAttribution(listing.image_url, "image.direct")
+
+
+def _is_first_scoped_listing_for_image(*, raw_text: str, candidate_text: str) -> bool:
+    raw_normalized = normalize_text(raw_text)
+    candidate_normalized = normalize_text(candidate_text)
+    if not raw_normalized or not candidate_normalized:
+        return False
+    if raw_normalized == candidate_normalized:
+        return False
+
+    candidate_index = raw_normalized.find(candidate_normalized)
+    if candidate_index < 0:
+        return False
+
+    prefix = raw_normalized[:candidate_index]
+    preceding_references = {
+        token.casefold()
+        for token in PRODUCT_REFERENCE_RE.findall(prefix)
+        if (
+            _looks_like_product_reference(token)
+            and not _looks_like_bundle_year_reference(token)
+        )
+    }
+    return not preceding_references
 
 
 def _looks_like_multi_listing_for_image(listing_text: str) -> bool:
