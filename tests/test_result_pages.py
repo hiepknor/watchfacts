@@ -153,6 +153,8 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "position: relative;" in html
     assert ".thumb img {\n      position: absolute;\n      inset: 0;" in html
     assert "grid-template-columns: clamp(5.75rem, 28vw, 7rem) minmax(0, 1fr)" in html
+    assert ".result-actions-primary,\n      .results.density-dense .result-actions-primary {\n        display: grid;" in html
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
     assert ".result-id-icon" in html
     assert ".detail-icon" in html
     assert ".modal-heading" in html

@@ -1918,6 +1918,32 @@ _HTML_TEMPLATE = """<!doctype html>
       .toolbar-actions .tool-button {
         width: 100%;
       }
+
+      .result-actions,
+      .results.density-dense .result-actions {
+        grid-template-columns: 1fr;
+        gap: 0.32rem;
+      }
+
+      .result-actions-primary,
+      .results.density-dense .result-actions-primary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.32rem;
+        width: 100%;
+      }
+
+      .result-actions-primary .action-button,
+      .result-actions-primary .source-link,
+      .results.density-dense .result-actions-primary .action-button,
+      .results.density-dense .result-actions-primary .source-link {
+        width: 100%;
+      }
+
+      .result-actions .details-toggle,
+      .results.density-dense .result-actions .details-toggle {
+        width: 100%;
+      }
     }
 
     @media (max-width: 520px) {
