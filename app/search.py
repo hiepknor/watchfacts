@@ -492,10 +492,12 @@ class WatchFactsSearchWorkflow:
         reason_code: str,
     ) -> int:
         kept_result_ids = {id(result) for result in after}
+        kept_by_key = {key_for_result(result): result for result in after}
         dropped = 0
         for index, result in enumerate(before, start=1):
             if id(result) in kept_result_ids:
                 continue
+            kept_result = kept_by_key.get(key_for_result(result))
             dropped += 1
             audit_events.append(
                 SearchAuditEvent(
@@ -511,6 +513,11 @@ class WatchFactsSearchWorkflow:
                     reason_codes=(
                         reason_code,
                         f"dedupe_key_hash:{_short_hash(key_for_result(result))}",
+                        (
+                            f"kept_audit_id:{_stable_audit_id(kept_result)}"
+                            if kept_result is not None
+                            else "kept_audit_id:unknown"
+                        ),
                     ),
                 )
             )

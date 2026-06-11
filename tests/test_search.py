@@ -176,6 +176,34 @@ def test_search_workflow_audits_weak_and_ambiguous_match_candidates() -> None:
     assert "ambiguous.not_deterministic_match" in events[1].reason_codes
 
 
+def test_search_workflow_audits_dedupe_drop_keep_reference() -> None:
+    events: list[search_module.SearchAuditEvent] = []
+    older = SearchResult(
+        "Patek 5712G Used 2015 76k usdt",
+        seller="Issac",
+        posted_date="May 1, 2026",
+    )
+    newer = SearchResult(
+        "Patek 5712G Used 2015 76k usdt",
+        seller="Issac",
+        posted_date="June 1, 2026",
+    )
+
+    dropped = WatchFactsSearchWorkflow._audit_dedupe_drops(
+        events,
+        query="5712g",
+        before=[older, newer],
+        after=[newer],
+        key_for_result=lambda result: result.listing_text,
+        reason_code="dedupe.text",
+    )
+
+    assert dropped == 1
+    assert events[0].stage == "dedupe_drop"
+    assert "dedupe.text" in events[0].reason_codes
+    assert any(reason.startswith("kept_audit_id:") for reason in events[0].reason_codes)
+
+
 def test_search_workflow_preserves_seller_phone_from_watchfacts_json(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """
