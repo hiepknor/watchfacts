@@ -147,7 +147,9 @@ Legacy Telegram path:
 Telegram update
   -> telegram_bot handler
   -> same search workflow
-  -> telegram_bot sends a summary first, then paginated result batches
+  -> telegram_bot generates a result page when configured
+  -> telegram_bot sends a summary plus result-page link
+  -> telegram_bot falls back to paginated result batches only when page generation is unavailable
 ```
 
 Production quality audits reuse the same search workflow and scoring modules.
@@ -171,7 +173,10 @@ Responsibilities:
 - Register legacy Telegram command/message handlers.
 - Validate empty or unsupported user input.
 - Call the search workflow asynchronously.
-- Format listing results for Telegram.
+- Generate the result page link used as the primary Telegram result surface when
+  configured.
+- Format listing results for Telegram only as fallback behavior when result-page
+  generation is unavailable.
 - Catch user-facing errors and return clear messages.
 - Notify configured owners when WatchFacts browser session state is missing or expired.
 - Provide `/health` to check WatchFacts session validity without exposing browser state.

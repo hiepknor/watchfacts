@@ -26,7 +26,8 @@ production integration target is Hermes over MCP.
 - Structured MCP tools for search, health, chat draft handoff, issue review, and suspicious QA
 - Offset-based MCP pagination with stable result ranks, short-lived `result_id` handles, and durable `stable_listing_id` references
 - Product image propagation via `image_url`
-- Summary-first Telegram pagination with "Show results" / "Load more"
+- Summary-first legacy Telegram flow that opens generated result pages when available
+- Telegram result batch fallback when generated result pages are not configured or fail
 - Telegram message length guards for long listings
 - WatchFacts session health check and owner alert when login state expires
 - One-tap result feedback and owner issue review commands
@@ -92,7 +93,9 @@ For the legacy Telegram bot, set the real Telegram bot token. Leave
 more Telegram user IDs, separated by commas, to restrict usage to those owners
 only.
 Set `TELEGRAM_RESULT_LIMIT` to control how many results are sent per Telegram
-batch.
+fallback batch when generated result pages are not available. In the normal
+production flow, Telegram sends a summary and a link to the generated result
+page instead of sending listing batches into the chat.
 Set `TELEGRAM_MAX_CONCURRENT_SEARCHES` to control how many WatchFacts searches
 may run at the same time; extra queries show a queue message and wait.
 Set `SEARCH_CACHE_TTL_SECONDS` to reuse fresh identical search results before
@@ -386,6 +389,12 @@ Control the number of results sent per button click:
 TELEGRAM_RESULT_LIMIT=5
 ```
 
+When `RESULT_PAGE_PUBLIC_BASE_URL` is configured, Telegram search replies use
+the generated result page as the primary result surface. The bot sends a compact
+summary plus a `Mở trang kết quả` button; it does not send individual listing
+batches into the chat. The older `Xem kết quả` / `Xem thêm` Telegram batch flow
+is retained only as a fallback when result-page generation is disabled or fails.
+
 Control concurrent WatchFacts searches:
 
 ```bash
@@ -464,15 +473,17 @@ message:
 Example response:
 
 ```text
-🏷️ 228253A choco N2 467000hkd
+✅ Đã tìm xong
 
-👤 HK STOCKS
+📦 Kết quả chính: 8
+🔁 Listing tương tự đã gộp: 2
 
-📅 20/04/2026
+🔗 Bấm “Mở trang kết quả” để xem dạng card, lọc và copy.
 ```
 
-The bot sends a result summary first. Press "Show results" to receive the first
-result batch, then use "Load more" for the next batches.
+When generated result pages are enabled, the `Mở trang kết quả` button is the
+primary result UI. Telegram listing batches are fallback-only behavior when the
+result page link is unavailable.
 
 ## Search And Matching Logic
 

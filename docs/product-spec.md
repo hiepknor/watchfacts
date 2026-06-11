@@ -69,6 +69,11 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 - Expose MCP tool `create_chat_draft(query, result_id=None, rank=None)` for seller handoff through OpenWA; `result_id` may be either the short-lived `result_id` or the returned `stable_listing_id`.
 - Expose MCP issue tools `report_issue`, `list_issues`, `get_issue`, `update_issue`, and `suspicious_summary`; issue reporting should accept `result_id`, `stable_listing_id`, or `rank`.
 - Accept plain-text Telegram messages as search queries in the legacy bot.
+- When generated result pages are configured, Telegram should return a compact
+  summary plus a result-page link instead of sending listing batches into the
+  chat.
+- When generated result pages are unavailable, Telegram may fall back to
+  paginated listing batches.
 - Support `/start`, `/help`, `/settings`, and `/cancel`.
 - Support `/health` for checking whether the saved WatchFacts session is valid.
 - Support owner issue commands for user feedback and auto-QA queues:
@@ -178,7 +183,8 @@ at the start of the message or reply to a bot message.
 - A Hermes user can ask for more results and the MCP runtime returns the next page through `offset`.
 - Product image URLs are passed through when available and never invented.
 - A selected result can be handed off to OpenWA through `create_chat_draft`.
-- A legacy Telegram user can still send a query and receive matching listings.
+- A legacy Telegram user can still send a query and receive a generated result
+  page link, or matching listing batches when result pages are unavailable.
 - Matching is case-insensitive, token-based, and covered by tests.
 - Output order prioritizes quality before recency, and recency is newest-first inside each quality group.
 - Duplicate listings are suppressed across a single search result set.

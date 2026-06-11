@@ -496,22 +496,24 @@ async def send_search_results(
         await _maybe_await(message.reply_text(NO_RESULTS_MESSAGE))
         return
 
-    token = _store_result_page(
-        context,
-        query=query,
-        results=results,
-        next_offset=0,
-        result_limit=result_limit,
-    )
-    page = _get_result_page(context, token)
-    if page is not None:
-        _prefetch_page_results(context, page, 0)
     result_page = _generate_result_page(
         context,
         query=query,
         results=results,
     )
     result_page_url = result_page.url if result_page is not None else None
+    token = ""
+    if result_page_url is None:
+        token = _store_result_page(
+            context,
+            query=query,
+            results=results,
+            next_offset=0,
+            result_limit=result_limit,
+        )
+        page = _get_result_page(context, token)
+        if page is not None:
+            _prefetch_page_results(context, page, 0)
     await _maybe_await(
         message.reply_text(
             format_result_summary(
@@ -523,7 +525,7 @@ async def send_search_results(
             reply_markup=_results_markup(
                 token,
                 min(result_limit, len(results)),
-                label="Xem trong Telegram" if result_page_url else "Xem kết quả",
+                label="Xem kết quả",
                 result_page_url=result_page_url,
             ),
         )
@@ -809,23 +811,29 @@ def format_result_summary(
         if similar_count
         else "🔁 Không có listing tương tự bị gộp\n"
     )
-    similar_hint = (
-        "🔎 Similar listings sẽ hiện bên trong từng kết quả.\n"
-        if similar_count
-        else ""
-    )
-    action_hint = (
-        "👇 Bấm “Mở trang kết quả” để scan dạng card.\n"
-        "💬 Muốn nhận từng kết quả trong Telegram: bấm “Xem trong Telegram”.\n"
-        if result_page_available
-        else "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
-    )
+    similar_hint = ""
+    if similar_count:
+        similar_hint = (
+            "🔎 Listing tương tự sẽ hiện bên trong trang kết quả.\n"
+            if result_page_available
+            else "🔎 Similar listings sẽ hiện bên trong từng kết quả.\n"
+        )
+    if result_page_available:
+        return (
+            "✅ Đã tìm xong\n\n"
+            f"📦 Kết quả chính: {total_count}\n"
+            f"{similar_line}\n"
+            "🔗 Bấm “Mở trang kết quả” để xem dạng card, lọc và copy.\n"
+            f"{similar_hint}"
+            "💡 Muốn gọn hơn: thêm màu dial, năm, tình trạng hoặc khoảng giá."
+        )
+
     return (
         "✅ Đã tìm xong\n\n"
         f"📦 Kết quả chính: {total_count}\n"
         f"{similar_line}"
         f"📨 Lượt đầu: {first_batch_count} kết quả\n\n"
-        f"{action_hint}"
+        "👇 Bấm “Xem kết quả” để bắt đầu nhận danh sách.\n"
         f"{similar_hint}"
         "💡 Muốn gọn hơn: thêm màu dial, năm, tình trạng hoặc khoảng giá."
     )
@@ -2045,26 +2053,38 @@ def _results_markup(
     label: str,
     result_page_url: str | None = None,
 ):
+    if result_page_url:
+        return _result_page_markup(result_page_url)
+    return _telegram_results_markup(token, count, label=label)
+
+
+def _result_page_markup(result_page_url: str):
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-    rows = []
-    if result_page_url:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    "🔗 Mở trang kết quả",
-                    url=result_page_url,
-                )
-            ]
-        )
-    rows.append(
+    rows = [
+        [
+            InlineKeyboardButton(
+                "🔗 Mở trang kết quả",
+                url=result_page_url,
+            )
+        ]
+    ]
+    return InlineKeyboardMarkup(
+        rows
+    )
+
+
+def _telegram_results_markup(token: str, count: int, *, label: str):
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    rows = [
         [
             InlineKeyboardButton(
                 f"{label} {count}",
                 callback_data=f"{MORE_RESULTS_PREFIX}{token}",
             )
         ]
-    )
+    ]
     return InlineKeyboardMarkup(
         rows
     )

@@ -118,7 +118,8 @@ Access control:
 - `TELEGRAM_ALLOWED_USER_IDS=` means all Telegram users may use the bot.
 - `TELEGRAM_ALLOWED_USER_IDS=123456789` means only that Telegram user id may use it.
 - Multiple owner ids can be comma-separated.
-- `TELEGRAM_RESULT_LIMIT=5` controls how many results each Telegram button click sends.
+- `TELEGRAM_RESULT_LIMIT=5` controls how many results each Telegram fallback
+  button click sends when generated result pages are unavailable.
 - `TELEGRAM_MAX_CONCURRENT_SEARCHES=1` serializes WatchFacts searches and shows
   a queue notice for extra concurrent queries.
 - `SEARCH_CACHE_TTL_SECONDS=300` serves repeated identical normalized searches
@@ -129,7 +130,11 @@ Access control:
 Telegram behavior:
 
 - The bot sends a summary first, not the full result list.
-- Use the "Show results" and "Load more" buttons to send result batches.
+- When `RESULT_PAGE_PUBLIC_BASE_URL` is configured and page generation
+  succeeds, the summary includes only a `Mở trang kết quả` button. The generated
+  result page is the primary listing UI.
+- The older "Xem kết quả" and "Xem thêm" buttons are fallback-only behavior when
+  result-page generation is disabled or fails.
 - When another query is already running, the bot tells the user their query is
   waiting and then runs it automatically when a search slot is free.
 - Photo captions are limited to Telegram's caption size; long text fallback messages are also truncated safely.

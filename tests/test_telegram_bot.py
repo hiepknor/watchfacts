@@ -845,10 +845,10 @@ def test_search_summary_includes_generated_result_page_link_when_enabled(tmp_pat
         result_page_available=True,
     )
     markup = message.sent_messages[-1].reply_markup
+    assert len(markup.inline_keyboard) == 1
     assert markup.inline_keyboard[0][0].text == "🔗 Mở trang kết quả"
     assert markup.inline_keyboard[0][0].url.startswith("https://mcp.example/results/")
-    assert markup.inline_keyboard[1][0].text == "Xem trong Telegram 1"
-    assert markup.inline_keyboard[1][0].callback_data.startswith("more_results:")
+    assert context.application.bot_data.get("result_pages", {}) == {}
     assert len(list(result_page_config.storage_dir.glob("*.html"))) == 1
 
 
