@@ -9,7 +9,7 @@
 __WATCHFACTS_RESULTS_CSS__
   </style>
 </head>
-<body>
+<body id="resultPageApp" v-scope v-effect="render()">
   <header class="page-header">
     <div class="wrap header-inner">
       <div class="header-main">
@@ -38,11 +38,11 @@ __WATCHFACTS_RESULTS_CSS__
     <div class="wrap toolbar-inner">
       <div class="search-control">
         <label class="sr-only" for="filterInput">Filter results</label>
-        <input id="filterInput" type="search" autocomplete="off" placeholder="Filter model, seller, phone, source">
+        <input id="filterInput" type="search" autocomplete="off" placeholder="Filter model, seller, phone, source" :value="state.filter" :disabled="!results" @input="setFilter($event.target.value)">
       </div>
       <div class="sort-control">
         <label class="sr-only" for="sortSelect">Sort results</label>
-        <select id="sortSelect" aria-label="Sort results">
+        <select id="sortSelect" aria-label="Sort results" :value="state.sort" :disabled="!results" @change="setSort($event.target.value)">
           <option value="rank">Rank</option>
           <option value="posted_desc">Posted date</option>
           <option value="seller">Seller</option>
@@ -50,13 +50,13 @@ __WATCHFACTS_RESULTS_CSS__
       </div>
       <div class="toolbar-actions">
         <div class="density-toggle" role="group" aria-label="View density">
-          <button type="button" id="densityComfortable" aria-pressed="true">Comfort</button>
-          <button type="button" id="densityDense" aria-pressed="false">Dense</button>
+          <button type="button" id="densityComfortable" :aria-pressed="String(state.density === 'comfortable')" :class="{ 'is-active': state.density === 'comfortable' }" :disabled="!results" @click="setDensity('comfortable')">Comfort</button>
+          <button type="button" id="densityDense" :aria-pressed="String(state.density === 'dense')" :class="{ 'is-active': state.density === 'dense' }" :disabled="!results" @click="setDensity('dense')">Dense</button>
         </div>
-        <button type="button" class="tool-button" id="copyPageLink">Link</button>
-        <button type="button" class="tool-button" id="exportJson">JSON</button>
-        <button type="button" class="tool-button" id="exportCsv">CSV</button>
-        <button type="button" class="tool-button" id="printPage">Print</button>
+        <button type="button" class="tool-button" id="copyPageLink" :disabled="!results" @click="copyPageLink()">Link</button>
+        <button type="button" class="tool-button" id="exportJson" :disabled="!results" @click="exportJson()">JSON</button>
+        <button type="button" class="tool-button" id="exportCsv" :disabled="!results" @click="exportCsv()">CSV</button>
+        <button type="button" class="tool-button" id="printPage" :disabled="!results" @click="printPage()">Print</button>
       </div>
     </div>
   </section>
@@ -77,7 +77,7 @@ __WATCHFACTS_RESULTS_CSS__
           <p class="modal-kicker" id="resultModalKicker"></p>
           <h2 class="modal-title" id="resultModalTitle">Result details</h2>
         </div>
-        <button type="button" class="modal-close" id="resultModalClose">Close</button>
+        <button type="button" class="modal-close" id="resultModalClose" @click="closeDetailsModal()">Close</button>
       </div>
       <div class="modal-body" id="resultModalBody"></div>
     </div>
@@ -85,6 +85,9 @@ __WATCHFACTS_RESULTS_CSS__
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script>
+__WATCHFACTS_RESULTS_VENDOR_JS__
+  </script>
   <script>
 __WATCHFACTS_RESULTS_JS__
   </script>

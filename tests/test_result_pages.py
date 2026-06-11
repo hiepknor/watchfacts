@@ -67,6 +67,7 @@ def test_result_page_template_is_loaded_from_project_template_file() -> None:
     source = Path(result_pages.__file__).read_text(encoding="utf-8")
     template = result_pages.RESULT_PAGE_TEMPLATE_PATH.read_text(encoding="utf-8")
     css = result_pages.RESULT_PAGE_CSS_PATH.read_text(encoding="utf-8")
+    vendor_js = result_pages.RESULT_PAGE_VENDOR_JS_PATH.read_text(encoding="utf-8")
     js = result_pages.RESULT_PAGE_JS_PATH.read_text(encoding="utf-8")
     rendered = render_result_page_template({"query": "5712g", "results": []})
 
@@ -74,14 +75,22 @@ def test_result_page_template_is_loaded_from_project_template_file() -> None:
     assert result_pages.RESULT_PAGE_CSS_PATH.name == "result_page.css"
     assert result_pages.RESULT_PAGE_JS_PATH.name == "result_page.js"
     assert result_pages.RESULT_PAGE_CSS_PLACEHOLDER in template
+    assert result_pages.RESULT_PAGE_VENDOR_JS_PLACEHOLDER in template
     assert result_pages.RESULT_PAGE_JS_PLACEHOLDER in template
     assert result_pages.RESULT_PAGE_TEMPLATE_PLACEHOLDER in js
     assert ".result-card" in css
+    assert "PetiteVue" in vendor_js
+    assert "PetiteVue.createApp(resultPageApp()).mount" in js
     assert "function renderResults()" in js
     assert "_HTML_TEMPLATE" not in source
     assert result_pages.RESULT_PAGE_TEMPLATE_PLACEHOLDER not in rendered
     assert result_pages.RESULT_PAGE_CSS_PLACEHOLDER not in rendered
+    assert result_pages.RESULT_PAGE_VENDOR_JS_PLACEHOLDER not in rendered
     assert result_pages.RESULT_PAGE_JS_PLACEHOLDER not in rendered
+    assert '<body id="resultPageApp" v-scope v-effect="render()">' in rendered
+    assert '<body id="resultPageApp" v-scope v-cloak' not in rendered
+    assert "[v-cloak]" not in rendered
+    assert "https://unpkg.com" not in rendered
 
 
 def test_render_result_page_template_includes_operational_dashboard_hooks() -> None:
@@ -310,7 +319,7 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert "lastModalTrigger.focus();" not in html
     assert 'if (event.key === "Escape")' in html
     assert 'if (event.key !== "Tab") return;' in html
-    assert 'els.modalClose.addEventListener("click", () => closeDetailsModal());' in html
+    assert '@click="closeDetailsModal()"' in html
     assert 'els.modalBackdrop.addEventListener("click", () => closeDetailsModal());' in html
     assert 'document.addEventListener("keydown", handleModalKeydown);' in html
     assert "closeDetailsModal({ restoreFocus: false });" in html
