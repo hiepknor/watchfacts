@@ -290,11 +290,13 @@ class WatchFactsHttpClient:
     ) -> SearchFormCacheEntry:
         if use_cache and self._form_cache_is_fresh():
             assert self._form_cache is not None
+            self._last_form_refresh_elapsed_ms = 0
             return self._form_cache
 
         async with self._form_lock:
             if use_cache and self._form_cache_is_fresh():
                 assert self._form_cache is not None
+                self._last_form_refresh_elapsed_ms = 0
                 return self._form_cache
 
             client = await self._get_client()
