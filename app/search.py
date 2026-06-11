@@ -35,7 +35,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v14"
+SEARCH_CACHE_VERSION = "search-v15"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -933,7 +933,52 @@ def _should_block_short_model_phrase_miss(
         original_rank=0,
         query=query,
     )
-    return "guardrail.brand_model_phrase_missing" in raw_score.reasons
+    if "guardrail.brand_model_phrase_missing" in raw_score.reasons:
+        return True
+    return not _raw_has_local_short_model_phrase(
+        raw_text=result.raw_listing_text,
+        candidate_text=result.listing_text,
+        query=query,
+    )
+
+
+def _raw_has_local_short_model_phrase(
+    *,
+    raw_text: str,
+    candidate_text: str,
+    query: str,
+) -> bool:
+    intent = classify_query_intent(query)
+    numeric_suffixes = tuple(
+        token
+        for token in intent.required_descriptor_tokens
+        if token.isdigit() and len(token) == 1
+    )
+    model_tokens = tuple(
+        token for token in intent.required_descriptor_tokens if not token.isdigit()
+    )
+    if not numeric_suffixes or not model_tokens:
+        return False
+
+    normalized_raw = normalize_text(raw_text)
+    normalized_candidate = normalize_text(candidate_text)
+    if not normalized_raw or not normalized_candidate:
+        return False
+    candidate_index = normalized_raw.find(normalized_candidate)
+    if candidate_index < 0:
+        return False
+
+    window_start = max(0, candidate_index - 60)
+    window_end = min(
+        len(normalized_raw),
+        candidate_index + len(normalized_candidate) + 60,
+    )
+    local_window = normalized_raw[window_start:window_end]
+    return any(
+        re.search(rf"\b{re.escape(model_token)}\s+{re.escape(suffix)}\b", local_window)
+        for model_token in model_tokens
+        for suffix in numeric_suffixes
+    )
 
 
 def _product_image_url(

@@ -1849,3 +1849,52 @@ def test_search_workflow_blocks_short_model_final_phrase_miss() -> None:
     assert blocked_events[0].decision == "exclude"
     assert blocked_events[0].guardrail_action == "block_from_final"
     assert "guardrail.brand_model_phrase_missing" in blocked_events[0].reason_codes
+
+
+def test_search_workflow_keeps_short_model_when_raw_phrase_is_local() -> None:
+    events: list[search_module.SearchAuditEvent] = []
+    query_intent = search_module.classify_query_intent("Lange 1")
+    extracted = SearchResult(
+        "1 Series 139.032 watch only 28900usd",
+        raw_listing_text=(
+            "A Lange LANGE 1 Series 139.032 watch only 28900usd "
+            "Lange Zeitwerk 821000 hkd"
+        ),
+    )
+    results = [extracted]
+
+    blocked_count = WatchFactsSearchWorkflow._audit_and_filter_blocked_final_results(
+        events,
+        query="Lange 1",
+        query_intent=query_intent,
+        results=results,
+    )
+
+    assert blocked_count == 0
+    assert results == [extracted]
+    assert events == []
+
+
+def test_search_workflow_blocks_short_model_when_raw_phrase_is_distant() -> None:
+    events: list[search_module.SearchAuditEvent] = []
+    query_intent = search_module.classify_query_intent("Lange 1")
+    distant_false_positive = SearchResult(
+        "1,163,000 145.032 Zeitwerk | HKD 821,000 Lange Zeitwerk",
+        raw_listing_text=(
+            "A Lange LANGE 1 Series 139.032 watch only 28900usd "
+            "Rolex 336938 green 540000 hkd Patek 5712R 820000 hkd "
+            "1,163,000 145.032 Zeitwerk | HKD 821,000 Lange Zeitwerk"
+        ),
+    )
+    results = [distant_false_positive]
+
+    blocked_count = WatchFactsSearchWorkflow._audit_and_filter_blocked_final_results(
+        events,
+        query="Lange 1",
+        query_intent=query_intent,
+        results=results,
+    )
+
+    assert blocked_count == 1
+    assert results == []
+    assert events[0].stage == "blocked_final"
