@@ -112,6 +112,8 @@ def validate_search_diagnostics(payload: dict[str, Any]) -> list[str]:
         "unique_latest_count",
         "unique_text_count",
         "deduped_drop_count",
+        "weak_match_count",
+        "ambiguous_candidate_count",
         "final_count",
     ):
         _validate_optional_non_negative_int(

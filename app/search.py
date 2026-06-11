@@ -65,6 +65,8 @@ class SearchDiagnostics:
     source_truncation_suspected: bool | None
     raw_candidate_count: int | None = None
     deduped_drop_count: int | None = None
+    weak_match_count: int | None = None
+    ambiguous_candidate_count: int | None = None
     fuzzy_score_min: int | None = None
     fuzzy_score_avg: float | None = None
     rejection_reasons: dict[str, int] | None = None
@@ -78,6 +80,8 @@ class SearchDiagnostics:
             "unique_latest_count": self.unique_latest_count,
             "unique_text_count": self.unique_text_count,
             "deduped_drop_count": self.deduped_drop_count,
+            "weak_match_count": self.weak_match_count,
+            "ambiguous_candidate_count": self.ambiguous_candidate_count,
             "fuzzy_score_min": self.fuzzy_score_min,
             "fuzzy_score_avg": self.fuzzy_score_avg,
             "final_count": self.final_count,
@@ -236,6 +240,12 @@ class WatchFactsSearchWorkflow:
             stage="matched",
             listings=matched,
         )
+        weak_match_count, ambiguous_candidate_count = self._audit_match_confidence(
+            audit_events,
+            query=query,
+            parsed=parsed,
+            matched=matched,
+        )
         parsed_count = len(parsed)
         if _should_expand_year_query(query, len(matched)):
             expanded_query = _query_without_year_descriptors(query)
@@ -273,6 +283,17 @@ class WatchFactsSearchWorkflow:
                     candidate_prefix="expanded-matched",
                 )
                 matched = _merge_listing_candidates(matched, expanded_matched)
+                expanded_weak_count, expanded_ambiguous_count = (
+                    self._audit_match_confidence(
+                        audit_events,
+                        query=query,
+                        parsed=expanded_parsed,
+                        matched=expanded_matched,
+                        candidate_prefix="expanded",
+                    )
+                )
+                weak_match_count += expanded_weak_count
+                ambiguous_candidate_count += expanded_ambiguous_count
         results = [_to_search_result(query, listing) for listing in matched]
         self._audit_search_results(
             audit_events,
@@ -343,6 +364,8 @@ class WatchFactsSearchWorkflow:
                 1 for event in audit_events if event.stage == "raw"
             ),
             deduped_drop_count=deduped_drop_count,
+            weak_match_count=weak_match_count,
+            ambiguous_candidate_count=ambiguous_candidate_count,
             fuzzy_score_min=min(fuzzy_scores) if fuzzy_scores else None,
             fuzzy_score_avg=(
                 round(sum(fuzzy_scores) / len(fuzzy_scores), 2)
@@ -492,6 +515,68 @@ class WatchFactsSearchWorkflow:
                 )
             )
         return dropped
+
+    @staticmethod
+    def _audit_match_confidence(
+        audit_events: list[SearchAuditEvent],
+        *,
+        query: str,
+        parsed: list[ListingCandidate],
+        matched: list[ListingCandidate],
+        candidate_prefix: str = "confidence",
+    ) -> tuple[int, int]:
+        _, descriptor_tokens = parse_query_terms(query)
+        matched_keys = {_listing_candidate_key(listing) for listing in matched}
+        weak_count = 0
+        ambiguous_count = 0
+        for index, listing in enumerate(matched, start=1):
+            score = score_fuzzy_match(query, listing.listing_text)
+            weak_reasons = _weak_match_reasons(score, descriptor_tokens=descriptor_tokens)
+            if not weak_reasons:
+                continue
+            weak_count += 1
+            audit_events.append(
+                SearchAuditEvent(
+                    query=query,
+                    stage="weak_match",
+                    candidate_id=f"{candidate_prefix}:weak:{index}",
+                    rank=index,
+                    seller=listing.seller,
+                    posted_date=listing.posted_date,
+                    source_url=listing.source_url,
+                    has_image=bool(listing.image_url),
+                    text=listing.listing_text,
+                    reason_codes=weak_reasons,
+                )
+            )
+        for index, listing in enumerate(parsed, start=1):
+            if _listing_candidate_key(listing) in matched_keys:
+                continue
+            score = score_fuzzy_match(query, listing.listing_text)
+            if score.reference_score < 80 or score.overall_score < 60:
+                continue
+            if descriptor_tokens and score.descriptor_overlap_score < 50:
+                continue
+            ambiguous_count += 1
+            audit_events.append(
+                SearchAuditEvent(
+                    query=query,
+                    stage="ambiguous_candidate",
+                    candidate_id=f"{candidate_prefix}:ambiguous:{index}",
+                    rank=index,
+                    seller=listing.seller,
+                    posted_date=listing.posted_date,
+                    source_url=listing.source_url,
+                    has_image=bool(listing.image_url),
+                    text=listing.listing_text,
+                    reason_codes=(
+                        "ambiguous.not_deterministic_match",
+                        f"fuzzy_score:{score.overall_score}",
+                        f"reference_score:{score.reference_score}",
+                    ),
+                )
+            )
+        return weak_count, ambiguous_count
 
     def _get_cached_results(
         self, cache_key: str
@@ -1037,6 +1122,21 @@ def _stable_audit_id(result: SearchResult) -> str:
 
 def _short_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def _weak_match_reasons(
+    score,
+    *,
+    descriptor_tokens: list[str],
+) -> tuple[str, ...]:
+    reasons: list[str] = []
+    if score.reference_score < 60:
+        reasons.append("weak.reference_score_low")
+    if descriptor_tokens and score.descriptor_overlap_score < 100:
+        reasons.append("weak.descriptor_overlap_low")
+    if score.query_text_score < 45:
+        reasons.append("weak.query_text_score_low")
+    return tuple(reasons)
 
 
 def _search_concurrency_semaphore(settings: Settings) -> asyncio.Semaphore | None:

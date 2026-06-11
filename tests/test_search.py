@@ -64,6 +64,8 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
         "unique_latest_count": 1,
         "unique_text_count": 1,
         "deduped_drop_count": 0,
+        "weak_match_count": 0,
+        "ambiguous_candidate_count": 0,
         "fuzzy_score_min": 86,
         "fuzzy_score_avg": 86.0,
         "final_count": 1,
@@ -153,6 +155,25 @@ def test_search_workflow_records_quality_metrics(tmp_path) -> None:
         ).fetchone()
 
     assert query_row == ("15510or", 2, 1, 1, 1)
+
+
+def test_search_workflow_audits_weak_and_ambiguous_match_candidates() -> None:
+    events: list[search_module.SearchAuditEvent] = []
+    weak_listing = ListingCandidate("Patek 5205R black dial 2026 415.000 HKD")
+    ambiguous_listing = ListingCandidate("Patek 5205R green New 2026 415.000 HKD")
+
+    weak_count, ambiguous_count = WatchFactsSearchWorkflow._audit_match_confidence(
+        events,
+        query="5205r green",
+        parsed=[weak_listing, ambiguous_listing],
+        matched=[weak_listing],
+    )
+
+    assert weak_count == 1
+    assert ambiguous_count == 1
+    assert [event.stage for event in events] == ["weak_match", "ambiguous_candidate"]
+    assert "weak.descriptor_overlap_low" in events[0].reason_codes
+    assert "ambiguous.not_deterministic_match" in events[1].reason_codes
 
 
 def test_search_workflow_preserves_seller_phone_from_watchfacts_json(tmp_path) -> None:
