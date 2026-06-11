@@ -100,6 +100,8 @@ def generate_result_page(
 
     created_at = _utc_now(now)
     expires_at = created_at.timestamp() + active_config.ttl_seconds
+    token = _new_token(active_config.storage_dir)
+    action_nonce = secrets.token_urlsafe(24)
     page_results = _result_payloads(query, results, active_config)
     payload = {
         "query": _clean_text(query, MAX_SHORT_TEXT_CHARS),
@@ -112,10 +114,14 @@ def generate_result_page(
         "limit": limit,
         "next_offset": next_offset,
         "result_count": len(page_results),
+        "actions": {
+            "action_nonce": action_nonce,
+            "openwa_draft_url": f"{active_config.public_base_url.rstrip('/')}/{token}/actions/openwa-draft",
+            "report_url": f"{active_config.public_base_url.rstrip('/')}/{token}/actions/report",
+        },
         "results": page_results,
     }
 
-    token = _new_token(active_config.storage_dir)
     cleanup_expired_result_pages(active_config, now=created_at)
     active_config.storage_dir.mkdir(parents=True, exist_ok=True)
     html = render_result_page_template(payload)
@@ -125,7 +131,7 @@ def generate_result_page(
     sidecar_path.write_text(
         json.dumps(
             {
-                "action_nonce": secrets.token_urlsafe(24),
+                "action_nonce": action_nonce,
                 "payload": payload,
             },
             ensure_ascii=False,
@@ -1249,9 +1255,100 @@ _HTML_TEMPLATE = """<!doctype html>
       justify-content: flex-end;
     }
 
+    .modal-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      gap: 0.45rem;
+      align-items: stretch;
+    }
+
     .modal-actions .action-button {
       min-height: 2rem;
       background: var(--surface);
+    }
+
+    .modal-primary-action,
+    .report-form,
+    .modal-utility-actions {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 0.55rem;
+    }
+
+    .modal-primary-action {
+      display: grid;
+      gap: 0.35rem;
+      align-content: start;
+    }
+
+    .modal-primary-action .action-button {
+      width: 100%;
+      align-self: start;
+      border-color: var(--listing-border);
+      background: var(--listing-soft);
+      color: var(--listing-strong);
+      font-weight: 750;
+    }
+
+    .modal-action-status {
+      min-height: 1.1rem;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+
+    .modal-action-status.error {
+      color: var(--danger);
+    }
+
+    .modal-action-status.success {
+      color: var(--accent-strong);
+    }
+
+    .draft-link {
+      color: var(--accent-strong);
+      font-weight: 750;
+    }
+
+    .report-form {
+      display: grid;
+      gap: 0.4rem;
+    }
+
+    .report-form label {
+      display: grid;
+      gap: 0.2rem;
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 750;
+    }
+
+    .report-form textarea {
+      min-height: 4.25rem;
+      resize: vertical;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 0.45rem 0.55rem;
+      font: inherit;
+      font-size: 0.8rem;
+    }
+
+    .report-form select {
+      min-height: 2.15rem;
+    }
+
+    .modal-utility-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      justify-content: flex-end;
     }
 
     .similar-panel {
@@ -1836,6 +1933,12 @@ _HTML_TEMPLATE = """<!doctype html>
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(5.75rem, 1fr));
         gap: 0.35rem;
+      }
+
+      .modal-primary-action,
+      .report-form,
+      .modal-utility-actions {
+        grid-column: 1 / -1;
       }
 
       .modal-actions .action-button {
@@ -2694,14 +2797,155 @@ _HTML_TEMPLATE = """<!doctype html>
       panel.dataset.loaded = "true";
     }
 
+    function resultActionConfig() {
+      const actions = results && results.actions;
+      return actions && typeof actions === "object" ? actions : {};
+    }
+
+    async function postResultAction(url, item, extra = {}) {
+      const actions = resultActionConfig();
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({
+          action_nonce: text(actions.action_nonce),
+          result_id: text(item.result_id)
+        }, extra))
+      });
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        payload = null;
+      }
+      if (!response.ok || !payload || payload.ok === false) {
+        const message = payload && payload.message ? payload.message : "Action failed.";
+        throw new Error(message);
+      }
+      return payload;
+    }
+
+    function createActionStatus() {
+      const status = createNode("div", "modal-action-status");
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      return status;
+    }
+
+    function setActionStatus(status, message, className = "") {
+      status.className = "modal-action-status" + (className ? " " + className : "");
+      status.textContent = message;
+    }
+
+    function createOpenWaDraftAction(item) {
+      const actions = resultActionConfig();
+      const container = createNode("div", "modal-primary-action");
+      const status = createActionStatus();
+      if (!actions.openwa_draft_url || !actions.action_nonce) {
+        container.appendChild(makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft", () => copyText(openWaPrompt(item), "OpenWA prompt")));
+        container.appendChild(status);
+        setActionStatus(status, "Draft creation is not available on this page.");
+        return container;
+      }
+
+      const button = makeButton("Create OpenWA draft", "Create an OpenWA chat draft", async () => {
+        button.disabled = true;
+        button.textContent = "Creating...";
+        setActionStatus(status, "Creating draft...");
+        try {
+          const payload = await postResultAction(actions.openwa_draft_url, item);
+          button.textContent = "Draft created";
+          setActionStatus(status, "Draft created.", "success");
+          if (payload.dashboard_url) {
+            const link = document.createElement("a");
+            link.className = "draft-link";
+            link.href = payload.dashboard_url;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = "Open draft";
+            status.append(" ");
+            status.appendChild(link);
+          }
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = "Create OpenWA draft";
+          setActionStatus(status, error.message || "OpenWA draft failed.", "error");
+        }
+      });
+      container.append(button, status);
+      return container;
+    }
+
+    function createReportIssueForm(item) {
+      const actions = resultActionConfig();
+      const form = createNode("form", "report-form");
+      const status = createActionStatus();
+      if (!actions.report_url || !actions.action_nonce) {
+        form.appendChild(makeButton("Copy Report", "Copy prompt to report this result", () => copyText(reportPrompt(item), "Report prompt")));
+        form.appendChild(status);
+        setActionStatus(status, "Issue reporting is not available on this page.");
+        return form;
+      }
+
+      const reasonLabel = createNode("label", "", "Issue reason");
+      const reason = document.createElement("select");
+      reason.name = "reason";
+      reason.required = true;
+      for (const option of [
+        ["wrong_result", "Wrong result"],
+        ["missing_info", "Missing info"],
+        ["other", "Other"]
+      ]) {
+        const node = document.createElement("option");
+        node.value = option[0];
+        node.textContent = option[1];
+        reason.appendChild(node);
+      }
+      reasonLabel.appendChild(reason);
+
+      const notesLabel = createNode("label", "", "Notes");
+      const notes = document.createElement("textarea");
+      notes.name = "notes";
+      notes.maxLength = 1000;
+      notes.placeholder = "Optional context for review";
+      notesLabel.appendChild(notes);
+
+      const submit = makeButton("Submit report", "Submit result issue report", () => {}, "action-button");
+      submit.type = "submit";
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        submit.disabled = true;
+        submit.textContent = "Submitting...";
+        setActionStatus(status, "Submitting report...");
+        try {
+          const payload = await postResultAction(actions.report_url, item, {
+            reason: reason.value,
+            notes: notes.value
+          });
+          reason.disabled = true;
+          notes.disabled = true;
+          submit.textContent = payload.issue_ref ? "Reported as " + payload.issue_ref : "Reported";
+          setActionStatus(status, "Issue recorded for review.", "success");
+        } catch (error) {
+          submit.disabled = false;
+          submit.textContent = "Submit report";
+          setActionStatus(status, error.message || "Report failed.", "error");
+        }
+      });
+
+      form.append(reasonLabel, notesLabel, submit, status);
+      return form;
+    }
+
     function createOverflowActions(item, similarPanel, className = "") {
       const secondaryClass = ["result-actions-secondary", className].filter(Boolean).join(" ");
       const secondary = createNode("div", secondaryClass);
-      secondary.appendChild(makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft", () => copyText(openWaPrompt(item), "OpenWA prompt")));
-      secondary.appendChild(makeButton("Copy Report", "Copy prompt to report this result", () => copyText(reportPrompt(item), "Report prompt")));
+      secondary.appendChild(createOpenWaDraftAction(item));
+      secondary.appendChild(createReportIssueForm(item));
+      const utilities = createNode("div", "modal-utility-actions");
       const sourceUrl = text(item.source_url).trim();
       if (sourceUrl) {
-        secondary.appendChild(makeButton("Copy URL", "Copy source URL", () => copyText(sourceUrl, "Source URL")));
+        utilities.appendChild(makeButton("Copy URL", "Copy source URL", () => copyText(sourceUrl, "Source URL")));
       }
       const count = similarCount(item);
       if (count) {
@@ -2716,8 +2960,9 @@ _HTML_TEMPLATE = """<!doctype html>
         });
         similarButton.setAttribute("aria-expanded", "false");
         similarButton.setAttribute("aria-controls", similarPanel.id);
-        secondary.appendChild(similarButton);
+        utilities.appendChild(similarButton);
       }
+      if (utilities.childElementCount) secondary.appendChild(utilities);
       return secondary;
     }
 

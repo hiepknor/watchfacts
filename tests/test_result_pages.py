@@ -221,9 +221,18 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert "focusWithoutScroll(lastModalTrigger);" in html
     assert 'values.push("👤 " + text(item.seller));' in html
     assert 'values.push("📅 " + formatCopyDate(item.posted_date));' in html
+    assert 'function createOpenWaDraftAction(item)' in html
+    assert 'function createReportIssueForm(item)' in html
+    assert 'function postResultAction(url, item, extra = {})' in html
+    assert 'button.textContent = "Creating...";' in html
+    assert 'submit.textContent = "Submitting...";' in html
+    assert '"Create OpenWA draft"' in html
+    assert '"Submit report"' in html
+    assert '"wrong_result", "Wrong result"' in html
+    assert '"missing_info", "Missing info"' in html
+    assert 'makeButton("Copy URL", "Copy source URL"' in html
     assert 'makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft"' in html
     assert 'makeButton("Copy Report", "Copy prompt to report this result"' in html
-    assert 'makeButton("Copy URL", "Copy source URL"' in html
     assert '"reason: wrong_result | missing_info | other"' in html
     assert 'const idIcon = createNode("span", "result-id-icon", "🆔");' in html
     assert 'idWrap.append(idIcon, idText, idCopy);' in html
@@ -480,6 +489,11 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
     assert "second result should be bounded out" not in html
     assert isinstance(sidecar["action_nonce"], str)
     assert len(sidecar["action_nonce"]) >= 16
+    assert sidecar["payload"]["actions"] == {
+        "action_nonce": sidecar["action_nonce"],
+        "openwa_draft_url": f"{page.url}/actions/openwa-draft",
+        "report_url": f"{page.url}/actions/report",
+    }
     assert sidecar["payload"]["query"] == "5712g </script><script>alert(1)</script>"
     assert (
         sidecar["payload"]["results"][0]["source_url"]
