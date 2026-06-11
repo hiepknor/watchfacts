@@ -37,6 +37,16 @@ def test_score_result_demotes_missing_price_evidence() -> None:
     assert "suspicious.missing_price_evidence" in score.reasons
 
 
+def test_score_result_demotes_reference_only_fragment_as_suspicious() -> None:
+    result = SearchResult("Patek ref 5712G")
+
+    score = score_result(result, original_rank=0, query="5712g")
+
+    assert score.quality_group == 2
+    assert "quality.suspicious" in score.reasons
+    assert "suspicious.reference_only_fragment" in score.reasons
+
+
 def test_score_result_does_not_treat_karat_gold_as_price_evidence() -> None:
     result = SearchResult(
         "5712R Patek original movement customized 18k rose gold case reservation",

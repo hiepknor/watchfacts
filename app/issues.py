@@ -50,6 +50,9 @@ def detect_suspicious_result(
     if _scoped_stock_list_missing_price(normalized, raw_normalized):
         issues.append(SuspiciousIssue("scoped_stock_list_missing_price", 2))
 
+    if _reference_only_fragment(normalized):
+        issues.append(SuspiciousIssue("reference_only_fragment", 2))
+
     if (
         not issues
         and raw_normalized
@@ -304,6 +307,45 @@ def _looks_like_product_reference(token: str) -> bool:
     if _looks_like_price_token(normalized):
         return False
     return True
+
+
+def _reference_only_fragment(listing_text: str) -> bool:
+    if not listing_text:
+        return False
+    if _has_price_evidence(listing_text):
+        return False
+    if _looks_like_non_sale_request(listing_text):
+        return False
+
+    tokens = listing_text.split()
+    references = {
+        token.casefold().strip(":,.;")
+        for token in PRODUCT_REFERENCE_RE.findall(listing_text)
+        if _looks_like_product_reference(token)
+    }
+    if not references:
+        return False
+
+    descriptive_tokens = [
+        token.strip(":,.;").casefold()
+        for token in tokens
+        if token.strip(":,.;").casefold() not in references
+        and not _looks_like_brand_or_reference_label(token)
+    ]
+    return len(descriptive_tokens) == 0
+
+
+def _looks_like_brand_or_reference_label(token: str) -> bool:
+    normalized = token.strip(":,.;").casefold()
+    return normalized in {
+        "ap",
+        "audemars",
+        "patek",
+        "philippe",
+        "pp",
+        "ref",
+        "rolex",
+    }
 
 
 def _looks_like_non_sale_request(value: str) -> bool:

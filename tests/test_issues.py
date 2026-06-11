@@ -167,6 +167,24 @@ def test_detect_suspicious_result_does_not_treat_reference_as_plain_price() -> N
     assert [issue.reason for issue in issues] == ["missing_price_evidence"]
 
 
+def test_detect_suspicious_result_flags_reference_only_fragment() -> None:
+    issues = detect_suspicious_result(
+        listing_text="Patek ref 5712G",
+        raw_listing_text="Patek ref 5712G",
+    )
+
+    assert [issue.reason for issue in issues] == ["reference_only_fragment"]
+
+
+def test_detect_suspicious_result_keeps_descriptive_missing_price_reason() -> None:
+    issues = detect_suspicious_result(
+        listing_text="5712G new 2024",
+        raw_listing_text="5712G new 2024",
+    )
+
+    assert [issue.reason for issue in issues] == ["missing_price_evidence"]
+
+
 def test_detect_suspicious_result_ignores_comma_thousands_price() -> None:
     issues = detect_suspicious_result(
         listing_text="116500 panda watch only -3 links 27,500",
