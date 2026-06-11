@@ -35,7 +35,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v15"
+SEARCH_CACHE_VERSION = "search-v16"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -968,17 +968,18 @@ def _raw_has_local_short_model_phrase(
     if candidate_index < 0:
         return False
 
-    window_start = max(0, candidate_index - 60)
-    window_end = min(
-        len(normalized_raw),
-        candidate_index + len(normalized_candidate) + 60,
-    )
-    local_window = normalized_raw[window_start:window_end]
-    return any(
-        re.search(rf"\b{re.escape(model_token)}\s+{re.escape(suffix)}\b", local_window)
-        for model_token in model_tokens
-        for suffix in numeric_suffixes
-    )
+    candidate_end = candidate_index + len(normalized_candidate)
+    for model_token in model_tokens:
+        for suffix in numeric_suffixes:
+            phrase_re = re.compile(
+                rf"\b{re.escape(model_token)}\s+{re.escape(suffix)}\b"
+            )
+            for match in phrase_re.finditer(normalized_raw):
+                if match.start() <= candidate_index <= match.end():
+                    return True
+                if candidate_index <= match.start() < candidate_end:
+                    return True
+    return False
 
 
 def _product_image_url(

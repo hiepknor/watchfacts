@@ -1898,3 +1898,30 @@ def test_search_workflow_blocks_short_model_when_raw_phrase_is_distant() -> None
     assert blocked_count == 1
     assert results == []
     assert events[0].stage == "blocked_final"
+
+
+def test_search_workflow_blocks_short_model_when_candidate_starts_at_previous_price() -> None:
+    events: list[search_module.SearchAuditEvent] = []
+    query_intent = search_module.classify_query_intent("Lange 1")
+    price_leak_false_positive = SearchResult(
+        "1,163,000 145.032 Zeitwerk Used Full set HKD 821,000 Lange Zeitwerk",
+        raw_listing_text=(
+            "425.025 Lange 1 brand new full set 2024 HKD 1,163,000 "
+            "145.032 Zeitwerk Used Full set HKD 821,000 Lange Zeitwerk"
+        ),
+    )
+    results = [price_leak_false_positive]
+
+    blocked_count = WatchFactsSearchWorkflow._audit_and_filter_blocked_final_results(
+        events,
+        query="Lange 1",
+        query_intent=query_intent,
+        results=results,
+    )
+
+    assert blocked_count == 1
+    assert results == []
+    assert events[0].reason_codes == (
+        "guardrail.brand_model_phrase_missing",
+        "blocked.short_model_phrase_missing",
+    )
