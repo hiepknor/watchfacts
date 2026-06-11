@@ -78,6 +78,8 @@ def test_render_result_page_template_includes_operational_dashboard_hooks() -> N
     assert "function renderResults()" in html
     assert "function createResultCard(item)" in html
     assert "No result payload" in html
+    assert ".view-note" in html
+    assert "display: none;" in html
 
 
 def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
@@ -235,7 +237,7 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert 'createModalFact("Media", hasImage(item) ? "Image" : "No image")' in html
     assert 'class="modal-fact-label"' not in html
     assert 'fact.setAttribute("aria-label", label + ": " + value);' in html
-    assert 'createNode("span", "modal-fact-label", label)' in html
+    assert 'createNode("span", "modal-fact-label", label + ": ")' in html
     assert 'createModalFact("Source"' not in html
     assert 'Create a seller chat draft from this exact result_id.' in html
     assert 'Report missing details or a wrong match for review.' in html
@@ -249,8 +251,10 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert 'function createModalQuickFacts(item)' in html
     assert 'const hero = createNode("div", "modal-hero");' in html
     assert 'const mediaCard = createNode("div", "modal-media-card");' in html
+    assert 'mediaCard.classList.add("modal-media-card-no-image")' in html
     assert 'const listingCopy = createNode("div", "modal-listing-copy");' in html
     assert ".modal-media-card .thumb" in html
+    assert ".modal-media-card-no-image .thumb" in html
     assert "position: relative;" in html
     assert 'createNode("div", "modal-section-label", "Listing snapshot")' in html
     assert 'createNode("div", "action-card-title", "OpenWA handoff")' in html

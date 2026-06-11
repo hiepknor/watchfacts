@@ -790,6 +790,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .view-note {
       flex: 0 0 auto;
       color: var(--subtle);
+      display: none;
     }
 
     .results {
@@ -1255,6 +1256,12 @@ _HTML_TEMPLATE = """<!doctype html>
       position: relative;
       overflow: hidden;
       align-self: start;
+    }
+
+    .modal-media-card-no-image .thumb {
+      min-height: 4.75rem;
+      max-height: 5.5rem;
+      aspect-ratio: auto;
     }
 
     .modal-quick-facts {
@@ -2579,6 +2586,17 @@ _HTML_TEMPLATE = """<!doctype html>
       box-shadow: 0 16px 36px rgba(17, 24, 23, 0.09);
     }
 
+    @media (min-width: 761px) {
+      .result-card.no-image {
+        grid-template-columns: 7rem minmax(0, 1fr);
+        min-height: 8rem;
+      }
+
+      .result-card.no-image .thumb {
+        min-height: 8rem;
+      }
+    }
+
     .result-media,
     .results.density-dense .result-media {
       min-height: 100%;
@@ -2781,6 +2799,12 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 11px;
     }
 
+    .modal-media-card-no-image .thumb {
+      min-height: 4.75rem;
+      max-height: 5.5rem;
+      aspect-ratio: auto;
+    }
+
     .modal-quick-facts {
       display: grid;
       grid-template-columns: 1fr;
@@ -2876,6 +2900,34 @@ _HTML_TEMPLATE = """<!doctype html>
       .result-card,
       .results.density-dense .result-card {
         grid-template-columns: var(--result-media-tablet) minmax(0, 1fr);
+      }
+
+      .result-card.no-image {
+        grid-template-columns: 7rem minmax(0, 1fr);
+        min-height: 8rem;
+      }
+
+      .result-card.no-image .thumb {
+        min-height: 8rem;
+      }
+
+      .result-actions,
+      .results.density-dense .result-actions {
+        grid-template-columns: minmax(0, 1fr) minmax(5.25rem, auto);
+        align-items: end;
+      }
+
+      .result-actions-primary,
+      .results.density-dense .result-actions-primary {
+        display: flex;
+        width: auto;
+      }
+
+      .result-actions-primary .action-button,
+      .result-actions-primary .source-link,
+      .results.density-dense .result-actions-primary .action-button,
+      .results.density-dense .result-actions-primary .source-link {
+        width: auto;
       }
 
       .results.density-dense .result-card {
@@ -3026,6 +3078,11 @@ _HTML_TEMPLATE = """<!doctype html>
       .modal-media-card .thumb {
         aspect-ratio: 1;
         max-height: 8rem;
+      }
+
+      .modal-media-card-no-image .thumb {
+        min-height: 5.5rem;
+        max-height: 6rem;
       }
 
       .modal-quick-facts {
@@ -3578,7 +3635,7 @@ _HTML_TEMPLATE = """<!doctype html>
     function createModalFact(label, value) {
       const fact = createNode("span", "modal-fact");
       fact.setAttribute("aria-label", label + ": " + value);
-      fact.append(createNode("span", "modal-fact-label", label), createNode("strong", "", value));
+      fact.append(createNode("span", "modal-fact-label", label + ": "), createNode("strong", "", value));
       return fact;
     }
 
@@ -3810,6 +3867,7 @@ _HTML_TEMPLATE = """<!doctype html>
       const listingSection = createNode("section", "modal-section modal-listing-section");
       const hero = createNode("div", "modal-hero");
       const mediaCard = createNode("div", "modal-media-card");
+      if (!hasImage(item)) mediaCard.classList.add("modal-media-card-no-image");
       mediaCard.append(createThumb(item), createModalQuickFacts(item));
       const listingCopy = createNode("div", "modal-listing-copy");
       listingCopy.append(
