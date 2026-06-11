@@ -27,9 +27,10 @@ Non-goals:
 
 ## Current Baseline
 
-Implementation status: phases 1 through 5 are implemented as diagnostics-only
-runtime changes. Fuzzy, weak/ambiguous, and dedupe evidence signals do not
-change final result eligibility or ranking.
+Implementation status: phases 1 through 5 are implemented. RapidFuzz remains a
+secondary signal and never includes candidates by itself. The only user-facing
+guardrail behavior is conservative demotion for final results that have an
+exact reference match but a clear required-descriptor conflict.
 
 The current runtime now has:
 
@@ -39,10 +40,12 @@ The current runtime now has:
 - suspicious-result detection;
 - MCP payload diagnostics through `search_diagnostics`;
 - `scripts/diagnostics/audit_quality.py` for bounded production/local audits,
-  JSONL audit exports, and DuckDB JSONL summaries;
+  JSONL audit exports, DuckDB JSONL summaries, and before/after comparisons;
 - lightweight search payload and diagnostics contract validation;
 - RapidFuzz-backed fuzzy diagnostics with a standard-library fallback;
-- weak/ambiguous candidate diagnostics in audit events only;
+- weak/ambiguous candidate diagnostics in audit events;
+- query intent metadata in diagnostics and audit artifacts;
+- JSON and JSONL audit artifact conversion into draft regression fixtures;
 - docs for production quality audit and result scoring.
 
 ## Design Principles
@@ -124,6 +127,11 @@ Extend `search_diagnostics` with additional optional fields:
 | `ambiguous_candidate_count` | Number of non-final candidates with strong diagnostic-only fuzzy evidence |
 | `fuzzy_score_min` | Lowest fuzzy diagnostics score among audited final results |
 | `fuzzy_score_avg` | Average fuzzy diagnostics score among audited final results |
+| `query_intent` | Classified query shape such as `reference_only`, `reference_with_descriptor`, or `brand_model_descriptor` |
+| `required_descriptor_tokens` | Descriptor tokens the guardrail treats as required for the query intent |
+| `optional_descriptor_tokens` | Descriptor tokens treated as optional metadata, such as soft year evidence |
+| `intent_reason_codes` | Short reason codes explaining intent classification |
+| `guardrail_action_counts` | Counts of emitted `warn` / `demote` guardrail actions |
 | `rejection_reasons` | Stage-level reason code counts for rejected/dropped candidates |
 
 Rules:
@@ -281,7 +289,9 @@ server_filtered_only
 ### Acceptance Criteria
 
 - Audit output shows fuzzy scores for final results.
-- Final result count and order do not change because of RapidFuzz in this phase.
+- RapidFuzz never accepts candidates by itself.
+- Exact-reference results with required-descriptor conflict may be demoted by
+  scoring when audit evidence and tests cover the behavior.
 - Tests cover exact reference, near reference typo, descriptor mismatch, and
   unrelated listing cases.
 
@@ -370,9 +380,12 @@ Implemented rollout order:
 
 1. Phase 1 shipped audit events, JSONL export, and DuckDB summary support.
 2. Phase 2 shipped shared search payload/diagnostics contract validators.
-3. Phase 3 shipped RapidFuzz fuzzy diagnostics without gating behavior.
+3. Phase 3 shipped RapidFuzz fuzzy diagnostics and conservative descriptor
+   conflict demotion; fuzzy still cannot include a candidate.
 4. Phase 4 shipped weak/ambiguous diagnostics as audit-only evidence.
 5. Phase 5 shipped dedupe drop events with kept-result audit references.
+6. DuckDB compare mode and JSONL fixture generation were added for before/after
+   regression evidence.
 
 Cache policy:
 
@@ -459,13 +472,15 @@ Suggested tests:
 python -m pytest tests/test_search.py tests/test_tool_runtime.py tests/test_audit_quality.py
 ```
 
-### Task 5: Add RapidFuzz diagnostics
+### Task 5: Add RapidFuzz diagnostics and guardrail demotion
 
 Acceptance:
 
 - Fuzzy scores are emitted in audit output.
 - MCP `search_diagnostics` includes aggregate fuzzy score fields when computed.
-- Final result behavior is unchanged.
+- Fuzzy does not include candidates.
+- Descriptor conflict demotion is covered by regression tests and requires a
+  cache version bump.
 
 Suggested tests:
 
@@ -499,6 +514,23 @@ Suggested tests:
 
 ```bash
 python -m pytest tests/test_search.py
+```
+
+### Task 8: Add DuckDB compare and JSONL fixture loop
+
+Acceptance:
+
+- Maintainer can run `--compare-jsonl before.jsonl after.jsonl` to inspect
+  changed stage counts.
+- `scripts/fixtures/generate_audit_fixtures.py` accepts audit JSON and JSONL
+  final-result events.
+- Future matcher/scoring fixes can move from audit finding to fixture before
+  implementation.
+
+Suggested tests:
+
+```bash
+python -m pytest tests/test_audit_quality.py tests/test_generate_audit_fixtures.py
 ```
 
 ## Documentation Updates

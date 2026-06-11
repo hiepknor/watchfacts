@@ -84,6 +84,8 @@ Minimum capabilities:
 - Support `--format text`, `--format json`, and `--format jsonl`.
 - Support `--summarize-jsonl <path>` for DuckDB-backed stage-count summaries
   over saved audit artifacts.
+- Support `--compare-jsonl <before> <after>` for DuckDB-backed before/after
+  stage-count comparison.
 - Return non-zero only on runtime failures, not on quality warnings.
 
 The script should use the existing app modules instead of duplicating scraping,
@@ -188,6 +190,8 @@ Fixture sources:
   needs raw -> parsed -> matched -> dedupe -> final stage evidence.
 - Use `scripts/diagnostics/audit_quality.py --summarize-jsonl <path>` to
   summarize saved JSONL artifacts without WatchFacts credentials.
+- Use `scripts/diagnostics/audit_quality.py --compare-jsonl before.jsonl after.jsonl`
+  to capture changed stage counts for a matcher/scoring PR.
 - Use `/issues_export` plus `scripts/fixtures/generate_issue_fixtures.py` for extraction
   fixtures that require full raw listing text.
 - Use [docs/templates/audit-issue-fixture.json](templates/audit-issue-fixture.json)
@@ -198,6 +202,14 @@ Generate a draft quality/scoring regression module from audit JSON:
 ```bash
 python scripts/diagnostics/audit_quality.py "5712r" --format json --limit 10 > audit-report.json
 python scripts/fixtures/generate_audit_fixtures.py audit-report.json > tests/test_audit_regressions.py
+```
+
+The same generator also accepts JSONL audit artifacts and uses `final_result`
+events as fixture input:
+
+```bash
+python scripts/diagnostics/audit_quality.py "5205r green" --format jsonl --limit 10 > audit-report.jsonl
+python scripts/fixtures/generate_audit_fixtures.py audit-report.jsonl > tests/test_audit_regressions.py
 ```
 
 By default, the generator emits only non-clean rows. Add `--include-clean` when
@@ -231,6 +243,9 @@ Mark issue S8 ignored with note raw source lacks info.
 - [x] Support `--limit`.
 - [x] Include score fields and reason codes.
 - [x] Keep output safe and bounded.
+- [x] Include query intent, candidate decision, fuzzy, guardrail, and dedupe
+  keep/drop metadata in JSONL artifacts.
+- [x] Support DuckDB `--compare-jsonl` before/after reports.
 - [x] Add tests for report formatting and score inclusion where practical.
 
 ### Phase 10.2: Fixture Capture Path
@@ -240,6 +255,7 @@ Mark issue S8 ignored with note raw source lacks info.
   where possible.
 - [x] Add a fixture template for ranking, extraction, and missing-price cases.
 - [x] Require a failing fixture before broad matcher/scoring changes.
+- [x] Generate draft fixture tests from audit JSON and JSONL artifacts.
 
 ### Phase 10.3: Ambiguous Price Policy
 

@@ -47,6 +47,30 @@ def test_score_result_demotes_reference_only_fragment_as_suspicious() -> None:
     assert "suspicious.reference_only_fragment" in score.reasons
 
 
+def test_score_result_demotes_reference_descriptor_conflict_with_guardrail_reason() -> None:
+    result = SearchResult(
+        "Patek 5205R black dial 2026 $428000",
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="5205r green")
+
+    assert score.quality_group == 1
+    assert "guardrail.descriptor_conflict" in score.reasons
+
+
+def test_score_result_does_not_demote_missing_descriptor_as_conflict() -> None:
+    result = SearchResult(
+        "Patek 5205R 2026 $428000",
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="5205r green")
+
+    assert score.quality_group == 0
+    assert "guardrail.descriptor_conflict" not in score.reasons
+
+
 def test_score_result_does_not_treat_karat_gold_as_price_evidence() -> None:
     result = SearchResult(
         "5712R Patek original movement customized 18k rose gold case reservation",

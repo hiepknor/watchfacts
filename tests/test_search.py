@@ -76,6 +76,14 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
         "deduped_drop_count": 0,
         "weak_match_count": 0,
         "ambiguous_candidate_count": 0,
+        "query_intent": "reference_with_descriptor",
+        "required_descriptor_tokens": ["choco"],
+        "optional_descriptor_tokens": [],
+        "intent_reason_codes": [
+            "reference.present",
+            "descriptor.present",
+        ],
+        "guardrail_action_counts": {},
         "final_count": 1,
         "server_filtered": False,
         "playwright_fallback": False,
@@ -181,7 +189,13 @@ def test_search_workflow_audits_weak_and_ambiguous_match_candidates() -> None:
     assert ambiguous_count == 1
     assert [event.stage for event in events] == ["weak_match", "ambiguous_candidate"]
     assert "weak.descriptor_overlap_low" in events[0].reason_codes
+    assert events[0].decision == "demote"
+    assert events[0].query_intent == "reference_with_descriptor"
+    assert events[0].fuzzy_score is not None
+    assert events[0].guardrail_action == "demote"
     assert "ambiguous.not_deterministic_match" in events[1].reason_codes
+    assert events[1].decision == "ambiguous"
+    assert events[1].guardrail_action == "warn"
 
 
 def test_search_workflow_audits_dedupe_drop_keep_reference() -> None:
@@ -208,6 +222,8 @@ def test_search_workflow_audits_dedupe_drop_keep_reference() -> None:
 
     assert dropped == 1
     assert events[0].stage == "dedupe_drop"
+    assert events[0].decision == "deduped"
+    assert events[0].kept_audit_id is not None
     assert "dedupe.text" in events[0].reason_codes
     assert any(reason.startswith("kept_audit_id:") for reason in events[0].reason_codes)
 

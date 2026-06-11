@@ -383,12 +383,16 @@ Write machine-readable output for handoff or later fixture work:
 
 ```bash
 python scripts/diagnostics/audit_quality.py --format json --limit 5 > audit-report.json
+python scripts/diagnostics/audit_quality.py --format jsonl --limit 5 > audit-report.jsonl
+python scripts/diagnostics/audit_quality.py --summarize-jsonl audit-report.jsonl
+python scripts/diagnostics/audit_quality.py --compare-jsonl before.jsonl after.jsonl
 ```
 
-Generate draft quality/scoring regression tests from audit JSON:
+Generate draft quality/scoring regression tests from audit JSON or JSONL:
 
 ```bash
 python scripts/fixtures/generate_audit_fixtures.py audit-report.json > tests/test_audit_regressions.py
+python scripts/fixtures/generate_audit_fixtures.py audit-report.jsonl > tests/test_audit_regressions.py
 ```
 
 The audit fixture generator is for quality group, suspicious-result, missing

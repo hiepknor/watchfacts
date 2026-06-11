@@ -5,7 +5,11 @@ from datetime import datetime
 import re
 
 from app.issues import detect_suspicious_result
+from app.fuzzy_diagnostics import score_fuzzy_match
 from app.matcher import explain_extraction
+from app.matcher_aliases import canonicalize_descriptor_tokens_as_set
+from app.matcher_normalization import normalize_text
+from app.query_intent import classify_query_intent
 from app.search_result import SearchResult
 
 
@@ -28,6 +32,25 @@ PRICE_EVIDENCE_RE = re.compile(
 KARAT_GOLD_RE = re.compile(
     r"\b(?:9|10|14|18|19|20|21|22|24)k\s+(?:(?:rose|yellow|white|pink)\s+)?gold\b",
     re.IGNORECASE,
+)
+COLOR_DESCRIPTOR_GROUP = {
+    "black",
+    "blue",
+    "champ",
+    "champagne",
+    "cho",
+    "choco",
+    "chocolate",
+    "gray",
+    "green",
+    "grey",
+    "purple",
+    "red",
+    "silver",
+    "white",
+}
+CANONICAL_COLOR_DESCRIPTOR_GROUP = canonicalize_descriptor_tokens_as_set(
+    COLOR_DESCRIPTOR_GROUP,
 )
 
 
@@ -84,6 +107,8 @@ def score_result(
     query: str | None = None,
 ) -> ResultScore:
     quality_group, quality_severity, quality_reasons = _quality_score(result)
+    guardrail_group, guardrail_reasons = _guardrail_score(result, query=query)
+    quality_group = max(quality_group, guardrail_group)
     posted_date_group, posted_date_timestamp, date_reason = _posted_date_score(
         result.posted_date
     )
@@ -93,7 +118,13 @@ def score_result(
         relevance_reasons,
     ) = _relevance_score(result, query=query)
     price_evidence_score, price_reasons = _price_evidence_score(result)
-    reasons = (*quality_reasons, date_reason, *relevance_reasons, *price_reasons)
+    reasons = (
+        *quality_reasons,
+        *guardrail_reasons,
+        date_reason,
+        *relevance_reasons,
+        *price_reasons,
+    )
     return ResultScore(
         quality_group=quality_group,
         quality_severity=quality_severity,
@@ -120,6 +151,45 @@ def _quality_score(result: SearchResult) -> tuple[int, int, tuple[str, ...]]:
     if all(issue.reason == "missing_price_evidence" for issue in issues):
         return 1, severity, ("quality.missing_price", *issue_reasons)
     return 2, severity, ("quality.suspicious", *issue_reasons)
+
+
+def _guardrail_score(
+    result: SearchResult,
+    *,
+    query: str | None,
+) -> tuple[int, tuple[str, ...]]:
+    if not query:
+        return 0, ()
+    intent = classify_query_intent(query)
+    if intent.kind not in {"reference_with_descriptor", "reference_with_year"}:
+        return 0, ()
+    if not intent.required_descriptor_tokens:
+        return 0, ()
+    fuzzy = score_fuzzy_match(query, result.listing_text)
+    if (
+        fuzzy.reference_score >= 100
+        and fuzzy.descriptor_overlap_score < 50
+        and _has_required_descriptor_conflict(intent.required_descriptor_tokens, result)
+    ):
+        return 1, ("guardrail.descriptor_conflict",)
+    return 0, ()
+
+
+def _has_required_descriptor_conflict(
+    required_descriptor_tokens: tuple[str, ...],
+    result: SearchResult,
+) -> bool:
+    required_colors = (
+        canonicalize_descriptor_tokens_as_set(required_descriptor_tokens)
+        & CANONICAL_COLOR_DESCRIPTOR_GROUP
+    )
+    if not required_colors:
+        return False
+    listing_colors = (
+        canonicalize_descriptor_tokens_as_set(normalize_text(result.listing_text).split())
+        & CANONICAL_COLOR_DESCRIPTOR_GROUP
+    )
+    return bool(listing_colors and required_colors.isdisjoint(listing_colors))
 
 
 def _posted_date_score(value: str | None) -> tuple[int, float, str]:

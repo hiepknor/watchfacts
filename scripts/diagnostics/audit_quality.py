@@ -18,6 +18,7 @@ from app.config import load_search_settings
 from app.db import Database
 from app.fuzzy_diagnostics import score_fuzzy_match
 from app.issues import detect_suspicious_result
+from app.query_intent import classify_query_intent
 from app.result_scoring import score_result
 from app.search import SearchAuditEvent, WatchFactsSearchWorkflow, _search_cache_key
 from app.search_contracts import validate_search_diagnostics, validate_search_payload
@@ -77,6 +78,8 @@ class AuditResultRow:
     fuzzy_score: int
     fuzzy_reference_score: int
     fuzzy_descriptor_overlap_score: int
+    query_intent: str
+    guardrail_action: str
     score_reasons: tuple[str, ...]
     fuzzy_reason_codes: tuple[str, ...]
     suspicious_reasons: tuple[str, ...]
@@ -122,6 +125,7 @@ def build_query_report(
         scope_reason = _scope_reason(result)
         image_reason = _image_reason(result, scope_reason=scope_reason)
         fuzzy = score_fuzzy_match(query, result.listing_text)
+        query_intent = _query_intent_from_final_result(query)
         rows.append(
             AuditResultRow(
                 rank=index,
@@ -134,6 +138,8 @@ def build_query_report(
                 fuzzy_score=fuzzy.overall_score,
                 fuzzy_reference_score=fuzzy.reference_score,
                 fuzzy_descriptor_overlap_score=fuzzy.descriptor_overlap_score,
+                query_intent=query_intent,
+                guardrail_action=_row_guardrail_action(fuzzy),
                 score_reasons=score.reasons,
                 fuzzy_reason_codes=fuzzy.reason_codes,
                 suspicious_reasons=tuple(issue.reason for issue in suspicious),
@@ -216,6 +222,8 @@ def format_text_report(reports: list[AuditQueryReport]) -> str:
             lines.append(
                 f" diagnostics=image_reason:{row.image_reason} "
                 f"scope_reason:{row.scope_reason} server_filtered:{row.server_filtered} "
+                f"query_intent:{row.query_intent} "
+                f"guardrail_action:{row.guardrail_action} "
                 f"stable_listing_id:{row.stable_listing_id}"
             )
             lines.append(f" text={row.listing_text}")
@@ -257,22 +265,128 @@ def summarize_jsonl_report(path: Path) -> str:
             "DuckDB is required for JSONL summaries. Install requirements.txt first."
         ) from exc
 
-    quoted_path = str(path).replace("'", "''")
     with duckdb.connect(database=":memory:") as connection:
+        _create_jsonl_table(connection, "audit_rows", path)
         rows = connection.execute(
-            f"""
+            """
             SELECT
               query,
               COALESCE(stage, type) AS stage,
               COUNT(*) AS row_count
-            FROM read_json_auto('{quoted_path}')
+            FROM audit_rows
             GROUP BY query, COALESCE(stage, type)
             ORDER BY query, stage
             """
         ).fetchall()
+        metrics = connection.execute(
+            """
+            WITH totals AS (
+              SELECT
+                COUNT(*) FILTER (WHERE stage = 'matched') AS matched_count,
+                COUNT(*) FILTER (WHERE stage = 'weak_match') AS weak_match_count,
+                COUNT(*) FILTER (
+                  WHERE stage = 'ambiguous_candidate'
+                ) AS ambiguous_candidate_count,
+                COUNT(*) FILTER (WHERE stage = 'dedupe_drop') AS dedupe_drop_count,
+                COUNT(*) FILTER (WHERE stage = 'final') AS final_count,
+                COUNT(*) FILTER (
+                  WHERE stage = 'final'
+                    AND COALESCE(fuzzy_score, 100) < 60
+                ) AS low_fuzzy_included_count,
+                COUNT(*) FILTER (
+                  WHERE stage = 'final'
+                    AND COALESCE(has_image, false) = false
+                ) AS missing_image_count,
+                COUNT(*) FILTER (
+                  WHERE stage = 'final'
+                    AND scope_reason = 'scope.stock_list'
+                ) AS stock_list_scoped_count
+              FROM audit_rows
+            ),
+            denominators AS (
+              SELECT
+                GREATEST(matched_count, final_count, 1) AS candidate_count,
+                GREATEST(final_count, 1) AS included_count,
+                *
+              FROM totals
+            )
+            SELECT
+              weak_match_count::DOUBLE / candidate_count,
+              ambiguous_candidate_count::DOUBLE / candidate_count,
+              dedupe_drop_count::DOUBLE / included_count,
+              low_fuzzy_included_count,
+              missing_image_count::DOUBLE / included_count,
+              stock_list_scoped_count::DOUBLE / included_count
+            FROM denominators
+            """
+        ).fetchone()
 
     lines = ["query,stage,row_count"]
     lines.extend(f"{query},{stage},{row_count}" for query, stage, row_count in rows)
+    if metrics is not None:
+        (
+            weak_match_rate,
+            ambiguous_candidate_rate,
+            dedupe_drop_rate,
+            low_fuzzy_included_count,
+            missing_image_rate,
+            stock_list_scoped_rate,
+        ) = metrics
+        lines.append(
+            "metrics "
+            f"weak_match_rate={weak_match_rate:.4f} "
+            f"ambiguous_candidate_rate={ambiguous_candidate_rate:.4f} "
+            f"dedupe_drop_rate={dedupe_drop_rate:.4f} "
+            f"low_fuzzy_included_count={low_fuzzy_included_count} "
+            f"missing_image_rate={missing_image_rate:.4f} "
+            f"stock_list_scoped_rate={stock_list_scoped_rate:.4f}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def compare_jsonl_reports(before_path: Path, after_path: Path) -> str:
+    try:
+        import duckdb
+    except ImportError as exc:
+        raise RuntimeError(
+            "DuckDB is required for JSONL comparison. Install requirements.txt first."
+        ) from exc
+
+    with duckdb.connect(database=":memory:") as connection:
+        _create_jsonl_table(connection, "before_rows", before_path)
+        _create_jsonl_table(connection, "after_rows", after_path)
+        rows = connection.execute(
+            """
+            WITH before_counts AS (
+              SELECT query, COALESCE(stage, type) AS stage, COUNT(*) AS row_count
+              FROM before_rows
+              GROUP BY query, COALESCE(stage, type)
+            ),
+            after_counts AS (
+              SELECT query, COALESCE(stage, type) AS stage, COUNT(*) AS row_count
+              FROM after_rows
+              GROUP BY query, COALESCE(stage, type)
+            )
+            SELECT
+              COALESCE(before_counts.query, after_counts.query) AS query,
+              COALESCE(before_counts.stage, after_counts.stage) AS stage,
+              COALESCE(before_counts.row_count, 0) AS before_count,
+              COALESCE(after_counts.row_count, 0) AS after_count,
+              COALESCE(after_counts.row_count, 0)
+                - COALESCE(before_counts.row_count, 0) AS delta
+            FROM before_counts
+            FULL OUTER JOIN after_counts
+              ON before_counts.query = after_counts.query
+             AND before_counts.stage = after_counts.stage
+            ORDER BY query, stage
+            """
+        ).fetchall()
+
+    lines = ["query,stage,before_count,after_count,delta"]
+    lines.extend(
+        f"{query},{stage},{before_count},{after_count},{delta}"
+        for query, stage, before_count, after_count, delta in rows
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -341,6 +455,12 @@ def main() -> int:
         "--summarize-jsonl",
         help="Read an audit JSONL artifact and print DuckDB stage-count summary.",
     )
+    parser.add_argument(
+        "--compare-jsonl",
+        nargs=2,
+        metavar=("BEFORE", "AFTER"),
+        help="Compare two audit JSONL artifacts with DuckDB.",
+    )
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="Top results per query.")
     parser.add_argument(
         "--format",
@@ -351,6 +471,15 @@ def main() -> int:
     args = parser.parse_args()
     if args.summarize_jsonl:
         print(summarize_jsonl_report(Path(args.summarize_jsonl)), end="")
+        return 0
+    if args.compare_jsonl:
+        print(
+            compare_jsonl_reports(
+                Path(args.compare_jsonl[0]),
+                Path(args.compare_jsonl[1]),
+            ),
+            end="",
+        )
         return 0
     if args.limit <= 0:
         parser.error("--limit must be a positive integer")
@@ -461,6 +590,12 @@ def _audit_event_payload(event: SearchAuditEvent) -> dict[str, object]:
         "query": event.query,
         "stage": event.stage,
         "candidate_id": event.candidate_id,
+        "decision": event.decision,
+        "query_intent": event.query_intent,
+        "fuzzy_score": event.fuzzy_score,
+        "guardrail_action": event.guardrail_action,
+        "stable_audit_id": event.stable_audit_id,
+        "kept_audit_id": event.kept_audit_id,
         "rank": event.rank,
         "seller": _redacted_snippet(event.seller, 80) if event.seller else None,
         "posted_date": event.posted_date,
@@ -481,6 +616,11 @@ def _final_row_event(query: str, row: AuditResultRow) -> dict[str, object]:
         "query": query,
         "stage": "final",
         "candidate_id": row.stable_listing_id,
+        "decision": "include",
+        "query_intent": row.query_intent,
+        "fuzzy_score": row.fuzzy_score,
+        "guardrail_action": row.guardrail_action,
+        "stable_audit_id": row.stable_listing_id,
         "rank": row.rank,
         "seller": row.seller,
         "posted_date": row.posted_date,
@@ -490,9 +630,11 @@ def _final_row_event(query: str, row: AuditResultRow) -> dict[str, object]:
         "reason_codes": [
             *row.score_reasons,
             *row.suspicious_reasons,
+            *row.fuzzy_reason_codes,
             row.image_reason,
             row.scope_reason,
         ],
+        "scope_reason": row.scope_reason,
     }
 
 
@@ -512,6 +654,76 @@ def _image_reason(result: SearchResult, *, scope_reason: str) -> str:
     if scope_reason == "scope.stock_list":
         return "image.omitted_bundle_ambiguous"
     return "image.missing_source"
+
+
+def _query_intent_from_final_result(query: str) -> str:
+    return classify_query_intent(query).kind
+
+
+def _row_guardrail_action(fuzzy) -> str:
+    if fuzzy.reference_score >= 100 and fuzzy.descriptor_overlap_score < 50:
+        return "warn"
+    return "none"
+
+
+def _create_jsonl_table(connection, table_name: str, path: Path) -> None:
+    connection.execute(
+        f"""
+        CREATE TABLE {table_name} (
+          type VARCHAR,
+          query VARCHAR,
+          stage VARCHAR,
+          decision VARCHAR,
+          has_image BOOLEAN,
+          fuzzy_score INTEGER,
+          scope_reason VARCHAR
+        )
+        """
+    )
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            continue
+        rows.append(
+            (
+                _optional_string(payload.get("type")),
+                _optional_string(payload.get("query")),
+                _optional_string(payload.get("stage")),
+                _optional_string(payload.get("decision")),
+                _optional_bool(payload.get("has_image")),
+                _optional_int(payload.get("fuzzy_score")),
+                _optional_string(payload.get("scope_reason")),
+            )
+        )
+    if rows:
+        connection.executemany(
+            f"INSERT INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _optional_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    return None
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
 
 
 def _looks_like_stock_list(value: str) -> bool:

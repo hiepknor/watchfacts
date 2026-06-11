@@ -45,10 +45,68 @@ def main() -> int:
 
 
 def load_audit_reports(text: str) -> list[dict[str, Any]]:
+    stripped = text.strip()
+    if _looks_like_jsonl(stripped):
+        return _load_audit_jsonl_reports(stripped)
     payload = json.loads(_extract_json_payload(text))
     if not isinstance(payload, list):
         raise ValueError("Expected audit payload to be a JSON list")
     return [report for report in payload if isinstance(report, dict)]
+
+
+def _load_audit_jsonl_reports(text: str) -> list[dict[str, Any]]:
+    reports_by_query: dict[str, dict[str, Any]] = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            continue
+        query = _string_value(payload.get("query"), "")
+        if not query:
+            continue
+        report = reports_by_query.setdefault(query, {"query": query, "rows": []})
+        if payload.get("type") != "final_result":
+            continue
+        reason_codes = _string_list(payload.get("reason_codes"))
+        report["rows"].append(
+            {
+                "listing_text": _string_value(payload.get("text_snippet"), ""),
+                "posted_date": payload.get("posted_date"),
+                "quality_group": _jsonl_quality_group(reason_codes),
+                "price_evidence_score": _jsonl_price_evidence_score(reason_codes),
+                "score_reasons": [
+                    reason
+                    for reason in reason_codes
+                    if reason.startswith("guardrail.")
+                ],
+                "suspicious_reasons": [
+                    reason.removeprefix("suspicious.")
+                    for reason in reason_codes
+                    if reason.startswith("suspicious.")
+                ],
+            }
+        )
+    return list(reports_by_query.values())
+
+
+def _looks_like_jsonl(text: str) -> bool:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return bool(lines) and all(line.startswith("{") for line in lines)
+
+
+def _jsonl_quality_group(reason_codes: list[str]) -> int:
+    if any(reason.startswith("guardrail.") for reason in reason_codes):
+        return 1
+    if any(reason == "quality.suspicious" for reason in reason_codes):
+        return 2
+    if any(reason == "quality.missing_price" for reason in reason_codes):
+        return 1
+    return 0
+
+
+def _jsonl_price_evidence_score(reason_codes: list[str]) -> int:
+    return 1 if "price.visible" in reason_codes else 0
 
 
 def render_pytest_module(
@@ -78,6 +136,8 @@ def render_pytest_module(
         "    issues = detect_suspicious_result(listing_text=result.listing_text)\n"
         "    assert score.quality_group == case[\"expected_quality_group\"]\n"
         "    assert score.price_evidence_score == case[\"expected_price_evidence_score\"]\n"
+        "    for reason in case[\"expected_score_reasons\"]:\n"
+        "        assert reason in score.reasons\n"
         "    assert [issue.reason for issue in issues] == case[\"expected_suspicious_reasons\"]\n"
     )
 
@@ -99,7 +159,13 @@ def audit_reports_to_cases(
                 continue
             quality_group = _int_value(row.get("quality_group"), 0)
             suspicious_reasons = _string_list(row.get("suspicious_reasons"))
-            if not include_clean and quality_group == 0 and not suspicious_reasons:
+            score_reasons = _string_list(row.get("score_reasons"))
+            if (
+                not include_clean
+                and quality_group == 0
+                and not suspicious_reasons
+                and not score_reasons
+            ):
                 continue
             listing_text = _string_value(row.get("listing_text"), "")
             if not query or not listing_text:
@@ -122,6 +188,7 @@ def audit_reports_to_cases(
                         row.get("price_evidence_score"),
                         0,
                     ),
+                    "expected_score_reasons": score_reasons,
                     "expected_suspicious_reasons": suspicious_reasons,
                 }
             )

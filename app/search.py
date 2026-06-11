@@ -25,6 +25,7 @@ from app.matcher import (
     normalize_text,
 )
 from app.parser import ListingCandidate, parse_listings
+from app.query_intent import QueryIntentMetadata, classify_query_intent
 from app.result_scoring import rank_results_by_quality
 from app.scraper import ScrapeResult, fetch_watchfacts_html
 from app.search_result import SearchResult, search_results_to_dicts
@@ -34,7 +35,7 @@ from app.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger(__name__)
-SEARCH_CACHE_VERSION = "search-v10"
+SEARCH_CACHE_VERSION = "search-v11"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -69,6 +70,11 @@ class SearchDiagnostics:
     ambiguous_candidate_count: int | None = None
     fuzzy_score_min: int | None = None
     fuzzy_score_avg: float | None = None
+    query_intent: str | None = None
+    required_descriptor_tokens: tuple[str, ...] = ()
+    optional_descriptor_tokens: tuple[str, ...] = ()
+    intent_reason_codes: tuple[str, ...] = ()
+    guardrail_action_counts: dict[str, int] | None = None
     rejection_reasons: dict[str, int] | None = None
 
     def to_payload(self) -> dict[str, object]:
@@ -84,6 +90,11 @@ class SearchDiagnostics:
             "ambiguous_candidate_count": self.ambiguous_candidate_count,
             "fuzzy_score_min": self.fuzzy_score_min,
             "fuzzy_score_avg": self.fuzzy_score_avg,
+            "query_intent": self.query_intent,
+            "required_descriptor_tokens": list(self.required_descriptor_tokens),
+            "optional_descriptor_tokens": list(self.optional_descriptor_tokens),
+            "intent_reason_codes": list(self.intent_reason_codes),
+            "guardrail_action_counts": self.guardrail_action_counts or {},
             "final_count": self.final_count,
             "server_filtered": self.server_filtered,
             "playwright_fallback": self.playwright_fallback,
@@ -105,6 +116,12 @@ class SearchAuditEvent:
     has_image: bool | None = None
     text: str | None = None
     reason_codes: tuple[str, ...] = ()
+    decision: str | None = None
+    query_intent: str | None = None
+    fuzzy_score: int | None = None
+    guardrail_action: str | None = None
+    stable_audit_id: str | None = None
+    kept_audit_id: str | None = None
 
 
 class WatchFactsSearchWorkflow:
@@ -125,6 +142,7 @@ class WatchFactsSearchWorkflow:
 
     async def search(self, query: str) -> list[SearchResult]:
         logger.info("event=query.start query_length=%d", len(query))
+        query_intent = classify_query_intent(query)
         cache_key = _search_cache_key(query, self.settings)
         in_flight_key = f"{self.settings.db_path.resolve()}:{cache_key}"
         try:
@@ -143,6 +161,10 @@ class WatchFactsSearchWorkflow:
                     playwright_fallback=cache_metrics["playwright_fallback_count"] > 0,
                     cache_hit=True,
                     source_truncation_suspected=None,
+                    query_intent=query_intent.kind,
+                    required_descriptor_tokens=query_intent.required_descriptor_tokens,
+                    optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
+                    intent_reason_codes=query_intent.reason_codes,
                 )
                 self.database.record_query_results(
                     query,
@@ -184,6 +206,10 @@ class WatchFactsSearchWorkflow:
                         playwright_fallback=cache_metrics["playwright_fallback_count"] > 0,
                         cache_hit=True,
                         source_truncation_suspected=None,
+                        query_intent=query_intent.kind,
+                        required_descriptor_tokens=query_intent.required_descriptor_tokens,
+                        optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
+                        intent_reason_codes=query_intent.reason_codes,
                     )
                 self.database.record_query_results(
                     query,
@@ -213,10 +239,12 @@ class WatchFactsSearchWorkflow:
         cache_key: str,
     ) -> list[SearchResult]:
         scrape_result = await self.fetch_html(self.settings, query=query)
+        query_intent = classify_query_intent(query)
         audit_events: list[SearchAuditEvent] = []
         self._audit_raw_scrape(
             audit_events,
             query=query,
+            query_intent=query_intent,
             scrape_result=scrape_result,
             candidate_id="raw:1",
         )
@@ -226,6 +254,7 @@ class WatchFactsSearchWorkflow:
         self._audit_listing_candidates(
             audit_events,
             query=query,
+            query_intent=query_intent,
             stage="parsed",
             listings=parsed,
         )
@@ -237,12 +266,14 @@ class WatchFactsSearchWorkflow:
         self._audit_listing_candidates(
             audit_events,
             query=query,
+            query_intent=query_intent,
             stage="matched",
             listings=matched,
         )
         weak_match_count, ambiguous_candidate_count = self._audit_match_confidence(
             audit_events,
             query=query,
+            query_intent=query_intent,
             parsed=parsed,
             matched=matched,
         )
@@ -257,6 +288,7 @@ class WatchFactsSearchWorkflow:
                 self._audit_raw_scrape(
                     audit_events,
                     query=query,
+                    query_intent=query_intent,
                     scrape_result=expanded_scrape_result,
                     candidate_id="raw:expanded",
                     reason_codes=("expanded_year_query",),
@@ -269,6 +301,7 @@ class WatchFactsSearchWorkflow:
                 self._audit_listing_candidates(
                     audit_events,
                     query=query,
+                    query_intent=query_intent,
                     stage="parsed",
                     listings=expanded_parsed,
                     candidate_prefix="expanded-parsed",
@@ -278,6 +311,7 @@ class WatchFactsSearchWorkflow:
                 self._audit_listing_candidates(
                     audit_events,
                     query=query,
+                    query_intent=query_intent,
                     stage="matched",
                     listings=expanded_matched,
                     candidate_prefix="expanded-matched",
@@ -287,6 +321,7 @@ class WatchFactsSearchWorkflow:
                     self._audit_match_confidence(
                         audit_events,
                         query=query,
+                        query_intent=query_intent,
                         parsed=expanded_parsed,
                         matched=expanded_matched,
                         candidate_prefix="expanded",
@@ -298,6 +333,7 @@ class WatchFactsSearchWorkflow:
         self._audit_search_results(
             audit_events,
             query=query,
+            query_intent=query_intent,
             stage="converted",
             results=results,
         )
@@ -319,6 +355,7 @@ class WatchFactsSearchWorkflow:
             self._audit_search_results(
                 audit_events,
                 query=query,
+                query_intent=query_intent,
                 stage="refined",
                 results=unique,
             )
@@ -342,6 +379,7 @@ class WatchFactsSearchWorkflow:
         self._audit_search_results(
             audit_events,
             query=query,
+            query_intent=query_intent,
             stage="final",
             results=unique,
         )
@@ -372,6 +410,11 @@ class WatchFactsSearchWorkflow:
                 if fuzzy_scores
                 else None
             ),
+            query_intent=query_intent.kind,
+            required_descriptor_tokens=query_intent.required_descriptor_tokens,
+            optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
+            intent_reason_codes=query_intent.reason_codes,
+            guardrail_action_counts=_guardrail_action_counts(audit_events),
             rejection_reasons={
                 "dedupe.latest_listing": latest_drop_count,
                 "dedupe.text": text_drop_count,
@@ -411,6 +454,7 @@ class WatchFactsSearchWorkflow:
         audit_events: list[SearchAuditEvent],
         *,
         query: str,
+        query_intent: QueryIntentMetadata,
         scrape_result: ScrapeResult,
         candidate_id: str,
         reason_codes: tuple[str, ...] = (),
@@ -429,6 +473,12 @@ class WatchFactsSearchWorkflow:
                 source_url=scrape_result.final_url,
                 text=f"html_chars={len(scrape_result.html)}",
                 reason_codes=tuple(reasons),
+                decision="include",
+                query_intent=query_intent.kind,
+                guardrail_action="none",
+                stable_audit_id=_short_hash(
+                    f"{query}:{candidate_id}:{scrape_result.final_url}"
+                ),
             )
         )
 
@@ -437,6 +487,7 @@ class WatchFactsSearchWorkflow:
         audit_events: list[SearchAuditEvent],
         *,
         query: str,
+        query_intent: QueryIntentMetadata,
         stage: str,
         listings: list[ListingCandidate],
         candidate_prefix: str | None = None,
@@ -454,6 +505,11 @@ class WatchFactsSearchWorkflow:
                     source_url=listing.source_url,
                     has_image=bool(listing.image_url),
                     text=listing.listing_text,
+                    decision="include",
+                    query_intent=query_intent.kind,
+                    fuzzy_score=score_fuzzy_match(query, listing.listing_text).overall_score,
+                    guardrail_action="none",
+                    stable_audit_id=_listing_audit_id(listing),
                 )
             )
 
@@ -462,10 +518,12 @@ class WatchFactsSearchWorkflow:
         audit_events: list[SearchAuditEvent],
         *,
         query: str,
+        query_intent: QueryIntentMetadata,
         stage: str,
         results: list[SearchResult],
     ) -> None:
         for index, result in enumerate(results, start=1):
+            fuzzy_score = score_fuzzy_match(query, result.listing_text).overall_score
             audit_events.append(
                 SearchAuditEvent(
                     query=query,
@@ -478,6 +536,11 @@ class WatchFactsSearchWorkflow:
                     has_image=bool(result.image_url),
                     text=result.raw_listing_text or result.listing_text,
                     reason_codes=(f"stable_audit_id:{_stable_audit_id(result)}",),
+                    decision="include",
+                    query_intent=query_intent.kind,
+                    fuzzy_score=fuzzy_score,
+                    guardrail_action="none",
+                    stable_audit_id=_stable_audit_id(result),
                 )
             )
 
@@ -491,6 +554,7 @@ class WatchFactsSearchWorkflow:
         key_for_result: Callable[[SearchResult], str],
         reason_code: str,
     ) -> int:
+        query_intent = classify_query_intent(query)
         kept_result_ids = {id(result) for result in after}
         kept_by_key = {key_for_result(result): result for result in after}
         dropped = 0
@@ -498,6 +562,10 @@ class WatchFactsSearchWorkflow:
             if id(result) in kept_result_ids:
                 continue
             kept_result = kept_by_key.get(key_for_result(result))
+            stable_audit_id = _stable_audit_id(result)
+            kept_audit_id = (
+                _stable_audit_id(kept_result) if kept_result is not None else None
+            )
             dropped += 1
             audit_events.append(
                 SearchAuditEvent(
@@ -514,11 +582,17 @@ class WatchFactsSearchWorkflow:
                         reason_code,
                         f"dedupe_key_hash:{_short_hash(key_for_result(result))}",
                         (
-                            f"kept_audit_id:{_stable_audit_id(kept_result)}"
-                            if kept_result is not None
+                            f"kept_audit_id:{kept_audit_id}"
+                            if kept_audit_id is not None
                             else "kept_audit_id:unknown"
                         ),
                     ),
+                    decision="deduped",
+                    query_intent=query_intent.kind,
+                    fuzzy_score=score_fuzzy_match(query, result.listing_text).overall_score,
+                    guardrail_action="none",
+                    stable_audit_id=stable_audit_id,
+                    kept_audit_id=kept_audit_id,
                 )
             )
         return dropped
@@ -528,10 +602,12 @@ class WatchFactsSearchWorkflow:
         audit_events: list[SearchAuditEvent],
         *,
         query: str,
+        query_intent: QueryIntentMetadata | None = None,
         parsed: list[ListingCandidate],
         matched: list[ListingCandidate],
         candidate_prefix: str = "confidence",
     ) -> tuple[int, int]:
+        intent = query_intent or classify_query_intent(query)
         _, descriptor_tokens = parse_query_terms(query)
         matched_keys = {_listing_candidate_key(listing) for listing in matched}
         weak_count = 0
@@ -542,6 +618,7 @@ class WatchFactsSearchWorkflow:
             if not weak_reasons:
                 continue
             weak_count += 1
+            guardrail_action = _weak_match_guardrail_action(intent, weak_reasons)
             audit_events.append(
                 SearchAuditEvent(
                     query=query,
@@ -554,6 +631,13 @@ class WatchFactsSearchWorkflow:
                     has_image=bool(listing.image_url),
                     text=listing.listing_text,
                     reason_codes=weak_reasons,
+                    decision=(
+                        "demote" if guardrail_action == "demote" else "include"
+                    ),
+                    query_intent=intent.kind,
+                    fuzzy_score=score.overall_score,
+                    guardrail_action=guardrail_action,
+                    stable_audit_id=_listing_audit_id(listing),
                 )
             )
         for index, listing in enumerate(parsed, start=1):
@@ -581,6 +665,11 @@ class WatchFactsSearchWorkflow:
                         f"fuzzy_score:{score.overall_score}",
                         f"reference_score:{score.reference_score}",
                     ),
+                    decision="ambiguous",
+                    query_intent=intent.kind,
+                    fuzzy_score=score.overall_score,
+                    guardrail_action="warn",
+                    stable_audit_id=_listing_audit_id(listing),
                 )
             )
         return weak_count, ambiguous_count
@@ -1127,6 +1216,17 @@ def _stable_audit_id(result: SearchResult) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
+def _listing_audit_id(listing: ListingCandidate) -> str:
+    payload = {
+        "listing_text": listing.listing_text,
+        "seller": listing.seller,
+        "posted_date": listing.posted_date,
+        "source_url": listing.source_url,
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
 def _short_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
@@ -1144,6 +1244,28 @@ def _weak_match_reasons(
     if score.query_text_score < 45:
         reasons.append("weak.query_text_score_low")
     return tuple(reasons)
+
+
+def _weak_match_guardrail_action(
+    query_intent: QueryIntentMetadata,
+    reason_codes: tuple[str, ...],
+) -> str:
+    if query_intent.kind in {"reference_with_descriptor", "reference_with_year"}:
+        if "weak.descriptor_overlap_low" in reason_codes:
+            return "demote"
+    return "warn"
+
+
+def _guardrail_action_counts(
+    audit_events: list[SearchAuditEvent],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for event in audit_events:
+        action = event.guardrail_action
+        if not action or action == "none":
+            continue
+        counts[action] = counts.get(action, 0) + 1
+    return counts
 
 
 def _search_concurrency_semaphore(settings: Settings) -> asyncio.Semaphore | None:

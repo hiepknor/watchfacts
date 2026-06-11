@@ -413,6 +413,10 @@ Responsibilities:
 - Print bounded top-result snippets and scoring diagnostics for maintainers.
 - Include result count, posted date, quality group, relevance scores, price
   evidence, and score reason codes.
+- Include additive JSONL metadata for query intent, candidate decision, fuzzy
+  score, guardrail action, stable audit id, and dedupe keep/drop relation.
+- Summarize and compare saved JSONL artifacts with DuckDB without requiring
+  WatchFacts credentials.
 - Avoid printing secrets, browser state, full page HTML, or unbounded raw
   listings.
 - Support focused production verification after matcher, extraction, scoring, or
@@ -422,7 +426,8 @@ Responsibilities:
 
 Responsibilities:
 
-- Read `scripts/diagnostics/audit_quality.py --format json` output.
+- Read `scripts/diagnostics/audit_quality.py --format json` and `--format jsonl`
+  output.
 - Generate draft quality/scoring pytest cases for non-clean audit rows by
   default.
 - Support `--include-clean` for locking accepted clean shorthand examples.

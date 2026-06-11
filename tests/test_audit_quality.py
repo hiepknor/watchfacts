@@ -13,6 +13,7 @@ from scripts.diagnostics import audit_quality
 from scripts.diagnostics.audit_quality import (
     DEFAULT_AUDIT_QUERIES,
     build_query_report,
+    compare_jsonl_reports,
     format_json_report,
     format_jsonl_report,
     format_text_report,
@@ -140,6 +141,8 @@ def test_format_json_report_is_machine_readable() -> None:
     assert payload[0]["rows"][0]["quality_group"] == 0
     assert payload[0]["rows"][0]["fuzzy_score"] >= 0
     assert payload[0]["rows"][0]["fuzzy_reference_score"] == 100
+    assert payload[0]["rows"][0]["query_intent"] == "reference_with_descriptor"
+    assert payload[0]["rows"][0]["guardrail_action"] == "none"
     assert payload[0]["rows"][0]["has_image"] is False
     assert payload[0]["rows"][0]["image_reason"] == "image.missing_source"
     assert payload[0]["rows"][0]["scope_reason"] == "scope.full_listing"
@@ -161,6 +164,11 @@ def test_format_jsonl_report_includes_stage_events_and_redacts_text() -> None:
                 source_url="https://watchfacts.example/result",
                 text="html_chars=100 cookie=session data/watchfacts_state.json",
                 reason_codes=("client_filtered",),
+                decision="include",
+                query_intent="reference_only",
+                fuzzy_score=100,
+                guardrail_action="none",
+                stable_audit_id="audit-1",
             ),
         ),
     )
@@ -170,9 +178,16 @@ def test_format_jsonl_report_includes_stage_events_and_redacts_text() -> None:
     assert lines[0]["type"] == "query_summary"
     assert lines[1]["type"] == "audit_event"
     assert lines[1]["stage"] == "raw"
+    assert lines[1]["decision"] == "include"
+    assert lines[1]["query_intent"] == "reference_only"
+    assert lines[1]["fuzzy_score"] == 100
+    assert lines[1]["guardrail_action"] == "none"
+    assert lines[1]["stable_audit_id"] == "audit-1"
     assert "cookie=session" not in lines[1]["text_snippet"]
     assert "watchfacts_state.json" not in lines[1]["text_snippet"]
     assert lines[2]["type"] == "final_result"
+    assert lines[2]["decision"] == "include"
+    assert lines[2]["query_intent"] == "reference_only"
 
 
 def test_summarize_jsonl_report_uses_duckdb(tmp_path) -> None:
@@ -185,7 +200,40 @@ def test_summarize_jsonl_report_uses_duckdb(tmp_path) -> None:
             [
                 json.dumps({"type": "audit_event", "query": "5712g", "stage": "raw"}),
                 json.dumps({"type": "audit_event", "query": "5712g", "stage": "parsed"}),
-                json.dumps({"type": "final_result", "query": "5712g", "stage": "final"}),
+                json.dumps(
+                    {
+                        "type": "audit_event",
+                        "query": "5712g",
+                        "stage": "weak_match",
+                        "decision": "demote",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "audit_event",
+                        "query": "5712g",
+                        "stage": "ambiguous_candidate",
+                        "decision": "ambiguous",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "audit_event",
+                        "query": "5712g",
+                        "stage": "dedupe_drop",
+                        "decision": "deduped",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "final_result",
+                        "query": "5712g",
+                        "stage": "final",
+                        "has_image": False,
+                        "fuzzy_score": 52,
+                        "scope_reason": "scope.stock_list",
+                    }
+                ),
             ]
         )
         + "\n",
@@ -195,9 +243,52 @@ def test_summarize_jsonl_report_uses_duckdb(tmp_path) -> None:
     output = summarize_jsonl_report(jsonl_path)
 
     assert "query,stage,row_count" in output
+    assert "metrics weak_match_rate=1.0000 ambiguous_candidate_rate=1.0000 dedupe_drop_rate=1.0000 low_fuzzy_included_count=1 missing_image_rate=1.0000 stock_list_scoped_rate=1.0000" in output
     assert "5712g,final,1" in output
     assert "5712g,parsed,1" in output
     assert "5712g,raw,1" in output
+
+
+def test_compare_jsonl_reports_uses_duckdb(tmp_path) -> None:
+    if importlib.util.find_spec("duckdb") is None:
+        pytest.skip("duckdb is not installed in the local test environment")
+
+    before_path = tmp_path / "before.jsonl"
+    after_path = tmp_path / "after.jsonl"
+    before_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"type": "audit_event", "query": "5712g", "stage": "weak_match"}),
+                json.dumps({"type": "final_result", "query": "5712g", "stage": "final"}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    after_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"type": "audit_event", "query": "5712g", "stage": "weak_match"}),
+                json.dumps({"type": "audit_event", "query": "5712g", "stage": "weak_match"}),
+                json.dumps(
+                    {
+                        "type": "audit_event",
+                        "query": "5712g",
+                        "stage": "ambiguous_candidate",
+                    }
+                ),
+                json.dumps({"type": "final_result", "query": "5712g", "stage": "final"}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    output = compare_jsonl_reports(before_path, after_path)
+
+    assert "query,stage,before_count,after_count,delta" in output
+    assert "5712g,weak_match,1,2,1" in output
+    assert "5712g,ambiguous_candidate,0,1,1" in output
 
 
 def test_build_query_report_marks_stock_list_scope_and_redacts_raw_preview() -> None:
