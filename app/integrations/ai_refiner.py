@@ -5,13 +5,12 @@ import json
 import logging
 import re
 import time
-import urllib.error
-import urllib.request
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 
 from app.config import Settings
 from app.db import Database
+from app.infrastructure import OpenAIResponsesClient
 from app.searching.issues import detect_suspicious_result
 from app.searching.matcher import listing_matches, tokenize_query
 from app.searching.search_result import SearchResult
@@ -56,11 +55,16 @@ async def refine_search_results(
     settings: Settings,
     *,
     database: Database | None = None,
+    openai_client: OpenAIResponsesClient | None = None,
 ) -> list[SearchResult]:
     if settings.hybrid_ai_mode == "off" or not settings.openai_api_key or not results:
         return results
 
-    complete = _settings_complete(settings)
+    complete = (
+        _settings_complete(settings)
+        if openai_client is None
+        else _settings_complete(settings, client=openai_client)
+    )
     refined: list[SearchResult] = []
     refine_count = 0
     for result in results:
@@ -267,83 +271,35 @@ def deterministic_refine_listing_text(query: str, listing_text: str) -> str:
     return _post_process_refined_text(query, listing_text)
 
 
-def _settings_complete(settings: Settings) -> Complete:
+def _settings_complete(
+    settings: Settings,
+    *,
+    client: OpenAIResponsesClient | None = None,
+) -> Complete:
     async def complete(prompt: str) -> str:
-        return await asyncio.to_thread(_complete_sync, prompt, settings)
+        return await asyncio.to_thread(_complete_sync, prompt, settings, client)
 
     return complete
 
 
-def _complete_sync(prompt: str, settings: Settings) -> str:
-    payload = {
-        "model": settings.openai_model,
-        "input": [
-            {
-                "role": "system",
-                "content": (
-                    "You refine WatchFacts listing snippets. Return only schema-valid "
-                    "JSON. Do not invent text; selected_text must be copied from the "
-                    "provided raw listing text."
-                ),
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        "max_output_tokens": 256,
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "watchfacts_refinement",
-                "strict": True,
-                "schema": _refinement_schema(),
-            }
-        },
-    }
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {settings.openai_api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+def _complete_sync(
+    prompt: str,
+    settings: Settings,
+    client: OpenAIResponsesClient | None = None,
+) -> str:
+    openai_client = client or OpenAIResponsesClient.from_settings(settings)
+    return openai_client.complete_json(
+        system_prompt=(
+            "You refine WatchFacts listing snippets. Return only schema-valid "
+            "JSON. Do not invent text; selected_text must be copied from the "
+            "provided raw listing text."
+        ),
+        user_prompt=prompt,
+        max_output_tokens=256,
+        schema_name="watchfacts_refinement",
+        schema=_refinement_schema(),
+        error_message="OpenAI request failed",
     )
-
-    try:
-        with urllib.request.urlopen(
-            request,
-            timeout=settings.openai_timeout_seconds,
-        ) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except (TimeoutError, urllib.error.URLError) as exc:
-        raise RuntimeError("OpenAI request failed") from exc
-
-    return _extract_response_text(data)
-
-
-def _extract_response_text(data: dict[str, object]) -> str:
-    output_text = data.get("output_text")
-    if isinstance(output_text, str):
-        return output_text
-
-    output = data.get("output")
-    if not isinstance(output, list):
-        raise ValueError("OpenAI response missing output")
-    for item in output:
-        if not isinstance(item, dict):
-            continue
-        content = item.get("content")
-        if not isinstance(content, list):
-            continue
-        for content_item in content:
-            if not isinstance(content_item, dict):
-                continue
-            text = content_item.get("text")
-            if isinstance(text, str):
-                return text
-    raise ValueError("OpenAI response missing output text")
 
 
 def _refinement_schema() -> dict[str, object]:

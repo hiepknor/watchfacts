@@ -39,6 +39,7 @@ app/
     issue_repository.py # feedback and suspicious issue repository
     search_cache_repository.py # search cache and query metrics repository
     ai_suggestion_repository.py # AI refinement suggestion review repository
+    openai_client.py # shared OpenAI Responses API infrastructure client
   searching/
     search.py       # deterministic search workflow
     search_result.py # shared search result dataclass
@@ -534,6 +535,7 @@ Responsibilities:
 Responsibilities:
 
 - Provide the optional OpenAI-backed refinement boundary.
+- Use the shared `OpenAIResponsesClient` infrastructure boundary for Responses API calls.
 - Accept only minimal safe inputs: query, deterministic shown text, bounded raw listing snippet, and issue/suspicion reason codes.
 - Use the raw listing snippet, when available, for allowlisted suspicious cases so OpenAI can recover traceable details that deterministic extraction may have omitted.
 - Request structured JSON output with fields such as `relevant`, `selected_text`, `confidence`, `reasons`, and `risk_flags`.

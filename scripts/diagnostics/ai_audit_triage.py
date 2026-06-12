@@ -5,8 +5,6 @@ import asyncio
 import json
 import re
 import sys
-import urllib.error
-import urllib.request
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
@@ -19,6 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.application import AuditTriageUseCase
 from app.config import Settings, load_search_settings
+from app.infrastructure import OpenAIResponsesClient
 
 
 Complete = Callable[[str], Awaitable[str]]
@@ -240,12 +239,16 @@ def render_json_report(
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
-def build_openai_complete(settings: Settings) -> Complete:
+def build_openai_complete(
+    settings: Settings,
+    *,
+    client: OpenAIResponsesClient | None = None,
+) -> Complete:
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY is required when --use-openai is set")
 
     async def complete(prompt: str) -> str:
-        return await asyncio.to_thread(_complete_sync, prompt, settings)
+        return await asyncio.to_thread(_complete_sync, prompt, settings, client)
 
     return complete
 
@@ -500,69 +503,23 @@ def _extract_json_object(value: str) -> dict[str, Any]:
     return parsed
 
 
-def _complete_sync(prompt: str, settings: Settings) -> str:
-    payload = {
-        "model": settings.openai_model,
-        "input": [
-            {
-                "role": "system",
-                "content": (
-                    "You are a WatchFacts search-quality reviewer. Return only "
-                    "schema-valid JSON. Use the provided audit evidence only."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-        "max_output_tokens": 900,
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": "watchfacts_ai_audit_triage",
-                "strict": True,
-                "schema": _triage_schema(),
-            }
-        },
-    }
-    request = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {settings.openai_api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+def _complete_sync(
+    prompt: str,
+    settings: Settings,
+    client: OpenAIResponsesClient | None = None,
+) -> str:
+    openai_client = client or OpenAIResponsesClient.from_settings(settings)
+    return openai_client.complete_json(
+        system_prompt=(
+            "You are a WatchFacts search-quality reviewer. Return only "
+            "schema-valid JSON. Use the provided audit evidence only."
+        ),
+        user_prompt=prompt,
+        max_output_tokens=900,
+        schema_name="watchfacts_ai_audit_triage",
+        schema=_triage_schema(),
+        error_message="OpenAI audit triage request failed",
     )
-    try:
-        with urllib.request.urlopen(
-            request,
-            timeout=settings.openai_timeout_seconds,
-        ) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except (TimeoutError, urllib.error.URLError) as exc:
-        raise RuntimeError("OpenAI audit triage request failed") from exc
-    return _extract_response_text(data)
-
-
-def _extract_response_text(data: dict[str, Any]) -> str:
-    output_text = data.get("output_text")
-    if isinstance(output_text, str):
-        return output_text
-    output = data.get("output")
-    if not isinstance(output, list):
-        raise ValueError("OpenAI response missing output")
-    for item in output:
-        if not isinstance(item, dict):
-            continue
-        content = item.get("content")
-        if not isinstance(content, list):
-            continue
-        for content_item in content:
-            if not isinstance(content_item, dict):
-                continue
-            text = content_item.get("text")
-            if isinstance(text, str):
-                return text
-    raise ValueError("OpenAI response missing output text")
 
 
 def _triage_schema() -> dict[str, Any]:

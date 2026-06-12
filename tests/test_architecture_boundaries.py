@@ -121,6 +121,22 @@ def test_telegram_bot_uses_repository_boundary_for_ai_suggestions() -> None:
     assert "database.record_ai_refinement_suggestion(" not in source
 
 
+def test_openai_requests_use_infrastructure_client_boundary() -> None:
+    client_source = Path("app/infrastructure/openai_client.py").read_text(
+        encoding="utf-8"
+    )
+    assert "https://api.openai.com/v1/responses" in client_source
+
+    for filename in (
+        "app/integrations/ai_refiner.py",
+        "scripts/diagnostics/ai_audit_triage.py",
+    ):
+        source = Path(filename).read_text(encoding="utf-8")
+        assert "urllib.request" not in source
+        assert "api.openai.com" not in source
+        assert "OpenAIResponsesClient" in source
+
+
 def _imported_modules(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     imports: set[str] = set()

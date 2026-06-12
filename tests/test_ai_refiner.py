@@ -469,6 +469,65 @@ def test_refine_search_results_uses_raw_text_for_suspicious_result(tmp_path, mon
     ]
 
 
+def test_refine_search_results_uses_shared_client_boundary(tmp_path) -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
+        telegram_result_limit=5,
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+        headless=True,
+        enable_crawl4ai=True,
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+        db_path=tmp_path / "data" / "bot.db",
+        browser_state_path=tmp_path / "data" / "watchfacts_state.json",
+        hybrid_ai_mode="shadow",
+        openai_api_key="sk-test",
+        openai_model="test-model",
+        openai_timeout_seconds=9,
+    )
+    result = SearchResult("FPJ Elegante titanium 48mm 2019 fullset HKD785K tudor")
+
+    class FakeOpenAIClient:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def complete_json(self, **kwargs):
+            self.calls.append(kwargs)
+            return json.dumps(
+                {
+                    "relevant": True,
+                    "index": 1,
+                    "selected_text": "FPJ Elegante titanium 48mm 2019 fullset HKD785K",
+                    "confidence": 0.92,
+                    "reasons": ["match"],
+                    "risk_flags": [],
+                }
+            )
+
+    client = FakeOpenAIClient()
+
+    refined = asyncio.run(
+        refine_search_results(
+            "Fpj Elegante Titanium",
+            [result],
+            settings,
+            openai_client=client,
+        )
+    )
+
+    assert refined == [
+        SearchResult("FPJ Elegante titanium 48mm 2019 fullset HKD785K")
+    ]
+    assert client.calls
+    assert client.calls[0]["system_prompt"].startswith(
+        "You refine WatchFacts listing snippets."
+    )
+    assert client.calls[0]["schema_name"] == "watchfacts_refinement"
+    assert client.calls[0]["error_message"] == "OpenAI request failed"
+
+
 def test_refine_search_results_falls_back_on_openai_timeout(tmp_path, monkeypatch) -> None:
     settings = Settings(
         telegram_bot_token="token",

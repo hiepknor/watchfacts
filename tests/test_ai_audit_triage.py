@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 
+from app.config import Settings
 from scripts.diagnostics import ai_audit_triage
 
 
@@ -201,3 +202,58 @@ def test_run_ai_triage_uses_injected_completion_and_schema(tmp_path) -> None:
     assert report.risk_level == "medium"
     assert report.issue_patterns[0].issue_type == "image_attribution"
     assert report.next_steps == ("Generate regression fixture",)
+
+
+def test_build_openai_complete_uses_shared_client_boundary(tmp_path) -> None:
+    settings = Settings(
+        telegram_bot_token="token",
+        telegram_allowed_user_ids=(),
+        telegram_result_limit=5,
+        watchfacts_url="https://watchfacts.example/simon-match-making",
+        headless=True,
+        enable_crawl4ai=True,
+        project_root=tmp_path,
+        data_dir=tmp_path / "data",
+        logs_dir=tmp_path / "logs",
+        db_path=tmp_path / "data" / "bot.db",
+        browser_state_path=tmp_path / "data" / "watchfacts_state.json",
+        hybrid_ai_mode="shadow",
+        openai_api_key="sk-test",
+        openai_model="test-model",
+        openai_timeout_seconds=9,
+    )
+
+    class FakeOpenAIClient:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def complete_json(self, **kwargs):
+            self.calls.append(kwargs)
+            return json.dumps(
+                {
+                    "summary": "Audit summary",
+                    "risk_level": "low",
+                    "issue_patterns": [],
+                    "next_steps": [],
+                }
+            )
+
+    client = FakeOpenAIClient()
+    complete = ai_audit_triage.build_openai_complete(settings, client=client)
+
+    response = asyncio.run(complete("bounded prompt"))
+
+    assert json.loads(response)["summary"] == "Audit summary"
+    assert client.calls == [
+        {
+            "system_prompt": (
+                "You are a WatchFacts search-quality reviewer. Return only "
+                "schema-valid JSON. Use the provided audit evidence only."
+            ),
+            "user_prompt": "bounded prompt",
+            "max_output_tokens": 900,
+            "schema_name": "watchfacts_ai_audit_triage",
+            "schema": ai_audit_triage._triage_schema(),
+            "error_message": "OpenAI audit triage request failed",
+        }
+    ]

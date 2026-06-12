@@ -332,6 +332,11 @@ Extract a shared OpenAI client used by:
 - future issue triage
 - future OpenWA draft copy
 
+Initial implementation lives in `app/infrastructure/openai_client.py`.
+Controlled result refinement and offline audit triage both use this shared
+Responses API client while keeping their prompt construction, schemas,
+redaction, and local validation gates in their existing use-case modules.
+
 Acceptance:
 
 - OpenAI remains optional.
