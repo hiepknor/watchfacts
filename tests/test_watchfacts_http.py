@@ -11,8 +11,8 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.scraper import ScrapeResult, ScraperError
-from app.watchfacts_http import (
+from app.integrations.scraper import ScrapeResult, ScraperError
+from app.integrations.watchfacts_http import (
     WatchFactsHttpClientManager,
     WatchFactsHttpClientStatus,
 )

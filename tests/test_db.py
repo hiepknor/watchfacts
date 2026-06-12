@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 from app.config import load_search_settings
 from app.db import Database
-from app.search import _search_cache_key
-from app.search_result import SearchResult, source_result_id, stable_listing_id
+from app.searching.search import _search_cache_key
+from app.searching.search_result import SearchResult, source_result_id, stable_listing_id
 
 
 @dataclass(frozen=True)

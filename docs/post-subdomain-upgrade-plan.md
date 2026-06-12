@@ -6,8 +6,9 @@
   dedicated subdomain.
 - Security route behavior is correct: only `/results/*` is public, `/mcp*` returns
   404.
-- Frequency limiting currently runs at app layer (`app/mcp_server.py`), and the
-  current Caddy build still lacks a rate-limit module.
+- Frequency limiting currently runs at app layer (`app/runtime/mcp_server.py`,
+  public import path `app.mcp_server`), and the current Caddy build still lacks
+  a rate-limit module.
 - A basic smoke/deploy loop exists via `make deploy` for standard releases and
   `make deploy-mcp` for MCP-only releases, with safe Caddy rollback.
 

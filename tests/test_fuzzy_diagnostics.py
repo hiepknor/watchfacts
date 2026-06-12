@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.fuzzy_diagnostics import score_fuzzy_match
+from app.searching.fuzzy_diagnostics import score_fuzzy_match
 
 
 def test_score_fuzzy_match_marks_exact_reference_and_descriptor_overlap() -> None:

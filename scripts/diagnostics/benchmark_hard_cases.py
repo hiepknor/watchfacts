@@ -7,10 +7,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from app.ai_refiner import (
+from app.integrations.ai_refiner import (
     deterministic_refine_listing_text,
 )
-from app.matcher import extract_relevant_listing_text
+from app.searching.matcher import extract_relevant_listing_text
 
 
 CASES = [

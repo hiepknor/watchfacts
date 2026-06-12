@@ -4,7 +4,7 @@ import logging
 import sys
 
 from app.config import ConfigError, load_settings
-from app.telegram_bot import run_bot
+from app.runtime.telegram_bot import run_bot
 
 
 def configure_logging() -> None:

@@ -23,24 +23,37 @@
 ```text
 app/
   main.py          # application entrypoint
-  telegram_bot.py  # primary Telegram handlers and message formatting
-  mcp_server.py    # WatchFacts MCP tools
-  tool_runtime.py  # non-Telegram payload runtime used by MCP and diagnostics
-  search_result.py # shared search result dataclass
-  scraper.py       # HTTPX search plus Playwright browser/session helpers
-  parser.py        # HTML/listing extraction
-  matcher.py       # stable public matcher API
-  matcher_normalization.py # normalization and tokenization helpers
-  matcher_token_classification.py # query intent and token classifiers
-  matcher_rules.py # deterministic matcher implementation
-  matcher_rulebook.py # rule taxonomy and extraction trace types
-  result_scoring.py # final quality and recency ordering boundary
-  dedupe.py        # listing identity and duplicate filtering
-  db.py            # SQLite schema and persistence
   config.py        # environment/config loading
-  issues.py        # suspicious-result heuristics for issue collection
-  openwa_handoff.py # OpenWA chat draft API boundary
-  ai_refiner.py    # optional OpenAI-backed result refinement boundary
+  db.py            # SQLite schema and persistence
+  runtime/
+    telegram_bot.py # primary Telegram handlers and message formatting
+    mcp_server.py   # WatchFacts MCP tools and result-page routes
+    tool_runtime.py # non-Telegram payload runtime used by MCP and diagnostics
+  searching/
+    search.py       # deterministic search workflow
+    search_result.py # shared search result dataclass
+    parser.py       # HTML/listing extraction
+    matcher.py      # stable public matcher implementation
+    matcher_normalization.py # normalization and tokenization helpers
+    matcher_token_classification.py # query intent and token classifiers
+    matcher_rules.py # deterministic matcher implementation
+    matcher_rulebook.py # rule taxonomy and extraction trace types
+    result_scoring.py # final quality and recency ordering boundary
+    dedupe.py       # listing identity and duplicate filtering
+    issues.py       # suspicious-result heuristics for issue collection
+  integrations/
+    scraper.py      # HTTPX search plus Playwright browser/session helpers
+    watchfacts_http.py # authenticated lightweight WatchFacts HTTP client
+    watchfacts_forms.py # WatchFacts form token/action discovery
+    openwa_handoff.py # OpenWA chat draft API boundary
+    ai_refiner.py   # optional OpenAI-backed result refinement boundary
+  results/
+    result_pages.py # generated result-page artifacts and action sidecars
+  templates/
+    result_page.html
+  static/
+    result_page.css
+    result_page.js
 scripts/
   *.py             # compatibility wrappers for older script paths
   ops/
@@ -58,6 +71,11 @@ data/
 logs/
 docs/
 ```
+
+Top-level modules such as `app.matcher`, `app.search`, `app.tool_runtime`,
+`app.telegram_bot`, and `app.mcp_server` remain compatibility/public import
+paths for older clients, tests, scripts, and Docker entrypoints. New internal
+code should import from the domain packages above.
 
 The repository is implemented through the production-hardening milestone. Agents must still inspect the filesystem before editing because behavior changes quickly.
 
@@ -180,7 +198,7 @@ Responsibilities:
 - Validate required settings.
 - Define stable runtime paths for `data/`, logs, database, and browser state.
 
-### `telegram_bot.py`
+### `runtime/telegram_bot.py`
 
 Responsibilities:
 
@@ -198,7 +216,7 @@ Responsibilities:
 - Protect Telegram sends by limiting photo captions to 1024 characters and text messages to 4096 characters.
 - Attach feedback callbacks to results, handle feedback issue callbacks, and provide owner issue review commands.
 
-### `mcp_server.py`
+### `runtime/mcp_server.py`
 
 Responsibilities:
 
@@ -225,7 +243,7 @@ Responsibilities:
 - Keep OpenWA API keys server-side and return only safe draft metadata to the
   browser.
 
-### `tool_runtime.py`
+### `runtime/tool_runtime.py`
 
 Responsibilities:
 
@@ -240,7 +258,7 @@ Responsibilities:
   re-running a search.
 - Include product `image_url` when available.
 
-### `result_pages.py`
+### `results/result_pages.py`
 
 Responsibilities:
 
@@ -333,7 +351,7 @@ Boundaries:
 - Do not log or persist cookies/tokens. HTTPX may read the operator-created Playwright storage state into memory only for authenticated WatchFacts requests.
 - Do not store WatchFacts credentials.
 
-### `parser.py`
+### `searching/parser.py`
 
 Responsibilities:
 
@@ -342,11 +360,12 @@ Responsibilities:
 - Normalize missing fields to `None` or empty strings consistently.
 - Keep extraction deterministic and unit-testable with HTML fixtures.
 
-### `matcher.py`, `matcher_rules.py`, `matcher_token_classification.py`, and `matcher_rulebook.py`
+### `searching/matcher.py`, `searching/matcher_rules.py`, `searching/matcher_token_classification.py`, and `searching/matcher_rulebook.py`
 
 Responsibilities:
 
 - Keep `app.matcher` as the stable public API for search, dedupe, AI gates, and tests.
+- Keep implementation modules under `app/searching/`.
 - Keep normalization and tokenization helpers in `matcher_normalization.py`.
 - Keep query intent and token classification helpers in
   `matcher_token_classification.py`.

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.parser import ListingCandidate, parse_listings
+from app.searching.parser import ListingCandidate, parse_listings
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "watchfacts_listing.html"

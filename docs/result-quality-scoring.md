@@ -14,11 +14,11 @@ explicit, testable layers.
 Completed baseline behavior:
 
 - `app.matcher` is a stable public matcher API.
-- `app.matcher_rules` contains deterministic matching and extraction rules.
-- `app.matcher_normalization` contains normalization/tokenization helpers.
-- `app.matcher_token_classification` contains query intent and token
+- `app.searching.matcher_rules` contains deterministic matching and extraction rules.
+- `app.searching.matcher_normalization` contains normalization/tokenization helpers.
+- `app.searching.matcher_token_classification` contains query intent and token
   classification helpers.
-- `app.matcher_rulebook` contains rule groups, priorities, and extraction trace
+- `app.searching.matcher_rulebook` contains rule groups, priorities, and extraction trace
   types.
 - Search output is quality-first:
   - clean results first
@@ -68,7 +68,7 @@ detection.
 Recommended module:
 
 ```text
-app/result_scoring.py
+app/searching/result_scoring.py
 ```
 
 The scorer should return a structured score object rather than a bare sort key.
@@ -196,8 +196,8 @@ OpenAI can contribute only a bounded review/refinement signal:
 
 Status: complete.
 
-Move current quality/date ordering from `app/search.py` into
-`app/result_scoring.py`.
+Move current quality/date ordering from `app/searching/search.py` into
+`app/searching/result_scoring.py`.
 
 Acceptance:
 
@@ -245,8 +245,8 @@ implementation files if it reduces maintenance risk.
 Candidate files:
 
 ```text
-app/matcher_normalization.py
-app/matcher_token_classification.py
+app/searching/matcher_normalization.py
+app/searching/matcher_token_classification.py
 app/matcher_reference.py
 app/matcher_descriptor.py
 app/matcher_boundaries.py

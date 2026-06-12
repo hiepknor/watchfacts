@@ -202,23 +202,30 @@ Runtime naming:
 watchfacts/
 ├── app/
 │   ├── main.py
-│   ├── telegram_bot.py
-│   ├── mcp_server.py
-│   ├── tool_runtime.py
-│   ├── scraper.py
-│   ├── search.py
-│   ├── search_result.py
-│   ├── openwa_handoff.py
-│   ├── issues.py
-│   ├── parser.py
-│   ├── matcher.py          # stable public matcher API
-│   ├── matcher_normalization.py # normalization and tokenization helpers
-│   ├── matcher_token_classification.py # query/token classifiers
-│   ├── matcher_rules.py    # deterministic matcher implementation
-│   ├── matcher_rulebook.py # rule taxonomy and extraction trace types
-│   ├── dedupe.py
+│   ├── config.py
 │   ├── db.py
-│   └── config.py
+│   ├── runtime/
+│   │   ├── telegram_bot.py # primary Telegram runtime
+│   │   ├── mcp_server.py   # MCP bridge and result-page routes
+│   │   └── tool_runtime.py # structured payload runtime
+│   ├── searching/
+│   │   ├── search.py
+│   │   ├── search_result.py
+│   │   ├── parser.py
+│   │   ├── matcher.py
+│   │   ├── matcher_rules.py
+│   │   ├── result_scoring.py
+│   │   └── dedupe.py
+│   ├── integrations/
+│   │   ├── scraper.py
+│   │   ├── watchfacts_http.py
+│   │   ├── watchfacts_forms.py
+│   │   ├── openwa_handoff.py
+│   │   └── ai_refiner.py
+│   ├── results/
+│   │   └── result_pages.py
+│   ├── templates/
+│   └── static/
 ├── scripts/
 │   ├── ops/
 │   │   └── login.py
@@ -245,6 +252,11 @@ watchfacts/
 ├── .gitignore
 └── README.md
 ```
+
+Top-level modules such as `app.matcher`, `app.search`, `app.tool_runtime`,
+`app.telegram_bot`, and `app.mcp_server` remain compatibility/public import
+paths. New internal code should prefer the domain packages under
+`app/searching`, `app/integrations`, `app/runtime`, and `app/results`.
 
 ## Documentation
 

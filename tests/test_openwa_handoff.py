@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.openwa_handoff import (
+from app.integrations.openwa_handoff import (
     OpenWAChatDraftResponse,
     OpenWAHandoffConfig,
     OpenWAHandoffConfigError,

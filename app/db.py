@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Protocol
 
-from app.dedupe import dedupe_key
-from app.matcher import normalize_text
-from app.search_result import (
+from app.searching.dedupe import dedupe_key
+from app.searching.matcher import normalize_text
+from app.searching.search_result import (
     SearchResult,
     search_result_to_dict,
     source_result_id,

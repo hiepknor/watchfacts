@@ -13,16 +13,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.ai_refiner import refine_search_results
+from app.integrations.ai_refiner import refine_search_results
 from app.config import load_search_settings
 from app.db import Database
-from app.fuzzy_diagnostics import score_fuzzy_match
-from app.issues import detect_suspicious_result
-from app.query_intent import classify_query_intent
-from app.result_scoring import score_result
-from app.search import SearchAuditEvent, WatchFactsSearchWorkflow, _search_cache_key
-from app.search_contracts import validate_search_diagnostics, validate_search_payload
-from app.search_result import SearchResult, stable_listing_id
+from app.searching.fuzzy_diagnostics import score_fuzzy_match
+from app.searching.issues import detect_suspicious_result
+from app.searching.query_intent import classify_query_intent
+from app.searching.result_scoring import score_result
+from app.searching.search import SearchAuditEvent, WatchFactsSearchWorkflow, _search_cache_key
+from app.searching.search_contracts import validate_search_diagnostics, validate_search_payload
+from app.searching.search_result import SearchResult, stable_listing_id
 
 
 DEFAULT_AUDIT_QUERIES = (

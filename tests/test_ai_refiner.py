@@ -6,7 +6,7 @@ import urllib.request
 
 from app.config import Settings
 from app.db import Database
-from app.ai_refiner import (
+from app.integrations.ai_refiner import (
     deterministic_refine_listing_text,
     evaluate_refinement_suggestion,
     refine_search_results,
@@ -14,7 +14,7 @@ from app.ai_refiner import (
     should_refine_listing_text,
     should_refine_search_result,
 )
-from app.telegram_bot import SearchResult
+from app.runtime.telegram_bot import SearchResult
 
 
 def test_refine_listing_text_accepts_relevant_substring() -> None:
@@ -457,7 +457,7 @@ def test_refine_search_results_uses_raw_text_for_suspicious_result(tmp_path, mon
             }
         )
 
-    monkeypatch.setattr("app.ai_refiner._settings_complete", lambda _: complete)
+    monkeypatch.setattr("app.integrations.ai_refiner._settings_complete", lambda _: complete)
 
     refined = asyncio.run(refine_search_results("116500 panda", [result], settings))
 

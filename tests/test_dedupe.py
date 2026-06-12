@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.dedupe import (
+from app.searching.dedupe import (
     dedupe_key,
     latest_dedupe_key,
     unique_latest_by_text,

@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.config import load_search_settings
-from app.watchfacts_http import (
+from app.integrations.watchfacts_http import (
     close_watchfacts_http_client,
     fetch_watchfacts_http_search,
     warm_watchfacts_http_client,

@@ -17,7 +17,8 @@
   - Reverse proxy should route only `/results/*` and keep `/mcp` private.
   - Log the `/results/*` route separately when the Caddy host supports it (for
     example `/var/log/caddy/watchfacts-results.log`).
-  - Temporarily apply rate limiting at the app layer (`app/mcp_server.py`) for
+  - Temporarily apply rate limiting at the app layer
+    (`app/runtime/mcp_server.py`, public import path `app.mcp_server`) for
     result-page requests: max 60 requests/60 seconds/IP, block for 120 seconds
     when threshold is exceeded.
   - Keep the post-subdomain upgrade plan in place:
@@ -414,7 +415,7 @@ Checklist:
   scoring, quality gates, or serialized result shape changes.
 - Convert confirmed issues into regression tests before implementing fixes.
 - Run focused tests, then the full suite.
-- Bump `SEARCH_CACHE_VERSION` in `app/search.py` when extraction, scoring,
+- Bump `SEARCH_CACHE_VERSION` in `app/searching/search.py` when extraction, scoring,
   quality gates, ranking, or serialized result shape can change cached output.
 - Deploy with `make deploy` for the standard production `watchfacts-bot` +
   `watchfacts-mcp` deploy. Use `make deploy-mcp` or `make deploy-bot` for

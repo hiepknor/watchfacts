@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.similarity import group_similar_results
-from app.telegram_bot import SearchResult, format_search_result_caption
+from app.searching.similarity import group_similar_results
+from app.runtime.telegram_bot import SearchResult, format_search_result_caption
 
 
 def test_group_similar_results_preserves_alternate_sellers_as_similar() -> None:
