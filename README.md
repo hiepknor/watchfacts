@@ -1,21 +1,22 @@
 # WatchFacts Runtime + MCP Bridge
 
-Self-hosted WatchFacts search runtime for MCP tools, OpenWA handoff, and the
-legacy Telegram bot.
+Self-hosted WatchFacts Telegram search runtime with MCP tools and OpenWA
+handoff support.
 
-The project keeps WatchFacts search logic in a non-Telegram runtime. MCP clients
-call that runtime through the `watchfacts-mcp` service, receive structured
-ranked results, paginate with `offset` / `next_offset`, use `image_url` for
-product photos, and can create OpenWA chat drafts from `result_id`,
-`stable_listing_id`, or absolute rank references returned by search.
+The Telegram bot is the primary production runtime and user-facing flow. It
+receives WatchFacts queries, runs the deterministic search pipeline, and returns
+a compact summary with a generated result page when available.
 
-The Telegram bot still exists as a supported legacy channel. The current
-production deployment target is the MCP service plus the legacy bot.
+The `watchfacts-mcp` service remains a supporting integration surface. MCP
+clients can call the same runtime, receive structured ranked results, paginate
+with `offset` / `next_offset`, use `image_url` for product photos, and create
+OpenWA chat drafts from `result_id`, `stable_listing_id`, or absolute rank
+references returned by search.
 
 ## Features
 
-- MCP integration for structured clients
-- Legacy Telegram bot integration
+- Primary Telegram bot runtime
+- Supporting MCP integration for structured clients
 - WatchFacts authenticated search
 - HTTPX WatchFacts search client
 - Playwright browser automation for login/session checks
@@ -26,7 +27,7 @@ production deployment target is the MCP service plus the legacy bot.
 - Structured MCP tools for search, health, chat draft handoff, issue review, and suspicious QA
 - Offset-based MCP pagination with stable result ranks, short-lived `result_id` handles, and durable `stable_listing_id` references
 - Product image propagation via `image_url`
-- Summary-first legacy Telegram flow that opens generated result pages when available
+- Summary-first Telegram flow that opens generated result pages when available
 - Telegram result batch fallback when generated result pages are not configured or fail
 - Telegram message length guards for long listings
 - WatchFacts session health check and owner alert when login state expires
@@ -58,7 +59,7 @@ production deployment target is the MCP service plus the legacy bot.
 
 - Python 3.11+
 - Docker, optional
-- Telegram bot token, only when running the legacy Telegram bot
+- Telegram bot token, required for the primary Telegram runtime
 - Valid WatchFacts account
 - Linux server or local machine
 
@@ -83,10 +84,7 @@ cp .env.example .env
 
 Then edit `.env`.
 
-For MCP-only runtime, the key requirements are the WatchFacts URL, valid browser
-state, and any OpenWA settings needed for `create_chat_draft`.
-
-For the legacy Telegram bot, set the real Telegram bot token. Leave
+For the primary Telegram runtime, set the real Telegram bot token. Leave
 `TELEGRAM_ALLOWED_USER_IDS` empty if everyone may use the bot. Set it to one or
 more Telegram user IDs, separated by commas, to restrict usage to those owners
 only.
@@ -130,14 +128,14 @@ Run the bot locally:
 python -m app.main
 ```
 
-Run the legacy Telegram bot with Docker:
+Run the Telegram bot with Docker:
 
 ```bash
 make init
 make deploy-bot
 ```
 
-Run MCP + legacy bot for standard deployment:
+Run Telegram bot + MCP for standard deployment:
 
 ```bash
 make deploy
@@ -150,8 +148,8 @@ values in `.env` and deploy with the standard target:
 make deploy
 ```
 
-The legacy Telegram bot can still use `make deploy-bot OPENWA_COMPOSE=1` when it
-needs the separate OpenWA compose override.
+The Telegram bot can use `make deploy-bot OPENWA_COMPOSE=1` when it needs the
+separate OpenWA compose override.
 
 ## Commands
 
@@ -160,11 +158,11 @@ needs the separate OpenWA compose override.
 | `make init` | Create `data/`, `logs/`, and `.env` from `.env.example` when missing |
 | `make verify-env` | Check `.env` and `data/watchfacts_state.json` before deploy |
 | `make predeploy-check` | Run pytest plus repository checks |
-| `make deploy` | Deploy both the legacy bot and `watchfacts-mcp` |
-| `make deploy-bot` | Pull latest code, build, recreate the legacy Telegram bot, and show startup logs |
+| `make deploy` | Deploy both the Telegram bot and `watchfacts-mcp` |
+| `make deploy-bot` | Pull latest code, build, recreate the Telegram bot, and show startup logs |
 | `make deploy-mcp` | Pull latest code, build, test, audit, and recreate `watchfacts-mcp` |
 | `make deploy-bot-mcp` | Alias for the standard bot + MCP deploy path |
-| `make deploy-bot OPENWA_COMPOSE=1` | Deploy legacy bot with the OpenWA network override |
+| `make deploy-bot OPENWA_COMPOSE=1` | Deploy Telegram bot with the OpenWA network override |
 | `make pull` | Pull latest git changes unless `SKIP_PULL=1` |
 | `make build` | Build the Docker image |
 | `make mcp-predeploy-check` | Run MCP predeploy checks inside the MCP Compose service |

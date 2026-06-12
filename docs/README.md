@@ -2,9 +2,10 @@
 
 This directory is the project knowledge base for humans and AI agents.
 
-Current production direction: WatchFacts search logic lives in a reusable
-runtime, trusted MCP clients access it through the `watchfacts-mcp` Docker
-service, and the Telegram bot is a supported legacy channel.
+Current production direction: the Telegram bot is the primary user-facing
+runtime. WatchFacts search logic lives in a reusable runtime, and trusted MCP
+clients access the same pipeline through the `watchfacts-mcp` Docker service for
+structured integrations, result pages, diagnostics, and handoff.
 
 ## Documents
 

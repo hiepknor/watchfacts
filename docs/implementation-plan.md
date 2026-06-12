@@ -11,9 +11,11 @@ For new work, add a focused task under "Future Work" before implementing if the 
 
 Current baseline:
 
-- Shared WatchFacts search logic lives outside Telegram in `app.tool_runtime`.
-- MCP clients use `app.mcp_server` through the `watchfacts-mcp` Docker service.
-- Legacy Telegram bot still exists, but new business workflows should use MCP.
+- The Telegram bot is the primary user-facing production runtime.
+- Shared WatchFacts search logic lives in reusable runtime modules used by both
+  Telegram and MCP.
+- MCP clients use `app.mcp_server` through the `watchfacts-mcp` Docker service
+  as a supporting structured integration.
 - Production deploy path is `make deploy` for bot + MCP. Use `make deploy-mcp`
   for MCP only and `make deploy-bot` for bot only.
 - Server deploy should not require `sudo` or `SKIP_PULL`.

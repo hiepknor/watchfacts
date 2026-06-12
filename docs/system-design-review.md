@@ -88,7 +88,7 @@ are consistent in deployed runtime.
   `WatchFactsSearchWorkflow`.
 - Search flow with realistic fixtures and end-to-end tests (including cache and
   follow-up tools).
-- Result presentation contract in MCP responses and legacy Telegram rendering.
+- Result presentation contract in MCP responses and Telegram rendering.
 - Deployment and cache behavior under repeated query patterns.
 
 ### Findings
@@ -151,23 +151,23 @@ runtime contract by itself.
 
 ## Current Architecture
 
-The production path is MCP:
+The production path is Telegram:
 
 ```text
-MCP client
-  -> watchfacts-mcp /mcp tools
-  -> app.mcp_server
-  -> app.tool_runtime payload functions
+Telegram user
+  -> app.telegram_bot
   -> WatchFactsSearchWorkflow
   -> scraper, parser, matcher, dedupe, scoring, similarity grouping
   -> suspicious issue detection, optional guarded AI refinement, SQLite cache
-  -> structured MCP response
+  -> generated result page when configured
+  -> Telegram summary plus result-page link, with fallback listing batches
 ```
 
-The legacy Telegram bot remains a supported channel, but it calls the same
-`WatchFactsSearchWorkflow` instead of owning a separate search implementation.
-This is the most important architectural boundary in the project: MCP clients,
-Telegram, diagnostics, and tests should reuse the same deterministic runtime.
+MCP remains a supporting integration path through `watchfacts-mcp` and
+`app.mcp_server`, but it calls the same `WatchFactsSearchWorkflow` instead of
+owning a separate search implementation. This is the most important
+architectural boundary in the project: Telegram, MCP clients, diagnostics, and
+tests should reuse the same deterministic runtime.
 
 The runtime has two cache layers:
 
@@ -184,7 +184,7 @@ Cloudflare, or anti-bot systems.
 
 ## Design Strengths
 
-- Shared runtime keeps the production MCP path and legacy Telegram path from
+- Shared runtime keeps the production Telegram path and supporting MCP path from
   drifting apart.
 - Core search remains deterministic: parser, matcher, dedupe, scoring, and
   grouping run locally and are covered by focused tests.
@@ -196,7 +196,7 @@ Cloudflare, or anti-bot systems.
 - The scraper respects the authenticated-browser boundary and fails clearly when
   browser state is missing or expired.
 - Default `make deploy` encodes the intended production deployment path:
-  pull, build, run checks, recreate legacy bot and `watchfacts-mcp`.
+  pull, build, run checks, recreate Telegram bot and `watchfacts-mcp`.
 - `make deploy-mcp` is used for MCP-only deploys; it pulls, builds, runs the
   MCP predeploy checks, and recreates the MCP service.
 

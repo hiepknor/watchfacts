@@ -1,35 +1,35 @@
-# Product Spec: WatchFacts Runtime For MCP Clients
+# Product Spec: WatchFacts Telegram Runtime
 
 ## Objective
 
 Maintain a self-hosted WatchFacts search runtime that lets an authorized user
-search WatchFacts trading listings through an MCP client, for example:
+search WatchFacts trading listings through the Telegram bot, for example:
 
 ```text
 @onioaibot search WatchFacts 5712G 2015 full set
 ```
 
-The MCP client calls the WatchFacts MCP tools. The runtime uses an authenticated browser
-session, extracts listings from WatchFacts JSON/HTML responses, matches listings
-deterministically, deduplicates latest reposts, and returns structured ranked
-results with seller, date, source link, product image, short-lived result
-handles, and stable listing identities for more durable follow-up lookup.
+The Telegram bot calls the shared WatchFacts runtime. The runtime uses an
+authenticated browser session, extracts listings from WatchFacts JSON/HTML
+responses, matches listings deterministically, deduplicates latest reposts, and
+returns ranked results with seller, date, source link, product image,
+short-lived result handles, and stable listing identities for follow-up lookup.
 
-The legacy Telegram bot remains available, but new business automation should
-use the non-Telegram runtime and MCP bridge instead of reimplementing search.
+The MCP bridge remains available as a supporting structured-tool integration and
+must use the shared runtime instead of reimplementing search.
 
 ## Users
 
-- Primary user: a watch trader or collector using an MCP client or Telegram to search WatchFacts.
-- Operator: the person who deploys WatchFacts MCP, manages `.env`, creates the browser login session, and monitors logs.
-- Maintainer: a developer or AI agent extending crawler, parser, matcher, database, MCP tools, OpenWA handoff, or legacy Telegram behavior.
+- Primary user: a watch trader or collector using Telegram to search WatchFacts.
+- Operator: the person who deploys the Telegram bot and WatchFacts MCP service, manages `.env`, creates the browser login session, and monitors logs.
+- Maintainer: a developer or AI agent extending crawler, parser, matcher, database, MCP tools, OpenWA handoff, or Telegram behavior.
 
 ## User Stories
 
-- As an MCP client user, I can send a model/reference query and receive relevant WatchFacts listings.
-- As an MCP client user, I can ask for more results and receive the next page without losing the original query context.
-- As an MCP client user, I can see product images when WatchFacts provides `image_url`.
-- As an MCP client user, I can ask to contact a seller and create an OpenWA chat draft from a selected `result_id`, `stable_listing_id`, or result rank.
+- As a Telegram user, I can send a model/reference query and receive relevant WatchFacts listings.
+- As a Telegram user, I can ask for more results and receive the next page without losing the original query context.
+- As a Telegram user, I can see product images when WatchFacts provides `image_url`.
+- As a Telegram user, I can open the generated result page and use copy, source, OpenWA, feedback, filtering, sorting, and export actions.
 - As a Telegram user, I can include multiple terms and get listings that contain all required tokens.
 - As an operator, I can log in to WatchFacts manually once and let the bot reuse the saved session.
 - As an operator, I can run the bot locally or through Docker Compose.
@@ -43,8 +43,8 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 
 ## Core Flow
 
-1. User sends a WatchFacts request to an MCP client.
-2. The client calls `search(query, limit=5, offset=0, include_similar=true)` on the WatchFacts MCP server.
+1. User sends a WatchFacts request to the Telegram bot.
+2. Telegram handler calls the shared search runtime.
 3. Runtime validates and normalizes the query.
 4. Runtime loads or reuses authenticated WatchFacts browser state.
 5. Runtime posts the WatchFacts search form through HTTPX.
@@ -54,9 +54,11 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 9. Runtime scores eligible listings by quality first, then newest posted date inside the same quality group.
 10. If OpenAI controlled intelligence is enabled, runtime may record or apply a guarded suggestion only after strict validation.
 11. Runtime stores query/cache/dedupe/issue data in SQLite.
-12. MCP payload returns ranked results with `result_id`, `stable_listing_id`, `rank`, `image_url`, `has_more`, and `next_offset`.
-13. The client answers in Vietnamese and preserves the short-lived `result_id`; it may also use `stable_listing_id` or absolute `rank` for contact/feedback follow-ups.
-14. For "load more", the client calls the same query with `offset=next_offset`.
+12. Telegram returns a compact summary and generated result page when available.
+13. Result pages and MCP payloads preserve `result_id`, `stable_listing_id`,
+    `rank`, `image_url`, `has_more`, and `next_offset` for actions and
+    integrations.
+14. For "load more", the runtime reuses the same query with `offset=next_offset`.
 
 ## Functional Requirements
 
@@ -68,7 +70,7 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 - Expose MCP tool `health` for WatchFacts session, database, OpenWA, and search readiness.
 - Expose MCP tool `create_chat_draft(query, result_id=None, rank=None)` for seller handoff through OpenWA; `result_id` may be either the short-lived `result_id` or the returned `stable_listing_id`.
 - Expose MCP issue tools `report_issue`, `list_issues`, `get_issue`, `update_issue`, and `suspicious_summary`; issue reporting should accept `result_id`, `stable_listing_id`, or `rank`.
-- Accept plain-text Telegram messages as search queries in the legacy bot.
+- Accept plain-text Telegram messages as search queries in the primary bot.
 - When generated result pages are configured, Telegram should return a compact
   summary plus a result-page link instead of sending listing batches into the
   chat.
@@ -150,9 +152,9 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 | Run repository checks | `make check` |
 | Run bot locally | `python -m app.main` |
 | Run login locally | `python scripts/ops/login.py` |
-| Deploy legacy Telegram bot | `make deploy-bot` |
+| Deploy Telegram bot | `make deploy-bot` |
 | Deploy WatchFacts MCP | `make deploy-mcp` |
-| Deploy legacy Telegram bot + MCP | `make deploy-bot-mcp` |
+| Deploy Telegram bot + MCP | `make deploy-bot-mcp` |
 | Deploy bot and WatchFacts MCP | `make deploy` |
 
 Telegram commands:
@@ -178,12 +180,12 @@ at the start of the message or reply to a bot message.
 
 ## Success Criteria
 
-- An MCP client user can request WatchFacts search and receive matching listings.
-- An MCP client user can ask for more results and the MCP runtime returns the next page through `offset`.
+- A Telegram user can request WatchFacts search and receive matching listings.
+- A Telegram user can ask for more results and the runtime returns the next page through `offset`.
 - Product image URLs are passed through when available and never invented.
 - A selected result can be handed off to OpenWA through `create_chat_draft`.
-- A legacy Telegram user can still send a query and receive a generated result
-  page link, or matching listing batches when result pages are unavailable.
+- A Telegram user can send a query and receive a generated result page link, or
+  matching listing batches when result pages are unavailable.
 - Matching is case-insensitive, token-based, and covered by tests.
 - Output order prioritizes quality before recency, and recency is newest-first inside each quality group.
 - Duplicate listings are suppressed across a single search result set.

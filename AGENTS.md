@@ -4,12 +4,12 @@ Project-level instructions for AI coding agents working on `watchfacts`.
 
 ## Project Summary
 
-`watchfacts` is a Python WatchFacts search runtime with an MCP bridge, OpenWA
-handoff support, and a legacy Telegram bot.
+`watchfacts` is a Python WatchFacts Telegram search runtime with an MCP bridge
+and OpenWA handoff support.
 
 Expected behavior:
 
-- Receive a WatchFacts query from an MCP client, or from the legacy Telegram bot.
+- Receive a WatchFacts query from the Telegram bot primary flow, or from an MCP client.
 - Crawl the WatchFacts trading page using an authenticated Playwright session.
 - Extract listing data with deterministic parsing.
 - Match listings by query tokens and regex-assisted rules.
@@ -117,23 +117,23 @@ Use these commands when the matching files exist:
 | Install dependencies | `pip install -r requirements.txt` |
 | Install Playwright browser | `playwright install chromium` |
 | Create WatchFacts session | `python scripts/ops/login.py` |
-| Run legacy bot locally | `python -m app.main` |
+| Run Telegram bot locally | `python -m app.main` |
 | Initialize local runtime files | `make init` |
 | Build Docker image | `make build` |
 | Deploy MCP only | `make deploy-mcp` |
-| Deploy bot only | `make deploy-bot` |
+| Deploy Telegram bot only | `make deploy-bot` |
 | Deploy bot and MCP | `make deploy` |
-| Start legacy Docker service | `make up` |
+| Start Telegram bot Docker service | `make up` |
 | Stop Docker services | `make down` |
 | Follow MCP logs | `make mcp-logs` |
-| Follow legacy bot logs | `make logs` |
+| Follow Telegram bot logs | `make logs` |
 | Open container shell | `make shell` |
 | Run repository checks | `make check` |
 | Run authorized HTTPX WatchFacts smoke search | `make mcp-smoke` |
 
 If tests or lint commands are added later, update this file and prefer those commands for verification.
 
-The legacy bot Docker entrypoint is `python -m app.main`. The MCP service
+The Telegram bot Docker entrypoint is `python -m app.main`. The MCP service
 entrypoint is `python -m app.mcp_server`.
 
 ## Project Documentation

@@ -1,8 +1,8 @@
 # Roadmap
 
-Current operating model: WatchFacts search is a shared runtime. MCP clients
-access it through the `watchfacts-mcp` Docker service. The Telegram bot remains
-available but is no longer the only product channel.
+Current operating model: WatchFacts search is a shared runtime. The Telegram bot
+is the primary user-facing runtime. MCP clients access the same pipeline through
+the `watchfacts-mcp` Docker service for structured integrations.
 
 ## Milestone 0: Project Foundation
 
@@ -350,19 +350,20 @@ Exit criteria:
 - [x] Search results include enough structured fields for clients to answer in
   Vietnamese and perform follow-up handoff/feedback.
 
-## Future Work: Telegram Retirement
+## Future Work: Shared Runtime Hardening
 
 Status: planned.
 
-Goal: remove or deprecate Telegram-specific runtime once MCP/result-page
-workflows fully own the business flow.
+Goal: keep Telegram-specific runtime stable while moving reusable actions and
+review surfaces into shared runtime modules.
 
 Required before changing defaults:
 
-- Confirm no production user still depends on direct `app.main` Telegram bot.
-- Move remaining owner review flows to MCP tools or another operator UI.
-- Change `make deploy` default from `deploy-bot` to `deploy-bot-mcp`.
-- Deprecate or remove `TELEGRAM_BOT_TOKEN` from default server setup.
+- Keep `app.main` Telegram bot as the primary production entrypoint.
+- Move reusable owner review flows to shared runtime modules where they also
+  benefit MCP tools or another operator UI.
+- Keep `make deploy` deploying both Telegram bot and MCP.
+- Keep `TELEGRAM_BOT_TOKEN` as required server setup for the primary bot.
 - Keep regression tests for the shared runtime independent of Telegram.
 
 ## Later Ideas

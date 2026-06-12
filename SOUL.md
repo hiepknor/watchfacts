@@ -3,22 +3,25 @@
 ## What This Project Is
 
 WatchFacts is a deterministic search runtime for authenticated WatchFacts
-listings. The production runtime is the `watchfacts-mcp` service plus the
-legacy Telegram bot. MCP clients can call the runtime through structured tools.
+listings. The Telegram bot is the primary production runtime and user-facing
+flow. The `watchfacts-mcp` service remains a supporting structured-tool bridge
+for result pages, diagnostics, OpenWA handoff, and operator integrations.
 
 ## Current Production Flow
 
-1. User asks an MCP client or the legacy Telegram bot for a WatchFacts search.
-2. The MCP client calls `watchfacts-mcp` at `http://watchfacts-mcp:8765/mcp`.
-3. MCP tool `search` calls `app.tool_runtime.watchfacts_search_payload`.
-4. Runtime uses the same scraper, parser, matcher, dedupe, scoring, cache, and
-   issue logic as the old Telegram bot.
-5. The client replies with ranked results, seller/date/source details, product
-   image when available, and next-page guidance when `has_more=true`.
-6. For seller handoff, the client calls `create_chat_draft(query, result_id)` or
-   uses `rank` / `stable_listing_id` when that is the safer reference available.
+1. User sends a WatchFacts query to the Telegram bot.
+2. `app.telegram_bot` calls the shared deterministic search workflow.
+3. Runtime uses the same scraper, parser, matcher, dedupe, scoring, cache, issue
+   logic, and result-page generation used by MCP tools.
+4. Telegram replies with a compact summary and a generated result page when
+   available; fallback listing batches remain supported.
+5. The result page and MCP tools preserve `result_id`, `rank`,
+   `stable_listing_id`, source/image fields, and pagination metadata for
+   OpenWA handoff, feedback, diagnostics, and integrations.
 
 ## MCP Tool Contract
+
+The MCP service is a supporting integration surface, not the primary user flow.
 
 Primary tool:
 

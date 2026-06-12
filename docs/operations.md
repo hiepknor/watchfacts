@@ -5,7 +5,7 @@
 1. Clone the repository.
 2. Run `make init`.
 3. Edit `.env` with WatchFacts, OpenWA, OpenAI, and optional Telegram values.
-   `TELEGRAM_BOT_TOKEN` is only required when running the legacy Telegram bot.
+   `TELEGRAM_BOT_TOKEN` is required when running the primary Telegram bot.
 4. Create browser state with `python scripts/ops/login.py`.
 5. For MCP production, configure the trusted MCP client to call
    `http://watchfacts-mcp:8765/mcp` from the Docker network or
@@ -29,7 +29,7 @@
     - `curl -I https://watchfacts.onio.cc/results/health` should return 200
     - `curl https://watchfacts.onio.cc/mcp` should still be 404
 
-7. Run `make deploy` for the standard bot + MCP deploy. Use `make deploy-mcp`
+7. Run `make deploy` for the standard Telegram bot + MCP deploy. Use `make deploy-mcp`
    for MCP only or `make deploy-bot` for bot only.
 8. Inspect startup with `make mcp-logs` or `make logs` if needed.
 
@@ -52,7 +52,7 @@ make deploy
 This target:
 
 - runs `git pull --ff-only`
-- builds and force-recreates legacy bot and `watchfacts-mcp`
+- builds and force-recreates the Telegram bot and `watchfacts-mcp`
 - runs pytest, compile checks, and the default bounded quality audit inside the
   MCP Compose service
 - prints Compose status and recent startup logs for each service
@@ -103,7 +103,7 @@ Access control:
   After changing cache policy, run `make mcp-runtime-config` on the server and
   verify `search_cache_ttl_seconds=1800`.
 
-Telegram behavior:
+Primary Telegram behavior:
 
 - The bot sends a summary first, not the full result list.
 - When `RESULT_PAGE_PUBLIC_BASE_URL` is configured and page generation
@@ -169,7 +169,7 @@ OpenWA chat handoff:
 - Set `ENABLE_OPENWA_CHAT_HANDOFF=true`, `OPENWA_API_KEY` to an OpenWA operator
   key, `OPENWA_CHAT_DRAFT_ENDPOINT=/api/chats/drafts`, and
   `OPENWA_DOCKER_NETWORK=openwa-network`.
-- The legacy Telegram bot can still use `make deploy-bot OPENWA_COMPOSE=1` if it
+- The Telegram bot can use `make deploy-bot OPENWA_COMPOSE=1` if it
   needs to join the separate OpenWA compose network.
 
 Result page modal actions:
@@ -241,7 +241,7 @@ Restart:
 make restart
 ```
 
-Restart legacy Telegram bot after updating code:
+Restart Telegram bot after updating code:
 
 ```bash
 make deploy-bot
@@ -254,13 +254,13 @@ make deploy-mcp
 ```
 
 `make deploy-bot` runs `git pull --ff-only`, builds the Docker image, runs
-pytest and compile checks inside the Compose image, force-recreates the legacy
+pytest and compile checks inside the Compose image, force-recreates the Telegram
 bot container, prints Compose status, and shows recent startup logs.
 
 `make deploy-mcp` does the same for `watchfacts-mcp`, runs the bounded quality
 audit gate, force-recreates the MCP container, and shows recent MCP logs.
 
-`make deploy` deploys both the legacy bot and `watchfacts-mcp`.
+`make deploy` deploys both the Telegram bot and `watchfacts-mcp`.
 
 Status:
 
@@ -405,7 +405,7 @@ Checklist:
 - Run focused tests, then the full suite.
 - Bump `SEARCH_CACHE_VERSION` in `app/search.py` when extraction, scoring,
   quality gates, ranking, or serialized result shape can change cached output.
-- Deploy with `make deploy` for the standard production bot + MCP deploy. Use
+- Deploy with `make deploy` for the standard production Telegram bot + MCP deploy. Use
   `make deploy-mcp` or `make deploy-bot` for scoped service deploys.
 - Verify the container is healthy and the production git HEAD matches the
   deployed commit.

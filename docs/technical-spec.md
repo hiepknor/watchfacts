@@ -11,7 +11,8 @@
 - BeautifulSoup4 + lxml for HTML parsing
 - SQLite for local cache, dedupe, and query history
 - Docker Compose for deployment
-- MCP clients as the external integration surface
+- Telegram bot as the primary user-facing runtime
+- MCP clients as a supporting structured integration surface
 - OpenWA chat draft API for seller handoff
 - Optional OpenAI API integration for controlled AI refinement
 - Makefile for repeatable local commands
@@ -21,7 +22,7 @@
 ```text
 app/
   main.py          # application entrypoint
-  telegram_bot.py  # legacy Telegram handlers and message formatting
+  telegram_bot.py  # primary Telegram handlers and message formatting
   mcp_server.py    # WatchFacts MCP tools
   tool_runtime.py  # non-Telegram payload runtime used by MCP and diagnostics
   search_result.py # shared search result dataclass
@@ -127,10 +128,9 @@ Configuration rules:
 ## Runtime Architecture
 
 ```text
-MCP client user request
-  -> MCP client
-  -> watchfacts-mcp tool: search / health / create_chat_draft / issue tools
-  -> tool_runtime payload function
+Telegram user request
+  -> telegram_bot handler
+  -> WatchFactsSearchWorkflow
   -> scraper loads saved browser state and posts the WatchFacts search form through HTTPX
   -> parser extracts listing candidates from JSON response or HTML fallback
   -> matcher filters or scopes listings by query tokens
@@ -139,11 +139,22 @@ MCP client user request
   -> suspicious-result detector records likely extraction issues
   -> optional OpenAI controlled refiner records suggestions or applies guarded refinements
   -> db records query/cache/dedupe state
+  -> result page generation when configured
+  -> Telegram summary plus result-page link, with fallback listing batches
+```
+
+Supporting MCP path:
+
+```text
+MCP client request
+  -> watchfacts-mcp tool: search / health / create_chat_draft / issue tools
+  -> tool_runtime payload function
+  -> same scraper, parser, matcher, dedupe, scoring, cache, and issue logic
   -> MCP payload returns structured results, pagination, images, and result handles
   -> client replies in Vietnamese and may call OpenWA/issue tools later
 ```
 
-Legacy Telegram path:
+Telegram fallback path:
 
 ```text
 Telegram update
@@ -172,7 +183,7 @@ Responsibilities:
 
 Responsibilities:
 
-- Register legacy Telegram command/message handlers.
+- Register primary Telegram command/message handlers.
 - Validate empty or unsupported user input.
 - Call the search workflow asynchronously.
 - Generate the result page link used as the primary Telegram result surface when
