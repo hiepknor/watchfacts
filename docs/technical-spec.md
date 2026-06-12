@@ -31,6 +31,7 @@ app/
     tool_runtime.py # non-Telegram payload runtime used by MCP and diagnostics
   application/
     search_use_case.py # search workflow shell shared by Telegram, MCP, diagnostics
+    search_payload_use_case.py # search pagination/result-page orchestration shell
     openwa_handoff_use_case.py # OpenWA chat draft orchestration shell
     issue_triage_use_case.py # feedback/suspicious issue orchestration shell
     audit_triage_use_case.py # offline audit triage orchestration shell
@@ -265,6 +266,7 @@ Responsibilities:
 Responsibilities:
 
 - Provide non-Telegram payload functions used by MCP tools and diagnostics.
+- Validate transport-level search arguments and delegate search pagination to `SearchPayloadUseCase`.
 - Reuse the same scraper, parser, matcher, dedupe, scoring, cache, suspicious,
   OpenAI, and SQLite behavior as the Telegram workflow.
 - Support offset-based pagination with `has_more` and `next_offset`.

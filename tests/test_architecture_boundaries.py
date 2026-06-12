@@ -100,6 +100,18 @@ def test_tool_runtime_uses_repository_boundary_for_result_references() -> None:
     assert "get_fresh_search_result_reference_by_rank" not in source
 
 
+def test_tool_runtime_search_payload_uses_application_use_case() -> None:
+    source = Path("app/runtime/tool_runtime.py").read_text(encoding="utf-8")
+    function_source = source.split("async def watchfacts_search_payload", 1)[1].split(
+        "\n\ndef _search_payload",
+        1,
+    )[0]
+
+    assert "SearchPayloadUseCase" in function_source
+    assert ".search(" not in function_source
+    assert "generate_result_page(" not in function_source
+
+
 def test_search_workflow_uses_repository_boundary_for_search_cache() -> None:
     source = Path("app/searching/search.py").read_text(encoding="utf-8")
 

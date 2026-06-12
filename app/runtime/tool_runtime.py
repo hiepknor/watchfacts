@@ -7,7 +7,13 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Protocol
 
-from app.application import IssueTriageUseCase, OpenWAHandoffUseCase, SearchUseCase
+from app.application import (
+    IssueTriageUseCase,
+    OpenWAHandoffUseCase,
+    SearchPayloadPage,
+    SearchPayloadUseCase,
+    SearchUseCase,
+)
 from app.config import (
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
     Settings,
@@ -128,75 +134,90 @@ async def watchfacts_search_payload(
             refine_results=_build_search_refiner(active_settings),
         )
     )
-    results = await active_workflow.search(normalized_query)
-    _store_results(
+    page = await SearchPayloadUseCase(
+        workflow=active_workflow,
+        result_cache_ttl_seconds=result_cache_ttl_seconds,
+        store_results=(
+            lambda search_query, results, ttl_seconds: _store_results(
+                search_query,
+                results,
+                settings=active_settings,
+                cache_ttl_seconds=ttl_seconds,
+            )
+        ),
+        generate_result_page=_result_page_generator(active_settings),
+    ).search_page(
         normalized_query,
-        results,
-        settings=active_settings,
-        cache_ttl_seconds=result_cache_ttl_seconds,
+        limit=limit,
+        offset=offset,
     )
-    visible_results = results[offset : offset + limit] if limit is not None else results[offset:]
-    next_offset = offset + len(visible_results)
-    has_more = next_offset < len(results)
+    return _search_payload(page, include_similar=include_similar, include_raw=include_raw)
 
+
+def _search_payload(
+    page: SearchPayloadPage,
+    *,
+    include_similar: bool,
+    include_raw: bool,
+) -> dict[str, object]:
     payload: dict[str, object] = {
-        "query": normalized_query,
-        "total_count": len(results),
-        "offset": offset,
-        "limit": limit,
-        "result_count": len(visible_results),
-        "truncated": offset > 0 or has_more,
-        "has_more": has_more,
-        "next_offset": next_offset if has_more else None,
-        "result_cache_ttl_seconds": result_cache_ttl_seconds,
+        "query": page.query,
+        "total_count": page.total_count,
+        "offset": page.offset,
+        "limit": page.limit,
+        "result_count": page.result_count,
+        "truncated": page.truncated,
+        "has_more": page.has_more,
+        "next_offset": page.next_offset,
+        "result_cache_ttl_seconds": page.result_cache_ttl_seconds,
         "results": [
             _search_result_payload(
-                normalized_query,
+                page.query,
                 rank,
                 result,
                 include_similar=include_similar,
                 include_raw=include_raw,
             )
-            for rank, result in enumerate(visible_results, start=offset + 1)
+            for rank, result in enumerate(
+                page.visible_results,
+                start=page.offset + 1,
+            )
         ],
     }
-    diagnostics = _search_diagnostics_payload(active_workflow)
-    if diagnostics is not None:
-        payload["search_diagnostics"] = diagnostics
-    if active_settings is not None:
+    if page.search_diagnostics is not None:
+        payload["search_diagnostics"] = page.search_diagnostics
+    if page.result_page is not None:
+        payload["result_page"] = page.result_page
+    return payload
+
+
+def _result_page_generator(
+    settings: Settings | None,
+) -> Callable[..., dict[str, object] | None] | None:
+    if settings is None:
+        return None
+
+    def generate(**kwargs: Any) -> dict[str, object] | None:
         try:
             result_page = generate_result_page(
-                normalized_query,
-                results,
-                config=ResultPageConfig.from_settings(active_settings),
-                offset=offset,
-                limit=limit,
-                total_count=len(results),
-                next_offset=next_offset if has_more else None,
+                kwargs["query"],
+                kwargs["results"],
+                config=ResultPageConfig.from_settings(settings),
+                offset=kwargs["offset"],
+                limit=kwargs["limit"],
+                total_count=kwargs["total_count"],
+                next_offset=kwargs["next_offset"],
             )
         except Exception as exc:
             logger.warning(
                 "event=watchfacts.result_page_failed error_type=%s query_length=%d",
                 exc.__class__.__name__,
-                len(normalized_query),
+                len(kwargs["query"]),
             )
-        else:
-            if result_page is not None:
-                payload["result_page"] = result_page.to_payload()
-    return payload
+            return None
+        return result_page.to_payload() if result_page is not None else None
 
-
-def _search_diagnostics_payload(workflow: SearchWorkflow) -> dict[str, object] | None:
-    diagnostics = getattr(workflow, "last_search_diagnostics", None)
-    if diagnostics is None:
-        return None
-    to_payload = getattr(diagnostics, "to_payload", None)
-    if callable(to_payload):
-        payload = to_payload()
-        return payload if isinstance(payload, dict) else None
-    if isinstance(diagnostics, dict):
-        return diagnostics
-    return None
+    return generate
 
 
 async def watchfacts_health_payload(

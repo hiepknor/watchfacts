@@ -8,6 +8,7 @@ from app.application import (
     AuditTriageUseCase,
     IssueTriageUseCase,
     OpenWAHandoffUseCase,
+    SearchPayloadUseCase,
     SearchUseCase,
 )
 from app.config import load_search_settings
@@ -97,6 +98,71 @@ def test_search_use_case_from_settings_builds_existing_workflow_shape(tmp_path) 
         "fetch_html": fetch_html,
         "refine_results": fake_refiner,
     }
+
+
+def test_search_payload_use_case_searches_stores_and_paginates_results() -> None:
+    workflow = FakeSearchWorkflow(
+        [
+            SearchResult("5712G first"),
+            SearchResult("5712G second"),
+            SearchResult("5712G third"),
+        ]
+    )
+    stored_calls: list[tuple[str, list[SearchResult], int]] = []
+    result_page_calls: list[dict[str, Any]] = []
+
+    def store_results(
+        query: str,
+        results: list[SearchResult],
+        cache_ttl_seconds: int,
+    ) -> None:
+        stored_calls.append((query, results, cache_ttl_seconds))
+
+    def generate_page(**kwargs):
+        result_page_calls.append(kwargs)
+        return {"url": "https://mcp.example/results/token", "result_count": 3}
+
+    use_case = SearchPayloadUseCase(
+        workflow=workflow,
+        result_cache_ttl_seconds=900,
+        store_results=store_results,
+        generate_result_page=generate_page,
+    )
+
+    page = asyncio.run(
+        use_case.search_page(
+            "5712g",
+            limit=1,
+            offset=1,
+        )
+    )
+
+    assert workflow.queries == ["5712g"]
+    assert stored_calls == [("5712g", workflow.results, 900)]
+    assert page.query == "5712g"
+    assert page.total_count == 3
+    assert page.offset == 1
+    assert page.limit == 1
+    assert page.result_count == 1
+    assert page.truncated is True
+    assert page.has_more is True
+    assert page.next_offset == 2
+    assert page.visible_results == (SearchResult("5712G second"),)
+    assert page.search_diagnostics == workflow.last_search_diagnostics
+    assert page.result_page == {
+        "url": "https://mcp.example/results/token",
+        "result_count": 3,
+    }
+    assert result_page_calls == [
+        {
+            "query": "5712g",
+            "results": workflow.results,
+            "offset": 1,
+            "limit": 1,
+            "total_count": 3,
+            "next_offset": 2,
+        }
+    ]
 
 
 def test_openwa_handoff_use_case_delegates_chat_draft_creation() -> None:

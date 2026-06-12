@@ -352,6 +352,12 @@ Reduce Telegram/MCP modules to adapters:
 - render Telegram or MCP/result-page responses
 - handle transport-specific errors
 
+Initial implementation adds `SearchPayloadUseCase` for the MCP/tool-runtime
+search path. `app/runtime/tool_runtime.py` still validates MCP-style arguments
+and serializes the response payload, while search execution, result caching,
+pagination metadata, diagnostics attachment, and optional result-page generation
+are coordinated through the application use-case.
+
 Acceptance:
 
 - No parser, matcher, scoring, or dedupe logic lives in adapters.
