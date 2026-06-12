@@ -20,6 +20,9 @@ MCP_POSTDEPLOY_PREWARM ?= 1
 MCP_POSTDEPLOY_PREWARM_BENCHMARK_DEFAULTS ?= 1
 MCP_COMPOSE_SUFFIX ?= -f docker-compose.watchfacts-mcp.yml
 MCP_SERVICE ?= watchfacts-mcp
+AI_AUDIT_ARTIFACT ?= audit-report.jsonl
+AI_AUDIT_TRIAGE_FORMAT ?= markdown
+AI_AUDIT_TRIAGE_OPENAI ?= 0
 
 ifeq ($(OPENWA_COMPOSE),1)
 COMPOSE := $(COMPOSE) -f docker-compose.yml -f docker-compose.openwa.yml
@@ -29,7 +32,7 @@ export IMAGE
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy quality-audit predeploy-quality-check
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy quality-audit ai-audit-triage predeploy-quality-check
 
 help:
 	@printf "%s\n" "watchfacts commands"
@@ -68,6 +71,7 @@ help:
 	@printf "%s\n" "  make mcp-postdeploy-prewarm Best-effort cache prewarm after MCP deploy"
 	@printf "%s\n" "  make mcp-runtime-config Print safe effective MCP runtime config values"
 	@printf "%s\n" "  make quality-audit  Run the default production quality audit query set"
+	@printf "%s\n" "  make ai-audit-triage Summarize an audit artifact, optionally with OpenAI"
 	@printf "%s\n" "  make predeploy-quality-check Run local checks plus the default quality audit"
 	@printf "%s\n" "  make check    Run repository checks"
 	@printf "%s\n" "  make clean    Remove local Python caches"
@@ -214,6 +218,11 @@ mcp-wait-healthy:
 
 quality-audit:
 	$(PYTHON) scripts/diagnostics/audit_quality.py --limit $(QUALITY_AUDIT_LIMIT)
+
+ai-audit-triage:
+	@extra=""; \
+	if [ "$(AI_AUDIT_TRIAGE_OPENAI)" = "1" ]; then extra="--use-openai"; fi; \
+	$(PYTHON) scripts/diagnostics/ai_audit_triage.py "$(AI_AUDIT_ARTIFACT)" --format "$(AI_AUDIT_TRIAGE_FORMAT)" $$extra
 
 predeploy-quality-check: check quality-audit
 

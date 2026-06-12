@@ -323,6 +323,22 @@ Owner review commands:
 - `/ai_ignore <id>`: ignore an unsafe or unhelpful suggestion.
 - `/ai_suggestions_export`: export accepted suggestions as JSON for `scripts/fixtures/generate_issue_fixtures.py`.
 
+Offline audit triage:
+
+```bash
+python scripts/diagnostics/audit_quality.py "5205r green" --format jsonl --limit 10 > audit-report.jsonl
+python scripts/diagnostics/ai_audit_triage.py audit-report.jsonl
+```
+
+The triage command always emits a deterministic artifact summary. Add
+`--use-openai` only when you want OpenAI to classify recurring issue patterns
+from bounded/redacted audit evidence:
+
+```bash
+python scripts/diagnostics/ai_audit_triage.py audit-report.jsonl --use-openai
+make ai-audit-triage AI_AUDIT_ARTIFACT=audit-report.jsonl AI_AUDIT_TRIAGE_OPENAI=1
+```
+
 Operational rules:
 
 - Store `OPENAI_API_KEY` only in `.env` or the deployment secret store.

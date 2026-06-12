@@ -192,6 +192,9 @@ Fixture sources:
   summarize saved JSONL artifacts without WatchFacts credentials.
 - Use `scripts/diagnostics/audit_quality.py --compare-jsonl before.jsonl after.jsonl`
   to capture changed stage counts for a matcher/scoring PR.
+- Use `scripts/diagnostics/ai_audit_triage.py audit-report.jsonl` to produce a
+  deterministic operator summary from a saved artifact, and add `--use-openai`
+  only for optional offline AI classification of recurring issue patterns.
 - Use `/issues_export` plus `scripts/fixtures/generate_issue_fixtures.py` for extraction
   fixtures that require full raw listing text.
 - Use [docs/templates/audit-issue-fixture.json](templates/audit-issue-fixture.json)

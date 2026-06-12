@@ -60,6 +60,7 @@ scripts/
     login.py       # manual WatchFacts login and browser state creation
   diagnostics/
     audit_quality.py # safe production/local quality audit script
+    ai_audit_triage.py # offline deterministic/OpenAI-assisted audit triage
     benchmark_hard_cases.py # hard-case matcher benchmark
     debug_match.py # local matcher/score debug tool
   fixtures/

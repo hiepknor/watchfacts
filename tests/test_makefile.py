@@ -41,6 +41,19 @@ def test_makefile_has_quality_audit_gate_targets() -> None:
     assert "check quality-audit" in predeploy_quality_target
 
 
+def test_makefile_has_ai_audit_triage_target() -> None:
+    makefile = Path("Makefile").read_text()
+    target = makefile.split("\nai-audit-triage:", 1)[1].split(
+        "\n\npredeploy-quality-check:",
+        1,
+    )[0]
+
+    assert "AI_AUDIT_ARTIFACT ?= audit-report.jsonl" in makefile
+    assert "scripts/diagnostics/ai_audit_triage.py" in target
+    assert '$(AI_AUDIT_TRIAGE_OPENAI)" = "1"' in target
+    assert "--use-openai" in target
+
+
 def test_makefile_deploy_targets_are_scoped() -> None:
     makefile = Path("Makefile").read_text()
 
