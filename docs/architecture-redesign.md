@@ -312,6 +312,12 @@ Move direct `Database` usage behind focused repository methods:
 - issue repository
 - AI suggestion repository
 
+Initial implementation lives under `app/infrastructure/` and keeps the existing
+SQLite schema. Runtime and application layers use these repositories for result
+references, feedback/suspicious issues, search cache/query metrics, and AI
+suggestion review records while remaining compatible with existing `Database`
+test injection.
+
 Acceptance:
 
 - Existing SQLite schema remains compatible.

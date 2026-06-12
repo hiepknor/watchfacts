@@ -28,6 +28,7 @@ from app.integrations.openwa_handoff import (
 )
 from app.results.result_pages import ResultPageConfig, generate_result_page
 from app.integrations.scraper import BrowserSessionError, BrowserSessionStatus
+from app.infrastructure import AiSuggestionRepository
 from app.searching.search_result import SearchResult
 
 
@@ -328,7 +329,7 @@ async def ai_suggestions_command(update, context) -> None:
     if message is None:
         return
 
-    suggestions = _issue_database(context).list_ai_refinement_suggestions(
+    suggestions = _ai_suggestion_repository(context).list_suggestions(
         limit=10,
         review_status="open",
     )
@@ -352,7 +353,7 @@ async def ai_suggestion_command(update, context) -> None:
         )
         return
 
-    suggestion = _issue_database(context).get_ai_refinement_suggestion(suggestion_id)
+    suggestion = _ai_suggestion_repository(context).get_suggestion(suggestion_id)
     await _maybe_await(message.reply_text(format_ai_suggestion_detail(suggestion)))
 
 
@@ -371,7 +372,7 @@ async def ai_suggestions_export_command(update, context) -> None:
     if message is None:
         return
 
-    payload = _issue_database(context).export_reviewed_ai_suggestions(
+    payload = _ai_suggestion_repository(context).export_reviewed(
         status="accepted",
         limit=ISSUES_EXPORT_LIMIT,
     )
@@ -1296,7 +1297,11 @@ def _issue_database(context) -> Database:
 
 
 def _issue_triage_use_case(context) -> IssueTriageUseCase:
-    return IssueTriageUseCase(_issue_database(context))
+    return IssueTriageUseCase.from_database(_issue_database(context))
+
+
+def _ai_suggestion_repository(context) -> AiSuggestionRepository:
+    return AiSuggestionRepository.from_database(_issue_database(context))
 
 
 def _watchfacts_session_checker(context) -> SessionChecker | None:
@@ -1455,7 +1460,7 @@ async def _mark_ai_suggestion_command(update, context, *, status: str) -> None:
         )
         return
 
-    suggestion = _issue_database(context).mark_ai_refinement_suggestion_status(
+    suggestion = _ai_suggestion_repository(context).mark_status(
         suggestion_id,
         status=status,
         notes=_issue_notes_arg(context),
@@ -1943,6 +1948,7 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
     from app.integrations.ai_refiner import evaluate_refinement_suggestion, refine_search_results
 
     database = Database(settings.db_path)
+    ai_suggestion_repository = AiSuggestionRepository.from_database(database)
 
     async def refine(
         query: str,
@@ -1963,7 +1969,7 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
                     continue
                 gate = evaluate_refinement_suggestion(query, original, suggested)
                 _record_ai_refinement_suggestion(
-                    database,
+                    ai_suggestion_repository,
                     settings,
                     query,
                     rank,
@@ -1984,7 +1990,7 @@ def _build_result_refiner(settings: Settings) -> RefineResults | None:
                 gate = evaluate_refinement_suggestion(query, original, suggested)
                 if suggested.listing_text != original.listing_text:
                     _record_ai_refinement_suggestion(
-                        database,
+                        ai_suggestion_repository,
                         settings,
                         query,
                         rank,
@@ -2020,7 +2026,7 @@ async def _call_result_refiner(
 
 
 def _record_ai_refinement_suggestion(
-    database,
+    repository: AiSuggestionRepository,
     settings: Settings,
     query: str,
     rank: int,
@@ -2032,7 +2038,7 @@ def _record_ai_refinement_suggestion(
     latency_ms: int,
 ) -> None:
     try:
-        database.record_ai_refinement_suggestion(
+        repository.record_suggestion(
             query_text=query,
             result_rank=rank,
             mode=mode,

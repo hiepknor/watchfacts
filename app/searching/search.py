@@ -11,6 +11,11 @@ from dataclasses import dataclass
 
 from app.config import Settings
 from app.db import Database
+from app.infrastructure import (
+    AiSuggestionRepository,
+    IssueRepository,
+    SearchCacheRepository,
+)
 from app.searching.dedupe import latest_dedupe_key, unique_latest_by_text, unique_latest_listings
 from app.integrations.ai_refiner import evaluate_refinement_suggestion
 from app.searching.fuzzy_diagnostics import score_fuzzy_match
@@ -130,11 +135,21 @@ class WatchFactsSearchWorkflow:
         settings: Settings,
         *,
         database: Database | None = None,
+        ai_suggestion_repository: AiSuggestionRepository | None = None,
+        issue_repository: IssueRepository | None = None,
+        search_cache_repository: SearchCacheRepository | None = None,
         fetch_html: FetchHtml | None = None,
         refine_results: RefineResults | None = None,
     ) -> None:
         self.settings = settings
         self.database = database or Database(settings.db_path)
+        self.ai_suggestion_repository = ai_suggestion_repository or AiSuggestionRepository(
+            self.database
+        )
+        self.issue_repository = issue_repository or IssueRepository(self.database)
+        self.search_cache_repository = search_cache_repository or SearchCacheRepository(
+            self.database
+        )
         self.fetch_html = fetch_html or fetch_watchfacts_html
         self.refine_results = refine_results
         self.last_search_diagnostics: SearchDiagnostics | None = None
@@ -166,7 +181,7 @@ class WatchFactsSearchWorkflow:
                     optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
                     intent_reason_codes=query_intent.reason_codes,
                 )
-                self.database.record_query_results(
+                self.search_cache_repository.record_query_results(
                     query,
                     results,
                     image_missing_count=cache_metrics["image_missing_count"],
@@ -192,7 +207,7 @@ class WatchFactsSearchWorkflow:
                     _IN_FLIGHT_SEARCHES.pop(in_flight_key, None)
 
             if not owner:
-                cache_metrics = self.database.get_search_cache_quality_metrics(cache_key)
+                cache_metrics = self.search_cache_repository.get_quality_metrics(cache_key)
                 if self.last_search_diagnostics is None:
                     self.last_search_audit_events = ()
                     self.last_search_diagnostics = SearchDiagnostics(
@@ -211,7 +226,7 @@ class WatchFactsSearchWorkflow:
                         optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
                         intent_reason_codes=query_intent.reason_codes,
                     )
-                self.database.record_query_results(
+                self.search_cache_repository.record_query_results(
                     query,
                     results,
                     image_missing_count=self._count_missing_images(results),
@@ -428,7 +443,7 @@ class WatchFactsSearchWorkflow:
             },
         )
 
-        self.database.record_query_results(
+        self.search_cache_repository.record_query_results(
             query,
             unique,
             image_missing_count=self._count_missing_images(unique),
@@ -729,7 +744,7 @@ class WatchFactsSearchWorkflow:
     def _get_cached_results(
         self, cache_key: str
     ) -> tuple[list[SearchResult], dict[str, int]] | None:
-        cache_record = self.database.get_fresh_search_cache_row(cache_key)
+        cache_record = self.search_cache_repository.get_fresh_row(cache_key)
         if cache_record is None:
             logger.info("event=query.cache_miss")
             return None
@@ -756,7 +771,7 @@ class WatchFactsSearchWorkflow:
         server_filtered_hit_count: int,
         playwright_fallback_count: int,
     ) -> None:
-        self.database.record_search_cache(
+        self.search_cache_repository.record_cache(
             cache_key=cache_key,
             query_text=query,
             result_json=_serialize_results(results),
@@ -856,7 +871,7 @@ class WatchFactsSearchWorkflow:
         latency_ms: int,
     ) -> None:
         try:
-            self.database.record_ai_refinement_suggestion(
+            self.ai_suggestion_repository.record_suggestion(
                 query_text=query,
                 result_rank=rank,
                 mode=mode,
@@ -886,7 +901,7 @@ class WatchFactsSearchWorkflow:
                 raw_listing_text=result.raw_listing_text,
             ):
                 try:
-                    self.database.record_suspicious_result(
+                    self.issue_repository.record_suspicious(
                         query_text=query,
                         result_rank=rank,
                         reason=issue.reason,

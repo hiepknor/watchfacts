@@ -34,6 +34,11 @@ app/
     openwa_handoff_use_case.py # OpenWA chat draft orchestration shell
     issue_triage_use_case.py # feedback/suspicious issue orchestration shell
     audit_triage_use_case.py # offline audit triage orchestration shell
+  infrastructure/
+    result_reference_repository.py # result_id/stable_listing_id follow-up cache repository
+    issue_repository.py # feedback and suspicious issue repository
+    search_cache_repository.py # search cache and query metrics repository
+    ai_suggestion_repository.py # AI refinement suggestion review repository
   searching/
     search.py       # deterministic search workflow
     search_result.py # shared search result dataclass

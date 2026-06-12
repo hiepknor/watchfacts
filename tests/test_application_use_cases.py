@@ -49,11 +49,17 @@ def test_search_use_case_from_settings_builds_existing_workflow_shape(tmp_path) 
             settings_arg,
             *,
             database=None,
+            ai_suggestion_repository=None,
+            issue_repository=None,
+            search_cache_repository=None,
             fetch_html=None,
             refine_results=None,
         ) -> None:
             captured["settings"] = settings_arg
             captured["database"] = database
+            captured["ai_suggestion_repository"] = ai_suggestion_repository
+            captured["issue_repository"] = issue_repository
+            captured["search_cache_repository"] = search_cache_repository
             captured["fetch_html"] = fetch_html
             captured["refine_results"] = refine_results
 
@@ -63,9 +69,19 @@ def test_search_use_case_from_settings_builds_existing_workflow_shape(tmp_path) 
     async def fake_refiner(query: str, results: list[SearchResult]) -> list[SearchResult]:
         return results
 
+    database = object()
+    ai_suggestion_repository = object()
+    issue_repository = object()
+    search_cache_repository = object()
+    fetch_html = object()
     use_case = SearchUseCase.from_settings(
         settings,
         workflow_factory=FakeWorkflowFactory,
+        database=database,
+        ai_suggestion_repository=ai_suggestion_repository,
+        issue_repository=issue_repository,
+        search_cache_repository=search_cache_repository,
+        fetch_html=fetch_html,
         refine_results=fake_refiner,
     )
 
@@ -74,8 +90,11 @@ def test_search_use_case_from_settings_builds_existing_workflow_shape(tmp_path) 
     assert results == [SearchResult("result for 5205r green")]
     assert captured == {
         "settings": settings,
-        "database": None,
-        "fetch_html": None,
+        "database": database,
+        "ai_suggestion_repository": ai_suggestion_repository,
+        "issue_repository": issue_repository,
+        "search_cache_repository": search_cache_repository,
+        "fetch_html": fetch_html,
         "refine_results": fake_refiner,
     }
 
@@ -138,7 +157,7 @@ class FakeIssueDatabase:
 
 def test_issue_triage_use_case_wraps_feedback_and_issue_queries() -> None:
     database = FakeIssueDatabase()
-    use_case = IssueTriageUseCase(database)
+    use_case = IssueTriageUseCase.from_database(database)
 
     issue = use_case.record_feedback(
         query_text="5712g",

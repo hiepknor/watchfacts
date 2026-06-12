@@ -32,6 +32,7 @@ from app.integrations.watchfacts_http import (
     warm_watchfacts_http_client,
     watchfacts_http_client_status,
 )
+from app.infrastructure import ResultReferenceRepository
 
 
 OPENWA_MAX_SOURCE_URL_LENGTH = 2048
@@ -331,7 +332,7 @@ async def watchfacts_report_issue_payload(
     resolved_result_id = _source_result_id(stored.query, stored.rank, stored.result)
     result = stored.result
     issue_database = database or Database(active_settings.db_path)
-    issue = IssueTriageUseCase(issue_database).record_feedback(
+    issue = IssueTriageUseCase.from_database(issue_database).record_feedback(
         query_text=stored.query,
         result_rank=stored.rank,
         reason=normalized_reason,
@@ -368,7 +369,7 @@ def watchfacts_list_issues_payload(
 
     active_settings = settings or load_search_settings()
     issue_database = database or Database(active_settings.db_path)
-    issues = IssueTriageUseCase(issue_database).list_issues(
+    issues = IssueTriageUseCase.from_database(issue_database).list_issues(
         issue_type=normalized_issue_type,
         status=normalized_status,
         limit=limit,
@@ -394,7 +395,7 @@ def watchfacts_get_issue_payload(
     parsed_type, issue_id = _parse_issue_ref(issue_ref, issue_type=issue_type)
     active_settings = settings or load_search_settings()
     issue_database = database or Database(active_settings.db_path)
-    issue = IssueTriageUseCase(issue_database).get_issue(
+    issue = IssueTriageUseCase.from_database(issue_database).get_issue(
         issue_id,
         issue_type=parsed_type,
     )
@@ -420,7 +421,7 @@ def watchfacts_update_issue_payload(
     parsed_type, issue_id = _parse_issue_ref(issue_ref, issue_type=issue_type)
     active_settings = settings or load_search_settings()
     issue_database = database or Database(active_settings.db_path)
-    issue = IssueTriageUseCase(issue_database).update_issue(
+    issue = IssueTriageUseCase.from_database(issue_database).update_issue(
         issue_id,
         issue_type=parsed_type,
         status=normalized_status,
@@ -441,7 +442,9 @@ def watchfacts_suspicious_summary_payload(
     _validate_limit(limit)
     active_settings = settings or load_search_settings()
     issue_database = database or Database(active_settings.db_path)
-    summary = IssueTriageUseCase(issue_database).summarize_suspicious(limit=limit)
+    summary = IssueTriageUseCase.from_database(issue_database).summarize_suspicious(
+        limit=limit
+    )
     return {
         "result_count": len(summary),
         "summary": [
@@ -507,7 +510,7 @@ def _store_results(
         _RESULT_CACHE[result_id] = stored
         _RESULT_CACHE[stable_id] = stored
     if cache_key is not None and settings is not None:
-        Database(settings.db_path).record_search_result_references(
+        ResultReferenceRepository.from_settings(settings).record_results(
             cache_key=cache_key,
             query_text=query,
             results=results,
@@ -529,9 +532,9 @@ async def _resolve_result(
     if stored is not None and _query_key(stored.query) == _query_key(query):
         return stored
 
-    database = Database(settings.db_path)
     cache_key = _result_cache_key(query, settings)
-    cached = database.get_fresh_search_result_reference_by_id(
+    result_reference_repository = ResultReferenceRepository.from_settings(settings)
+    cached = result_reference_repository.get_by_result_id(
         cache_key=cache_key,
         result_id=result_id,
     )
@@ -546,7 +549,7 @@ async def _resolve_result(
         _RESULT_CACHE[result_id] = stored
         return stored
 
-    cached = database.get_fresh_search_result_reference_by_stable_listing_id(
+    cached = result_reference_repository.get_by_stable_listing_id(
         cache_key=cache_key,
         stable_listing_id=result_id,
     )
@@ -652,7 +655,7 @@ def _lookup_stored_result_by_rank(
     if latest is not None:
         return latest
 
-    cached = Database(settings.db_path).get_fresh_search_result_reference_by_rank(
+    cached = ResultReferenceRepository.from_settings(settings).get_by_rank(
         cache_key=_result_cache_key(query, settings),
         result_rank=rank,
     )

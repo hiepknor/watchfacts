@@ -28,6 +28,9 @@ class SearchUseCase:
         *,
         workflow_factory: WorkflowFactory | None = None,
         database: Any = None,
+        ai_suggestion_repository: Any = None,
+        issue_repository: Any = None,
+        search_cache_repository: Any = None,
         fetch_html: Any = None,
         refine_results: RefineResults | None = None,
     ) -> "SearchUseCase":
@@ -39,6 +42,12 @@ class SearchUseCase:
         kwargs: dict[str, Any] = {}
         if database is not None:
             kwargs["database"] = database
+        if ai_suggestion_repository is not None:
+            kwargs["ai_suggestion_repository"] = ai_suggestion_repository
+        if issue_repository is not None:
+            kwargs["issue_repository"] = issue_repository
+        if search_cache_repository is not None:
+            kwargs["search_cache_repository"] = search_cache_repository
         if fetch_html is not None:
             kwargs["fetch_html"] = fetch_html
         if refine_results is not None:
