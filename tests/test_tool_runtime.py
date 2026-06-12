@@ -9,6 +9,7 @@ from app.config import load_search_settings
 from app.db import Database
 from app.openwa_handoff import OpenWAChatDraftResponse
 from app.scraper import BrowserSessionStatus
+from app.search_contracts import validate_search_payload
 from app.search_result import SearchResult
 from app.tool_runtime import (
     watchfacts_create_chat_draft_payload,
@@ -137,6 +138,70 @@ def test_watchfacts_search_payload_serializes_results_for_tool_runtime(tmp_path)
     assert result["seller"] == "Issac"
     assert result["seller_phone"] == "17826241887"
     assert result["similar_results"] == []
+
+
+def test_watchfacts_search_payload_preserves_mcp_contract_fields(tmp_path) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    workflow = FakeWorkflow(
+        [
+            SearchResult(
+                listing_text="5205R Green New 2/2026 $417,000 HKD",
+                seller="Mr Dain",
+                posted_date="11/06/2026",
+                source_url="/listing/5205r-green",
+                image_url="/images/5205r-green.jpg",
+                raw_listing_text="5205R Green New 2/2026 $417,000 HKD",
+            ),
+            SearchResult(
+                listing_text="5205R green 2017 used fullset HK$360k",
+                seller="BenGi",
+                posted_date="05/06/2026",
+                source_url="/listing/5205r-2017",
+                image_url="/images/5205r-2017.jpg",
+            ),
+        ]
+    )
+    workflow.last_search_diagnostics = {
+        "parsed_count": 26,
+        "matched_count": 26,
+        "final_count": 2,
+        "server_filtered": True,
+        "playwright_fallback": False,
+        "cache_hit": False,
+        "query_intent": "reference_with_descriptor",
+        "weak_match_count": 0,
+        "ambiguous_candidate_count": 0,
+        "guardrail_action_counts": {"none": 2},
+    }
+
+    payload = asyncio.run(
+        watchfacts_search_payload(
+            "5205r green",
+            workflow=workflow,
+            settings=settings,
+            limit=1,
+            offset=0,
+            include_similar=False,
+            include_raw=False,
+        )
+    )
+
+    assert validate_search_payload(payload) == []
+    assert payload["query"] == "5205r green"
+    assert payload["total_count"] == 2
+    assert payload["result_count"] == 1
+    assert payload["has_more"] is True
+    assert payload["next_offset"] == 1
+    assert payload["search_diagnostics"]["query_intent"] == "reference_with_descriptor"
+    result = payload["results"][0]
+    assert result["rank"] == 1
+    assert result["result_id"].startswith("watchfacts:")
+    assert result["source_result_id"] == result["result_id"]
+    assert result["stable_listing_id"].startswith("watchfacts-listing:")
+    assert result["source_url"] == "/listing/5205r-green"
+    assert result["image_url"] == "/images/5205r-green.jpg"
+    assert result["seller"] == "Mr Dain"
+    assert result["posted_date"] == "11/06/2026"
 
 
 def test_watchfacts_create_chat_draft_uses_db_reference_when_memory_cache_missing(

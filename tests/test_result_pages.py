@@ -598,6 +598,13 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
         sidecar["payload"]["results"][0]["source_url"]
         == "https://watchfacts.example/listing/5712g"
     )
+    assert sidecar["payload"]["results"][0]["result_id"].startswith("watchfacts:")
+    assert sidecar["payload"]["results"][0]["stable_listing_id"].startswith(
+        "watchfacts-listing:"
+    )
+    assert sidecar["payload"]["results"][0]["source_result_id"] == (
+        sidecar["payload"]["results"][0]["result_id"]
+    )
     assert "raw_listing_text" not in json.dumps(sidecar, ensure_ascii=False)
     assert "raw cookie=secret" not in json.dumps(sidecar, ensure_ascii=False)
     assert "cookie=secret" not in json.dumps(sidecar, ensure_ascii=False)
@@ -626,6 +633,15 @@ def test_read_result_page_action_payload_reports_sidecar_states(tmp_path) -> Non
     assert found.action_nonce
     assert found.payload is not None
     assert found.payload["query"] == "5712g"
+    assert found.payload["actions"] == {
+        "action_nonce": found.action_nonce,
+        "openwa_draft_url": f"{page.url}/actions/openwa-draft",
+        "report_url": f"{page.url}/actions/report",
+    }
+    assert found.payload["results"][0]["result_id"].startswith("watchfacts:")
+    assert found.payload["results"][0]["stable_listing_id"].startswith(
+        "watchfacts-listing:"
+    )
     assert (
         found.payload["results"][0]["source_url"]
         == "https://watchfacts.example/listing/5712g"
