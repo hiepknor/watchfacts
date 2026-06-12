@@ -9,8 +9,7 @@
 - Frequency limiting currently runs at app layer (`app/mcp_server.py`), and the
   current Caddy build still lacks a rate-limit module.
 - A basic smoke/deploy loop exists via `make deploy` for standard releases and
-  `make deploy-hermes-mcp` when Hermes schema/config changes require reload, with safe Caddy
-  rollback.
+  `make deploy-mcp` for MCP-only releases, with safe Caddy rollback.
 
 ## Upgrade Priorities (high to low)
 

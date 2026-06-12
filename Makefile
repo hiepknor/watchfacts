@@ -16,10 +16,6 @@ MCP_PREWARM_FORMAT ?= text
 MCP_PREWARM_LIMIT ?= 5
 MCP_COMPOSE_SUFFIX ?= -f docker-compose.watchfacts-mcp.yml
 MCP_SERVICE ?= watchfacts-mcp
-export HERMES_DOCKER_NETWORK ?= hermes-network
-HERMES_DIR ?= /opt/hermes-agent
-HERMES_SERVICE ?= hermes
-HERMES_COMPOSE ?= docker compose
 
 ifeq ($(OPENWA_COMPOSE),1)
 COMPOSE := $(COMPOSE) -f docker-compose.yml -f docker-compose.openwa.yml
@@ -27,7 +23,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-runtime-config mcp-wait-healthy quality-audit predeploy-quality-check restart-hermes hermes-ps hermes-logs
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-runtime-config mcp-wait-healthy quality-audit predeploy-quality-check
 
 help:
 	@printf "%s\n" "watchfacts commands"
@@ -37,11 +33,10 @@ help:
 	@printf "%s\n" "  make pull     Pull latest git changes unless SKIP_PULL=1"
 	@printf "%s\n" "  make build    Build Docker image"
 	@printf "%s\n" "  make predeploy-check Run tests and repository checks before deploy"
-	@printf "%s\n" "  make deploy   Alias for deploy-bot-mcp"
-	@printf "%s\n" "  make deploy-hermes-mcp Deploy MCP, wait healthy, restart Hermes, smoke"
+	@printf "%s\n" "  make deploy   Deploy bot and watchfacts-mcp"
 	@printf "%s\n" "  make deploy-bot Deploy bot only"
 	@printf "%s\n" "  make deploy-mcp Deploy watchfacts-mcp only (build, prechecks, recreate)"
-	@printf "%s\n" "  make deploy-bot-mcp Deploy bot and watchfacts-mcp (no Hermes restart)"
+	@printf "%s\n" "  make deploy-bot-mcp Alias for deploy"
 	@printf "%s\n" "  make deploy-bot OPENWA_COMPOSE=1 Deploy legacy bot with OpenWA network override"
 	@printf "%s\n" "  make update   Alias for deploy"
 	@printf "%s\n" "  make up       Start bot with Docker Compose"
@@ -54,7 +49,7 @@ help:
 	@printf "%s\n" "  make login    Run WatchFacts browser login locally on the host"
 	@printf "%s\n" "  make mcp-build      Build watchfacts-mcp image/service"
 	@printf "%s\n" "  make mcp-predeploy-check Run MCP predeploy checks"
-	@printf "%s\n" "  make mcp-up         Start watchfacts-mcp (with Hermes network override file)"
+	@printf "%s\n" "  make mcp-up         Start watchfacts-mcp with the MCP compose override"
 	@printf "%s\n" "  make mcp-down       Stop watchfacts-mcp"
 	@printf "%s\n" "  make mcp-restart    Restart watchfacts-mcp"
 	@printf "%s\n" "  make mcp-logs       Follow watchfacts-mcp logs"
@@ -66,9 +61,6 @@ help:
 	@printf "%s\n" "  make mcp-runtime-config Print safe effective MCP runtime config values"
 	@printf "%s\n" "  make quality-audit  Run the default production quality audit query set"
 	@printf "%s\n" "  make predeploy-quality-check Run local checks plus the default quality audit"
-	@printf "%s\n" "  make restart-hermes Recreate Hermes service after MCP schema/config changes"
-	@printf "%s\n" "  make hermes-ps      Show Hermes service status"
-	@printf "%s\n" "  make hermes-logs    Follow Hermes logs"
 	@printf "%s\n" "  make check    Run repository checks"
 	@printf "%s\n" "  make clean    Remove local Python caches"
 
@@ -108,8 +100,6 @@ deploy-mcp: verify-env pull mcp-build mcp-predeploy-check
 	$(MCP_COMPOSE_CMD) logs --tail=$(LOG_LINES) $(MCP_SERVICE)
 
 deploy-bot-mcp: deploy-bot deploy-mcp
-
-deploy-hermes-mcp: deploy-mcp mcp-wait-healthy restart-hermes mcp-smoke-set
 
 update: deploy
 
@@ -202,15 +192,6 @@ quality-audit:
 	$(PYTHON) scripts/diagnostics/audit_quality.py --limit $(QUALITY_AUDIT_LIMIT)
 
 predeploy-quality-check: check quality-audit
-
-restart-hermes:
-	cd $(HERMES_DIR) && $(HERMES_COMPOSE) up -d --force-recreate --no-deps $(HERMES_SERVICE)
-
-hermes-ps:
-	cd $(HERMES_DIR) && $(HERMES_COMPOSE) ps $(HERMES_SERVICE)
-
-hermes-logs:
-	cd $(HERMES_DIR) && $(HERMES_COMPOSE) logs -f $(HERMES_SERVICE)
 
 check:
 	git diff --check

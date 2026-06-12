@@ -34,27 +34,39 @@ def test_makefile_has_quality_audit_gate_targets() -> None:
     )[0]
     predeploy_quality_target = makefile.split("\npredeploy-quality-check:", 1)[
         1
-    ].split("\n\nrestart-hermes:", 1)[0]
+    ].split("\n\ncheck:", 1)[0]
 
     assert "scripts/diagnostics/audit_quality.py" in quality_target
     assert "--limit $(QUALITY_AUDIT_LIMIT)" in quality_target
     assert "check quality-audit" in predeploy_quality_target
 
 
-def test_makefile_has_post_deploy_mcp_smoke_set() -> None:
+def test_makefile_deploy_targets_are_scoped() -> None:
     makefile = Path("Makefile").read_text()
-    deploy_target = makefile.split("\ndeploy-hermes-mcp:", 1)[1].split(
-        "\n\nupdate:",
-        1,
-    )[0]
+
+    assert "\ndeploy: deploy-bot-mcp\n" in makefile
+    assert "\ndeploy-bot: verify-env pull build predeploy-check\n" in makefile
+    assert "\ndeploy-mcp: verify-env pull mcp-build mcp-predeploy-check\n" in makefile
+    assert "\ndeploy-bot-mcp: deploy-bot deploy-mcp\n" in makefile
+
+
+def test_makefile_has_mcp_smoke_set_target() -> None:
+    makefile = Path("Makefile").read_text()
     smoke_set_target = makefile.split("\nmcp-smoke-set:", 1)[1].split(
         "\n\nmcp-wait-healthy:",
         1,
     )[0]
 
-    assert "mcp-wait-healthy restart-hermes mcp-smoke-set" in deploy_target
     assert "scripts/diagnostics/mcp_smoke.py" in smoke_set_target
     assert '--url "$(MCP_SMOKE_URL)"' in smoke_set_target
+
+
+def test_makefile_has_no_removed_external_agent_targets() -> None:
+    makefile = Path("Makefile").read_text()
+    removed_agent_name = "her" + "mes"
+
+    assert removed_agent_name.upper() not in makefile
+    assert removed_agent_name not in makefile
 
 
 def test_makefile_has_mcp_benchmark_target() -> None:

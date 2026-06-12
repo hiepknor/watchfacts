@@ -12,7 +12,7 @@ Accepted
 
 The runtime currently exposes `result_id` in MCP payloads to support follow-up actions (`create_chat_draft`, `report_issue`) by rank/id reference.
 
-`result_id` is generated from query/rank and listing snapshot fields. This makes it stable for short-lived cache references inside one search session, but it changes when ranking or extracted text changes. In operational flows, Hermes/TG can request follow-up a short time after search, then process may span restarts.
+`result_id` is generated from query/rank and listing snapshot fields. This makes it stable for short-lived cache references inside one search session, but it changes when ranking or extracted text changes. In operational flows, MCP clients or Telegram can request follow-up a short time after search, then process may span restarts.
 
 At the same time, the runtime keeps SQLite `result_reference_cache` for replayability and computes a normalized `stable_listing_id` based on source URL + normalized listing text.
 
@@ -60,7 +60,7 @@ Rejected as insufficient for future-proof listing comparison.
   - Not observable to runtime clients.
   - Requires broader migration of existing follow-up flow contracts.
 
-Rejected to avoid breaking MCP flow and Hermes assumptions.
+Rejected to avoid breaking MCP flow and client assumptions.
 
 ## Consequences
 

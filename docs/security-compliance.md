@@ -68,21 +68,20 @@ Logs must not include:
 - Avoid echoing untrusted HTML as Markdown without escaping.
 - Avoid sending too many messages for one query.
 
-## Hermes And MCP Safety
+## MCP Safety
 
-- Treat Hermes prompts and Telegram messages routed through Hermes as untrusted user input.
-- Expose only explicit WatchFacts tools in Hermes config.
-- Keep MCP tool names and schemas stable so Hermes does not need prompt hacks to call them.
+- Treat MCP client prompts and Telegram messages as untrusted user input.
+- Expose only explicit WatchFacts tools to MCP clients.
+- Keep MCP tool names and schemas stable so clients do not need prompt hacks to call them.
 - Do not expose `.env`, browser state, raw cookies, OpenWA API keys, or Telegram tokens through MCP payloads.
 - Issue review tools may return only bounded, redacted raw context around the
   stored listing. They must not return full HTML, `.env`,
   `data/watchfacts_state.json`, cookies, or unbounded raw listings.
-- Do not let Hermes invent seller contact, source links, prices, product images, result ids, or OpenWA links.
+- Do not let clients invent seller contact, source links, prices, product images, result ids, or OpenWA links.
 - Use only references returned by `search` for follow-up tools such as
   `create_chat_draft` and `report_issue`: short-lived `result_id`, returned
   `stable_listing_id`, or explicit `rank`.
 - Use `offset` / `next_offset` for pagination instead of hidden Telegram callback state.
-- `watchfacts_prefill.json` may contain operating instructions, but must not contain secrets.
 
 ## OpenWA Safety
 

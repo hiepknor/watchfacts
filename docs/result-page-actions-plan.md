@@ -341,7 +341,7 @@ Acceptance:
 - Successful report disables repeat submit for that result in the page session.
 - Utility actions still work.
 - Modal keyboard/focus behavior remains intact.
-- No browser action requires Hermes to copy/paste prompts.
+- No browser action requires copy/paste prompts through an MCP client.
 
 Verification:
 

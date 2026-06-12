@@ -1,20 +1,20 @@
 # WatchFacts Runtime + MCP Bridge
 
-Self-hosted WatchFacts search runtime for Hermes, MCP tools, OpenWA handoff,
-and the legacy Telegram bot.
+Self-hosted WatchFacts search runtime for MCP tools, OpenWA handoff, and the
+legacy Telegram bot.
 
-The project keeps WatchFacts search logic in a non-Telegram runtime. Hermes calls
-that runtime through the `watchfacts-mcp` service, receives structured ranked
-results, paginates with `offset` / `next_offset`, uses `image_url` for product
-photos, and can create OpenWA chat drafts from `result_id`, `stable_listing_id`,
-or absolute rank references returned by search.
+The project keeps WatchFacts search logic in a non-Telegram runtime. MCP clients
+call that runtime through the `watchfacts-mcp` service, receive structured
+ranked results, paginate with `offset` / `next_offset`, use `image_url` for
+product photos, and can create OpenWA chat drafts from `result_id`,
+`stable_listing_id`, or absolute rank references returned by search.
 
-The Telegram bot still exists as a supported legacy channel, but the current
-production integration target is Hermes over MCP.
+The Telegram bot still exists as a supported legacy channel. The current
+production deployment target is the MCP service plus the legacy bot.
 
 ## Features
 
-- Hermes MCP integration
+- MCP integration for structured clients
 - Legacy Telegram bot integration
 - WatchFacts authenticated search
 - HTTPX WatchFacts search client
@@ -32,9 +32,9 @@ production integration target is Hermes over MCP.
 - WatchFacts session health check and owner alert when login state expires
 - One-tap result feedback and owner issue review commands
 - SQLite local cache
-- Non-Telegram search payload runtime for Hermes/MCP-style wrappers
+- Non-Telegram search payload runtime for MCP-style wrappers
 - Docker Compose service for `watchfacts-mcp`
-- Makefile deploy target for MCP + Hermes restart
+- Makefile deploy targets for MCP only, bot only, or both services
 - Optional OpenAI controlled refinement for hard cases
 - Docker deployment
 - Fully async architecture
@@ -53,7 +53,6 @@ production integration target is Hermes over MCP.
 - Regex
 - SQLite
 - Docker
-- Hermes, external deployment
 
 ## Requirements
 
@@ -62,7 +61,6 @@ production integration target is Hermes over MCP.
 - Telegram bot token, only when running the legacy Telegram bot
 - Valid WatchFacts account
 - Linux server or local machine
-- Hermes server, only when using the MCP integration
 
 ## Quick Start
 
@@ -85,8 +83,8 @@ cp .env.example .env
 
 Then edit `.env`.
 
-For Hermes/MCP-only runtime, the key requirements are the WatchFacts URL, valid
-browser state, and any OpenWA settings needed for `create_chat_draft`.
+For MCP-only runtime, the key requirements are the WatchFacts URL, valid browser
+state, and any OpenWA settings needed for `create_chat_draft`.
 
 For the legacy Telegram bot, set the real Telegram bot token. Leave
 `TELEGRAM_ALLOWED_USER_IDS` empty if everyone may use the bot. Set it to one or
@@ -101,7 +99,7 @@ may run at the same time; extra queries show a queue message and wait.
 Set `SEARCH_CACHE_TTL_SECONDS` to reuse fresh identical search results before
 calling WatchFacts again; the default is 300 seconds.
 Set `SEARCH_MAX_CONCURRENT_SEARCHES` to limit concurrent non-Telegram
-WatchFacts searches, including Hermes/MCP requests; the default is 1.
+WatchFacts searches, including MCP requests; the default is 1.
 Keep `WATCHFACTS_HTTP_CLIENT_ENABLED=true` for the normal Telegram and MCP
 search runtime. Playwright is reserved for manual login/session checks in the
 production path; disabling the HTTPX client disables query search instead of
@@ -145,7 +143,7 @@ Run MCP + legacy bot for standard deployment:
 make deploy
 ```
 
-When enabling OpenWA chat draft handoff for Hermes/MCP, configure the OpenWA
+When enabling OpenWA chat draft handoff for MCP clients, configure the OpenWA
 values in `.env` and deploy with the standard target:
 
 ```bash
@@ -162,25 +160,21 @@ needs the separate OpenWA compose override.
 | `make init` | Create `data/`, `logs/`, and `.env` from `.env.example` when missing |
 | `make verify-env` | Check `.env` and `data/watchfacts_state.json` before deploy |
 | `make predeploy-check` | Run pytest plus repository checks |
-| `make deploy` | Alias for `make deploy-bot-mcp` |
+| `make deploy` | Deploy both the legacy bot and `watchfacts-mcp` |
 | `make deploy-bot` | Pull latest code, build, recreate the legacy Telegram bot, and show startup logs |
 | `make deploy-mcp` | Pull latest code, build, test, audit, and recreate `watchfacts-mcp` |
-| `make deploy-bot-mcp` | Pull latest code, build, and deploy both legacy bot and MCP service |
-| `make deploy-hermes-mcp` | Deploy `watchfacts-mcp`, wait for health, recreate Hermes, and run MCP smoke |
+| `make deploy-bot-mcp` | Alias for the standard bot + MCP deploy path |
 | `make deploy-bot OPENWA_COMPOSE=1` | Deploy legacy bot with the OpenWA network override |
 | `make pull` | Pull latest git changes unless `SKIP_PULL=1` |
 | `make build` | Build the Docker image |
 | `make mcp-predeploy-check` | Run MCP predeploy checks inside the MCP Compose service |
-| `make mcp-up` | Start `watchfacts-mcp` with the Hermes network override |
+| `make mcp-up` | Start `watchfacts-mcp` with the MCP compose override |
 | `make mcp-logs` | Follow `watchfacts-mcp` logs |
 | `make mcp-ps` | Show `watchfacts-mcp` status |
 | `make mcp-smoke` | Run one authorized HTTPX WatchFacts search smoke check |
 | `make mcp-smoke-set` | Validate MCP `search` shape for representative queries |
 | `make quality-audit` | Run the default bounded quality audit query set |
 | `make predeploy-quality-check` | Run local checks plus the default quality audit |
-| `make restart-hermes` | Recreate Hermes after MCP schema/config changes |
-| `make hermes-logs` | Follow Hermes logs |
-| `make hermes-ps` | Show Hermes status |
 | `make up` | Start the bot with Docker Compose |
 | `make down` | Stop Docker Compose services |
 | `make restart` | Restart the bot service |
@@ -280,7 +274,7 @@ data/watchfacts_state.json
 
 The bot reuses this session automatically when crawling WatchFacts.
 
-## Hermes MCP Runtime
+## MCP Runtime
 
 External wrappers can reuse the same search pipeline without requiring a
 Telegram token:
@@ -301,7 +295,7 @@ This path uses `load_search_settings()` internally. It still needs the
 WatchFacts browser state in `data/watchfacts_state.json`, and it shares the same
 SQLite cache and deterministic parser/matcher/scoring logic as the Telegram bot.
 
-The MCP bridge exposes the runtime as structured tools for Hermes. Hermes config
+The MCP bridge exposes the runtime as structured tools for MCP clients. A client
 should include only the tools this project owns, normally:
 
 ```yaml
@@ -322,7 +316,7 @@ mcp_servers:
 ```
 
 `search(query, limit=5, offset=0, include_similar=true)` returns ranked results,
-`has_more`, and `next_offset`. Hermes should reuse the original query and pass
+`has_more`, and `next_offset`. Clients should reuse the original query and pass
 `offset=next_offset` for "load more" follow-ups. Search results include a
 short-lived `result_id` cache handle, durable `stable_listing_id`, and absolute
 `rank` for later handoff/feedback. Follow-up tools accept the returned
@@ -407,7 +401,7 @@ Control fresh search cache TTL:
 SEARCH_CACHE_TTL_SECONDS=1800
 ```
 
-Control Hermes/MCP WatchFacts search concurrency:
+Control MCP WatchFacts search concurrency:
 
 ```bash
 SEARCH_MAX_CONCURRENT_SEARCHES=1

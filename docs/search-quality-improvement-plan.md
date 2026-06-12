@@ -33,8 +33,8 @@ Core constraints:
   maintainer to create a targeted test.
 - MCP smoke continues to validate `result_id`, `stable_listing_id`, pagination,
   and safe result fields.
-- Server deploy passes `pytest`, `compileall`, quality audit, MCP health, Hermes
-  restart, and MCP smoke set.
+- Server deploy passes `pytest`, `compileall`, quality audit, MCP health, and
+  MCP smoke set.
 
 ## Baseline Query Set
 
@@ -159,13 +159,14 @@ make quality-audit
 Server deploy verification:
 
 ```bash
-make deploy-hermes-mcp
+make deploy-mcp
+make mcp-wait-healthy
+make mcp-smoke-set
 ```
 
 Deployment must confirm:
 
 - `watchfacts-mcp` is healthy
-- Hermes restarts successfully
 - representative MCP smoke set passes
 - audit output does not expose secrets
 
@@ -231,13 +232,13 @@ Required production checks:
 
 - one live query analysis for `5712g`
 - one color-specific query analysis for `15510or blue`
-- one MCP smoke set after Hermes restart
+- one MCP smoke set after MCP deploy
 
 ## Non-Goals
 
 - Replacing deterministic matching with an LLM.
 - Adding uncontrolled AI ranking or summarization.
-- Rewriting Hermes prompts to duplicate WatchFacts search logic.
+- Rewriting MCP client prompts to duplicate WatchFacts search logic.
 - Changing WatchFacts authentication boundaries.
 - Moving away from SQLite or single-server deployment in this phase.
 - Showing a product image when attribution is ambiguous.

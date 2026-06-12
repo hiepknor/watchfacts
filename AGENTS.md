@@ -4,23 +4,23 @@ Project-level instructions for AI coding agents working on `watchfacts`.
 
 ## Project Summary
 
-`watchfacts` is a Python WatchFacts search runtime with a Hermes MCP bridge,
-OpenWA handoff support, and a legacy Telegram bot.
+`watchfacts` is a Python WatchFacts search runtime with an MCP bridge, OpenWA
+handoff support, and a legacy Telegram bot.
 
 Expected behavior:
 
-- Receive a WatchFacts query from Hermes through MCP, or from the legacy Telegram bot.
+- Receive a WatchFacts query from an MCP client, or from the legacy Telegram bot.
 - Crawl the WatchFacts trading page using an authenticated Playwright session.
 - Extract listing data with deterministic parsing.
 - Match listings by query tokens and regex-assisted rules.
 - Deduplicate results.
 - Return structured ranked listing details, including `result_id`, image, listing text, seller, posted date, source, and pagination metadata.
-- Let Hermes create OpenWA chat drafts from selected `result_id` handles.
+- Let MCP clients create OpenWA chat drafts from selected `result_id` handles.
 
 Core constraint: this project does not require an LLM for core WatchFacts search.
 Matching and extraction logic should remain deterministic unless the user
-explicitly changes that direction. Hermes must call the MCP runtime instead of
-reimplementing WatchFacts search in prompts.
+explicitly changes that direction. MCP clients must call the MCP runtime instead
+of reimplementing WatchFacts search in prompts.
 
 ## Local Skills
 
@@ -120,9 +120,9 @@ Use these commands when the matching files exist:
 | Run legacy bot locally | `python -m app.main` |
 | Initialize local runtime files | `make init` |
 | Build Docker image | `make build` |
-| Deploy Hermes MCP runtime | `make deploy-hermes-mcp` |
 | Deploy MCP only | `make deploy-mcp` |
-| Restart Hermes | `make restart-hermes` |
+| Deploy bot only | `make deploy-bot` |
+| Deploy bot and MCP | `make deploy` |
 | Start legacy Docker service | `make up` |
 | Stop Docker services | `make down` |
 | Follow MCP logs | `make mcp-logs` |
@@ -133,7 +133,7 @@ Use these commands when the matching files exist:
 
 If tests or lint commands are added later, update this file and prefer those commands for verification.
 
-The legacy bot Docker entrypoint is `python -m app.main`. The Hermes MCP service
+The legacy bot Docker entrypoint is `python -m app.main`. The MCP service
 entrypoint is `python -m app.mcp_server`.
 
 ## Project Documentation
@@ -144,7 +144,7 @@ Load docs selectively:
 
 - Project context: `SOUL.md`.
 - New features: `docs/product-spec.md`, `docs/technical-spec.md`, and `docs/implementation-plan.md`.
-- Hermes/MCP changes: `SOUL.md`, `docs/technical-spec.md`, `docs/operations.md`, and `docs/security-compliance.md`.
+- MCP changes: `SOUL.md`, `docs/technical-spec.md`, `docs/operations.md`, and `docs/security-compliance.md`.
 - Crawler/auth changes: `docs/technical-spec.md`, `docs/security-compliance.md`, and `docs/decisions/002-authenticated-browser-session.md`.
 - Matching/parser/dedupe changes: `docs/technical-spec.md` and `docs/decisions/001-deterministic-matching.md`.
 - Docker/runtime changes: `docs/operations.md` and `docs/decisions/004-docker-compose-runtime.md`.
@@ -168,7 +168,7 @@ Rules:
 
 - Never commit `.env`.
 - Never commit real Telegram tokens, WatchFacts credentials, cookies, browser state, or session files.
-- Never commit OpenWA API keys, OpenAI API keys, Hermes secrets, or MCP prefill files containing secrets.
+- Never commit OpenWA API keys, OpenAI API keys, or MCP prefill files containing secrets.
 - Treat `data/watchfacts_state.json` as sensitive because it contains authenticated browser state.
 - Treat `data/bot.db` as local runtime data.
 - Keep `logs/`, `.venv/`, `__pycache__/`, and generated runtime files out of commits.
@@ -200,7 +200,7 @@ If a requested change appears to weaken these boundaries, stop and surface the c
 - For SQLite, use parameterized queries and keep schema changes documented.
 - For Telegram handlers, avoid blocking calls in async paths.
 - For MCP tools, keep tool names/schema stable and return structured payloads rather than human-only text.
-- For Hermes answers, preserve `result_id`, use `offset` / `next_offset` for pagination, and never invent seller contacts, source links, images, prices, or OpenWA links.
+- For MCP client answers, preserve `result_id`, use `offset` / `next_offset` for pagination, and never invent seller contacts, source links, images, prices, or OpenWA links.
 - Preserve clear error handling around network, login/session, parsing, and Telegram API failures.
 
 ## Verification Expectations

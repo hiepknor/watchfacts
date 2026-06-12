@@ -58,8 +58,8 @@ The current runtime now has:
   uncertain.
 - Keep production audit output safe, bounded, and redacted.
 - Add dependencies only when they earn their operational cost.
-- Do not make Hermes reimplement WatchFacts search logic. Hermes should consume
-  MCP payloads and diagnostics from the runtime.
+- Do not make MCP clients reimplement WatchFacts search logic. Clients should
+  consume MCP payloads and diagnostics from the runtime.
 
 ## Technology Choices
 
@@ -137,7 +137,7 @@ Extend `search_diagnostics` with additional optional fields:
 Rules:
 
 - Fields may be `null` on cache hits when stage-level data is unavailable.
-- Unknown fields must not break Hermes, Telegram, or result templates.
+- Unknown fields must not break MCP clients, Telegram, or result templates.
 - Do not expose full raw HTML or sensitive browser/session data.
 
 ## Phase 1: Audit Funnel Export
@@ -322,7 +322,7 @@ mixing uncertain records into final user-facing results.
     not accept the candidate.
 - Keep final results limited to current deterministic output.
 - Add weak/ambiguous counts and examples to audit output.
-- Let Hermes mention the existence of uncertain candidates only if the MCP
+- Let MCP clients mention the existence of uncertain candidates only if the MCP
   payload explicitly provides that diagnostic data.
 
 ### Acceptance Criteria
@@ -494,7 +494,7 @@ Acceptance:
 
 - Audit JSONL includes examples of weak and ambiguous candidates.
 - Final result payload remains conservative.
-- Hermes can only reference this data when MCP payload provides it.
+- MCP clients can only reference this data when MCP payload provides it.
 
 Suggested tests:
 
@@ -554,7 +554,7 @@ Before phase 4 becomes user-facing behavior, explicitly decide whether
 `weak/ambiguous` candidates should:
 
 - stay audit-only;
-- appear in Hermes as a separate "possible matches" count;
+- appear in client responses as a separate "possible matches" count;
 - become a guarded opt-in result bucket.
 
 Before phase 5 adds `datasketch`, explicitly decide whether approximate

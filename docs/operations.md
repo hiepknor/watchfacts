@@ -7,11 +7,12 @@
 3. Edit `.env` with WatchFacts, OpenWA, OpenAI, and optional Telegram values.
    `TELEGRAM_BOT_TOKEN` is only required when running the legacy Telegram bot.
 4. Create browser state with `python scripts/ops/login.py`.
-5. For Hermes/MCP production, configure Hermes to call
-   `http://watchfacts-mcp:8765/mcp`.
+5. For MCP production, configure the trusted MCP client to call
+   `http://watchfacts-mcp:8765/mcp` from the Docker network or
+   `http://127.0.0.1:8765/mcp` from the host.
 6. To enable generated result pages, set `RESULT_PAGE_PUBLIC_BASE_URL` to the
    public `/results` base URL and expose only that public route; keep `/mcp`
-   reachable only by Hermes.
+   reachable only by trusted internal clients.
    - Example for dedicated subdomain: `https://watchfacts.onio.cc/results`.
   - Reverse proxy should route only `/results/*` and keep `/mcp` private.
   - Log the `/results/*` route separately when the Caddy host supports it (for
@@ -28,8 +29,9 @@
     - `curl -I https://watchfacts.onio.cc/results/health` should return 200
     - `curl https://watchfacts.onio.cc/mcp` should still be 404
 
-7. Run `make deploy` (standard deploy: bot + MCP service, no Hermes restart).
-8. Inspect startup with `make mcp-logs` or `make hermes-logs` if needed.
+7. Run `make deploy` for the standard bot + MCP deploy. Use `make deploy-mcp`
+   for MCP only or `make deploy-bot` for bot only.
+8. Inspect startup with `make mcp-logs` or `make logs` if needed.
 
 The bot expects `data/watchfacts_state.json` to exist before the first real search.
 Deploy targets also check for `.env` and browser state before they pull/build.
@@ -53,51 +55,19 @@ This target:
 - builds and force-recreates legacy bot and `watchfacts-mcp`
 - runs pytest, compile checks, and the default bounded quality audit inside the
   MCP Compose service
-- waits for `watchfacts-mcp` health
+- prints Compose status and recent startup logs for each service
 
-Use `make deploy-hermes-mcp` when MCP schema/config changes require a Hermes reload.
+Use `make deploy-mcp` for MCP-only changes and `make deploy-bot` for bot-only
+changes:
 
 ```bash
-make deploy-hermes-mcp
+make deploy-mcp
+make deploy-bot
 ```
-
-`make deploy-hermes-mcp`:
-
-- deploys `watchfacts-mcp`
-- runs the MCP bounded quality audit gate
-- waits for `watchfacts-mcp` health
-- recreates Hermes so it reloads MCP config/schema
-- runs the representative MCP search smoke set
 
 Do not use `SKIP_PULL=1` for normal production deploys. If the server working
 tree is dirty, fix the deploy checkout first rather than layering rsync changes
 over it.
-
-Hermes config lives outside this repository, normally at:
-
-```text
-/opt/hermes-agent/data/config.yaml
-/opt/hermes-agent/data/watchfacts_prefill.json
-```
-
-Expected Hermes MCP config shape:
-
-```yaml
-mcp_servers:
-  watchfacts:
-    url: "http://watchfacts-mcp:8765/mcp"
-    timeout: 120
-    tools:
-      include:
-        - search
-        - health
-        - create_chat_draft
-        - report_issue
-        - list_issues
-        - get_issue
-        - update_issue
-        - suspicious_summary
-```
 
 ## Local Setup
 
@@ -125,7 +95,7 @@ Access control:
 - `SEARCH_CACHE_TTL_SECONDS=1800` serves repeated identical normalized searches
   from SQLite before calling WatchFacts again.
 - `SEARCH_MAX_CONCURRENT_SEARCHES=1` serializes non-Telegram WatchFacts searches,
-  including Hermes/MCP requests, while identical queries still coalesce.
+  including MCP requests, while identical queries still coalesce.
 - Use `make mcp-prewarm` after deploy or from a light cron to warm common
   production query cache entries. Add `MCP_PREWARM_FORMAT=jsonl` when the output
   should be archived as an ops artifact.
@@ -146,21 +116,21 @@ Telegram behavior:
 - Photo captions are limited to Telegram's caption size; long text fallback messages are also truncated safely.
 - In group chats, normal messages are ignored unless the bot is mentioned at the beginning or the user replies to a bot message.
 
-Hermes/MCP behavior:
+MCP client behavior:
 
 - Initial search should call `search(query=<full user text>, limit=5, offset=0, include_similar=true)`.
 - "Load more" should call `search` again with the same query and previous
   `next_offset`.
 - Use the returned `result_id` for immediate `create_chat_draft` and issue
   reporting. Use the returned `stable_listing_id` when the follow-up may cross a
-  restart or when Hermes preserved that field instead. If the user says
+  restart or when the client preserved that field instead. If the user says
   "result 20", pass `rank=20`.
 - Use `image_url` as the product image when present.
 - Do not invent seller contact, result ids, source links, prices, image links, or OpenWA links.
 
 Issue queues:
 
-- Production issue review should go through Hermes MCP first, not SSH or direct
+- Production issue review should go through MCP tools first, not SSH or direct
   database inspection.
 - Use `list_issues(issue_type="all", status="open", limit=20)` to see the
   active queue. Use `status="fixed"`, `status="ignored"`, or `status="all"`
@@ -175,7 +145,7 @@ Issue queues:
   after the fix is tested, deployed, and verified. Mark `ignored` only with a
   note explaining why no code change is needed.
 
-Example Hermes prompts:
+Example MCP-client operator prompts:
 
 ```text
 List open WatchFacts issues.
@@ -187,12 +157,12 @@ Mark issue F15 fixed with notes: commit <sha>, deploy date <date>, audit query p
 Mark issue S8 ignored with notes: raw source has no additional price data.
 ```
 
-Hermes should call the MCP tools above. It should not inspect `data/bot.db`
+MCP clients should call the tools above. They should not inspect `data/bot.db`
 directly and must not reimplement WatchFacts matching in prompts.
 
 OpenWA chat handoff:
 
-- For Hermes/MCP production, set OpenWA values in `.env` and deploy with `make deploy`.
+- For MCP production, set OpenWA values in `.env` and deploy with `make deploy`.
 - Use `OPENWA_BASE_URL=http://openwa-api:2785` for server-to-server API calls
   and the public dashboard URL, for example `https://openwa.onio.cc`, for
   `OPENWA_DASHBOARD_URL`.
@@ -277,26 +247,26 @@ Restart legacy Telegram bot after updating code:
 make deploy-bot
 ```
 
-Restart WatchFacts MCP and reload Hermes after updating code or MCP schema:
+Restart WatchFacts MCP after updating MCP code or schema:
 
 ```bash
-make deploy-hermes-mcp
+make deploy-mcp
 ```
 
 `make deploy-bot` runs `git pull --ff-only`, builds the Docker image, runs
 pytest and compile checks inside the Compose image, force-recreates the legacy
 bot container, prints Compose status, and shows recent startup logs.
 
-`make deploy-hermes-mcp` does the same for `watchfacts-mcp`, runs the bounded
-quality audit gate, waits for MCP health, recreates Hermes, then runs the MCP
-smoke set.
+`make deploy-mcp` does the same for `watchfacts-mcp`, runs the bounded quality
+audit gate, force-recreates the MCP container, and shows recent MCP logs.
+
+`make deploy` deploys both the legacy bot and `watchfacts-mcp`.
 
 Status:
 
 ```bash
 make ps
 make mcp-ps
-make hermes-ps
 ```
 
 Docker Compose also configures a lightweight container healthcheck and rotates
@@ -435,8 +405,8 @@ Checklist:
 - Run focused tests, then the full suite.
 - Bump `SEARCH_CACHE_VERSION` in `app/search.py` when extraction, scoring,
   quality gates, ranking, or serialized result shape can change cached output.
-- Deploy with `make deploy` (standard production deploy), then use
-  `make deploy-hermes-mcp` only if Hermes must be restarted for schema/config changes.
+- Deploy with `make deploy` for the standard production bot + MCP deploy. Use
+  `make deploy-mcp` or `make deploy-bot` for scoped service deploys.
 - Verify the container is healthy and the production git HEAD matches the
   deployed commit.
 - Rerun the focused production audit after deploy and keep `make mcp-smoke-set`
@@ -448,7 +418,7 @@ cookies, browser state, full page HTML, or unbounded raw listings.
 
 ## Production Access Policy
 
-- Use Hermes MCP as the default production review surface for WatchFacts issues.
+- Use MCP tools as the default production review surface for WatchFacts issues.
 - Use `ubuntu@43.153.208.222` for deploy and operational commands only.
 - Do not use `audit@43.153.208.222` as the primary review path.
 - If emergency audit SSH is needed later, create a restricted read-only user

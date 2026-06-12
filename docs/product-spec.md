@@ -1,15 +1,15 @@
-# Product Spec: WatchFacts Runtime For Hermes
+# Product Spec: WatchFacts Runtime For MCP Clients
 
 ## Objective
 
 Maintain a self-hosted WatchFacts search runtime that lets an authorized user
-search WatchFacts trading listings through Hermes, for example:
+search WatchFacts trading listings through an MCP client, for example:
 
 ```text
 @onioaibot search WatchFacts 5712G 2015 full set
 ```
 
-Hermes calls the WatchFacts MCP tools. The runtime uses an authenticated browser
+The MCP client calls the WatchFacts MCP tools. The runtime uses an authenticated browser
 session, extracts listings from WatchFacts JSON/HTML responses, matches listings
 deterministically, deduplicates latest reposts, and returns structured ranked
 results with seller, date, source link, product image, short-lived result
@@ -20,16 +20,16 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 
 ## Users
 
-- Primary user: a watch trader or collector using Hermes/Telegram to search WatchFacts.
-- Operator: the person who deploys WatchFacts MCP, configures Hermes, manages `.env`, creates the browser login session, and monitors logs.
+- Primary user: a watch trader or collector using an MCP client or Telegram to search WatchFacts.
+- Operator: the person who deploys WatchFacts MCP, manages `.env`, creates the browser login session, and monitors logs.
 - Maintainer: a developer or AI agent extending crawler, parser, matcher, database, MCP tools, OpenWA handoff, or legacy Telegram behavior.
 
 ## User Stories
 
-- As a Hermes user, I can send a model/reference query and receive relevant WatchFacts listings.
-- As a Hermes user, I can ask for more results and receive the next page without losing the original query context.
-- As a Hermes user, I can see product images when WatchFacts provides `image_url`.
-- As a Hermes user, I can ask to contact a seller and let Hermes create an OpenWA chat draft from a selected `result_id`, `stable_listing_id`, or result rank.
+- As an MCP client user, I can send a model/reference query and receive relevant WatchFacts listings.
+- As an MCP client user, I can ask for more results and receive the next page without losing the original query context.
+- As an MCP client user, I can see product images when WatchFacts provides `image_url`.
+- As an MCP client user, I can ask to contact a seller and create an OpenWA chat draft from a selected `result_id`, `stable_listing_id`, or result rank.
 - As a Telegram user, I can include multiple terms and get listings that contain all required tokens.
 - As an operator, I can log in to WatchFacts manually once and let the bot reuse the saved session.
 - As an operator, I can run the bot locally or through Docker Compose.
@@ -43,8 +43,8 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 
 ## Core Flow
 
-1. User sends a WatchFacts request to Hermes.
-2. Hermes calls `search(query, limit=5, offset=0, include_similar=true)` on the WatchFacts MCP server.
+1. User sends a WatchFacts request to an MCP client.
+2. The client calls `search(query, limit=5, offset=0, include_similar=true)` on the WatchFacts MCP server.
 3. Runtime validates and normalizes the query.
 4. Runtime loads or reuses authenticated WatchFacts browser state.
 5. Runtime posts the WatchFacts search form through HTTPX.
@@ -55,8 +55,8 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 10. If OpenAI controlled intelligence is enabled, runtime may record or apply a guarded suggestion only after strict validation.
 11. Runtime stores query/cache/dedupe/issue data in SQLite.
 12. MCP payload returns ranked results with `result_id`, `stable_listing_id`, `rank`, `image_url`, `has_more`, and `next_offset`.
-13. Hermes answers in Vietnamese and preserves the short-lived `result_id`; it may also use `stable_listing_id` or absolute `rank` for contact/feedback follow-ups.
-14. For "load more", Hermes calls the same query with `offset=next_offset`.
+13. The client answers in Vietnamese and preserves the short-lived `result_id`; it may also use `stable_listing_id` or absolute `rank` for contact/feedback follow-ups.
+14. For "load more", the client calls the same query with `offset=next_offset`.
 
 ## Functional Requirements
 
@@ -97,9 +97,9 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 - Persist local cache, query history, and dedupe records in SQLite.
 - Reuse `data/watchfacts_state.json` for authenticated browser state.
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
-- Support Docker deployment of `watchfacts-mcp` on the same server/network as Hermes.
-- Support Makefile deployment with `make deploy` for standard bot+MCP release and
-  `make deploy-hermes-mcp` for MCP schema/config changes requiring Hermes restart.
+- Support Docker deployment of `watchfacts-mcp`.
+- Support Makefile deployment with `make deploy` for standard bot+MCP release,
+  `make deploy-mcp` for MCP only, and `make deploy-bot` for bot only.
 - Limit Telegram photo captions and text messages to platform-safe lengths.
 - Notify the owner in Vietnamese when WatchFacts browser session state is missing or expired.
 - Support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
@@ -110,8 +110,8 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 ## Non-Functional Requirements
 
 - No LLM is required for core behavior.
-- Hermes must not reimplement WatchFacts search logic; it should call MCP tools.
-- MCP tool output must be structured enough for Hermes to answer without inventing seller contact, result ids, source links, prices, product images, or OpenWA links.
+- MCP clients must not reimplement WatchFacts search logic; they should call MCP tools.
+- MCP tool output must be structured enough for clients to answer without inventing seller contact, result ids, source links, prices, product images, or OpenWA links.
 - Matching must be deterministic and testable.
 - Ranking must be deterministic, quality-first, and covered by regression tests.
 - Continuous improvement must be evidence collection and review, not autonomous code mutation.
@@ -153,8 +153,7 @@ use the non-Telegram runtime and MCP bridge instead of reimplementing search.
 | Deploy legacy Telegram bot | `make deploy-bot` |
 | Deploy WatchFacts MCP | `make deploy-mcp` |
 | Deploy legacy Telegram bot + MCP | `make deploy-bot-mcp` |
-| Deploy WatchFacts MCP and restart Hermes | `make deploy-hermes-mcp` |
-| Restart Hermes | `make restart-hermes` |
+| Deploy bot and WatchFacts MCP | `make deploy` |
 
 Telegram commands:
 
@@ -179,8 +178,8 @@ at the start of the message or reply to a bot message.
 
 ## Success Criteria
 
-- A Hermes user can request WatchFacts search and receive matching listings.
-- A Hermes user can ask for more results and the MCP runtime returns the next page through `offset`.
+- An MCP client user can request WatchFacts search and receive matching listings.
+- An MCP client user can ask for more results and the MCP runtime returns the next page through `offset`.
 - Product image URLs are passed through when available and never invented.
 - A selected result can be handed off to OpenWA through `create_chat_draft`.
 - A legacy Telegram user can still send a query and receive a generated result

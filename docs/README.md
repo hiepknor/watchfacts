@@ -3,9 +3,8 @@
 This directory is the project knowledge base for humans and AI agents.
 
 Current production direction: WatchFacts search logic lives in a reusable
-runtime, Hermes accesses it through the `watchfacts-mcp` Docker service, and the
-Telegram bot is a supported legacy channel while the business flow moves to
-Hermes.
+runtime, trusted MCP clients access it through the `watchfacts-mcp` Docker
+service, and the Telegram bot is a supported legacy channel.
 
 ## Documents
 
@@ -48,7 +47,7 @@ Agents should read documents selectively:
 
 - For new features: start with `product-spec.md`, then `technical-spec.md`, then `implementation-plan.md`.
 - For architecture review or system-risk triage: read `system-design-review.md`, then the relevant spec or ADR it references.
-- For Hermes/MCP changes: read `../SOUL.md`, `technical-spec.md`, `operations.md`, and `security-compliance.md`.
+- For MCP changes: read `../SOUL.md`, `technical-spec.md`, `operations.md`, and `security-compliance.md`.
 - For infrastructure changes: read `operations.md`, `security-compliance.md`, and ADR-004.
 - For crawler changes: read `technical-spec.md`, `security-compliance.md`, and ADR-002.
 - For matching/parser changes: read `technical-spec.md` and ADR-001.
@@ -59,7 +58,7 @@ Agents should read documents selectively:
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.
 - For result page modal actions: read `result-page-actions-plan.md`, `technical-spec.md`, `security-compliance.md`, and ADR-007.
 - For OpenAI controlled refinement: read `roadmap.md` Milestone 7, `implementation-plan.md` Phase 7, `technical-spec.md`, `security-compliance.md`, and ADR-005.
-- For deploys: use `make deploy` on the server unless the task is explicitly about the legacy Telegram bot or requires a Hermes/MCP config/schema reload.
+- For deploys: use `make deploy` on the server for bot + MCP, `make deploy-mcp` for MCP only, or `make deploy-bot` for bot only.
 - For commits: follow `AGENTS.md` and the workflow in `contributing.md`.
 
 Do not load every document into context by default. Load the smallest set that applies to the task.

@@ -3,8 +3,8 @@
 ## Overview
 
 The initial implementation phases, continuous-improvement loop, OpenAI guarded
-refinement, and Hermes MCP bridge are complete. Keep this document as the
-project baseline and use it to verify that future changes preserve the intended
+refinement, and MCP bridge are complete. Keep this document as the project
+baseline and use it to verify that future changes preserve the intended
 architecture.
 
 For new work, add a focused task under "Future Work" before implementing if the change affects behavior, data retention, scraping strategy, or deployment.
@@ -12,9 +12,10 @@ For new work, add a focused task under "Future Work" before implementing if the 
 Current baseline:
 
 - Shared WatchFacts search logic lives outside Telegram in `app.tool_runtime`.
-- Hermes uses `app.mcp_server` through the `watchfacts-mcp` Docker service.
+- MCP clients use `app.mcp_server` through the `watchfacts-mcp` Docker service.
 - Legacy Telegram bot still exists, but new business workflows should use MCP.
-- Production deploy path is `make deploy` (alias for `make deploy-bot-mcp`), while `make deploy-hermes-mcp` is reserved for Hermes schema/config reload needs.
+- Production deploy path is `make deploy` for bot + MCP. Use `make deploy-mcp`
+  for MCP only and `make deploy-bot` for bot only.
 - Server deploy should not require `sudo` or `SKIP_PULL`.
 
 ## Phase 0: Foundation
@@ -28,7 +29,7 @@ Acceptance:
 - [x] `Dockerfile` exists and installs Python dependencies plus Playwright Chromium.
 - [x] `docker-compose.yml` mounts `data/` and `logs/`.
 - [x] `Makefile` wraps common commands.
-- [x] `Makefile` includes `deploy-mcp`, `deploy-bot-mcp`, `deploy-hermes-mcp`, and Hermes restart targets.
+- [x] `Makefile` includes `deploy-mcp`, `deploy-bot`, and `deploy-bot-mcp`.
 - [x] `.env.example`, `.gitignore`, and `.dockerignore` exist.
 
 Verify:
@@ -1044,7 +1045,7 @@ Likely files:
 
 Status: complete.
 
-Description: Add the first prerequisite for a Hermes/MCP wrapper by separating
+Description: Add the first prerequisite for an MCP wrapper by separating
 the search runtime from Telegram-only configuration and exposing stable JSON
 payload serialization for search results.
 
@@ -1076,7 +1077,7 @@ Likely files:
 - `tests/test_config.py`
 - `tests/test_tool_runtime.py`
 
-## Phase 12: Hermes MCP Runtime
+## Phase 12: MCP Runtime
 
 Status: complete.
 
@@ -1095,23 +1096,19 @@ Likely files:
 - `app/mcp_server.py`
 - `tests/test_mcp_server.py`
 
-### Task 12.2: Docker And Hermes Wiring
+### Task 12.2: Docker And MCP Wiring
 
 Acceptance:
 
 - [x] `watchfacts-mcp` service runs in Docker.
-- [x] Compose override joins the Hermes Docker network through
-  `HERMES_DOCKER_NETWORK`.
-- [x] Hermes config points to `http://watchfacts-mcp:8765/mcp`.
-- [x] `make deploy-hermes-mcp` deploys MCP and recreates Hermes when schema/config changes require a Hermes restart.
+- [x] Compose override publishes MCP on `127.0.0.1:8765`.
+- [x] `make deploy-mcp` deploys the MCP service.
 
 Likely files:
 
 - `docker-compose.yml`
 - `docker-compose.watchfacts-mcp.yml`
 - `Makefile`
-- `/opt/hermes-agent/data/config.yaml`
-- `/opt/hermes-agent/data/watchfacts_prefill.json`
 
 ### Task 12.3: MCP Pagination And Image Contract
 
@@ -1121,7 +1118,7 @@ Acceptance:
 - [x] Payload returns `has_more` and `next_offset`.
 - [x] Result ranks remain absolute across pages.
 - [x] Product images are passed through as `image_url` when available.
-- [x] Hermes instructions tell the agent to use `next_offset` for "load more"
+- [x] MCP client instructions tell clients to use `next_offset` for "load more"
   and not invent image links.
 
 ## Phase 13: Result Page Real Actions

@@ -3,7 +3,8 @@
 Purpose:
 
 - Expose only the MCP server `/results/*` route publicly (Result Page).
-- Keep `/mcp` internal so Hermes can call it directly through the Docker network.
+- Keep `/mcp` internal so trusted MCP clients can call it through the private
+  host or Docker network.
 
 Implementation:
 
@@ -27,7 +28,7 @@ RESULT_PAGE_PUBLIC_BASE_URL=https://watchfacts.onio.cc/results
 4. Deploy as usual:
 
 ```bash
-make deploy-hermes-mcp
+make deploy-mcp
 ```
 
 Quick checks:

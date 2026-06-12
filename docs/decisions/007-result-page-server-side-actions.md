@@ -11,9 +11,9 @@ Accepted
 ## Context
 
 Generated WatchFacts result pages are the primary listing UI for Telegram and a
-useful handoff surface for Hermes users. The detail modal currently copies
+useful handoff surface for MCP client users. The detail modal currently copies
 prompts for OpenWA draft creation and issue reporting, which forces the operator
-back through Hermes/MCP for real side effects.
+back through MCP tools for real side effects.
 
 The project already has server-side implementations for OpenWA draft creation
 and issue reporting. OpenWA uses an API key and must remain a server-to-server

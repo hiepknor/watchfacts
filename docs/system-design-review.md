@@ -137,7 +137,7 @@ are consistent in deployed runtime.
    group.
 2. Reduce image-missing rate for color-specific result groups, especially where
    parent-level image context should propagate to sub-listing variants.
-3. Continue monitoring `stable_listing_id` follow-up resolution in Hermes/OpenWA
+3. Continue monitoring `stable_listing_id` follow-up resolution in MCP/OpenWA
    flows and add regressions for any stale-reference edge case.
 4. Expand health/quality alerting so unusual `result image missing` spikes by query
    class trigger early investigation.
@@ -151,10 +151,10 @@ runtime contract by itself.
 
 ## Current Architecture
 
-The production path is Hermes through MCP:
+The production path is MCP:
 
 ```text
-Hermes
+MCP client
   -> watchfacts-mcp /mcp tools
   -> app.mcp_server
   -> app.tool_runtime payload functions
@@ -166,7 +166,7 @@ Hermes
 
 The legacy Telegram bot remains a supported channel, but it calls the same
 `WatchFactsSearchWorkflow` instead of owning a separate search implementation.
-This is the most important architectural boundary in the project: Hermes,
+This is the most important architectural boundary in the project: MCP clients,
 Telegram, diagnostics, and tests should reuse the same deterministic runtime.
 
 The runtime has two cache layers:
@@ -188,7 +188,7 @@ Cloudflare, or anti-bot systems.
   drifting apart.
 - Core search remains deterministic: parser, matcher, dedupe, scoring, and
   grouping run locally and are covered by focused tests.
-- MCP responses are structured enough for Hermes to answer without inventing
+- MCP responses are structured enough for clients to answer without inventing
   result IDs, seller data, image URLs, source links, pagination state, or OpenWA
   links.
 - SQLite is used for local query history, dedupe records, search cache, issue
@@ -197,9 +197,8 @@ Cloudflare, or anti-bot systems.
   browser state is missing or expired.
 - Default `make deploy` encodes the intended production deployment path:
   pull, build, run checks, recreate legacy bot and `watchfacts-mcp`.
-- `make deploy-hermes-mcp` is used for MCP schema/config changes when Hermes
-  restart is required; it pulls/builds/recreates MCP, then restarts Hermes so it
-  reloads tool schema/config.
+- `make deploy-mcp` is used for MCP-only deploys; it pulls, builds, runs the
+  MCP predeploy checks, and recreates the MCP service.
 
 ## Risks And Follow-Ups
 
@@ -235,13 +234,13 @@ Cloudflare, or anti-bot systems.
 
    `WatchFactsSearchWorkflow` coalesces identical in-flight searches, but the
    MCP path does not have a shared concurrency limit for different queries. A
-   burst of Hermes searches can launch multiple Playwright browser sessions and
+   burst of MCP searches can launch multiple Playwright browser sessions and
    WatchFacts requests at the same time. Telegram has
    `TELEGRAM_MAX_CONCURRENT_SEARCHES`; MCP needs an equivalent runtime guard.
 
    Implemented fix: search-mode runtime settings now include
    `SEARCH_MAX_CONCURRENT_SEARCHES`, defaulting to 1. The search workflow applies
-   a semaphore only for `runtime_mode="search"`, so Hermes/MCP and diagnostics
+   a semaphore only for `runtime_mode="search"`, so MCP and diagnostics
    are bounded while Telegram keeps its existing queue behavior. Identical-query
    coalescing still happens before the concurrency gate.
 
@@ -249,7 +248,7 @@ Cloudflare, or anti-bot systems.
 
    `watchfacts_create_chat_draft_payload()` returns the full OpenWA draft payload
    to the MCP caller, including raw listing fields. The OpenWA API needs the
-   payload, but Hermes generally should not receive raw listing text unless a
+   payload, but MCP clients generally should not receive raw listing text unless a
    diagnostic path explicitly asks for it.
 
    Implemented fix: normal `create_chat_draft` responses return only safe
@@ -286,7 +285,7 @@ should preserve the existing MCP tool names:
 
 Any future change to `result_id`, rank follow-up semantics, or
 `create_chat_draft` response shape should be treated as a compatibility-sensitive
-MCP contract change and verified against Hermes behavior.
+MCP contract change and verified against client behavior.
 
 ## Verification Snapshot
 

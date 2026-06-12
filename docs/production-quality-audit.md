@@ -41,7 +41,7 @@ regress later.
 
 - Production evidence first: do not tune broad rules from one vague report.
 - Every confirmed issue should become a fixture or test before behavior changes.
-- Production issue review should go through Hermes MCP tools first; SSH and
+- Production issue review should go through MCP tools first; SSH and
   direct database reads are deploy/emergency paths, not the normal review path.
 - Audit output must be safe: no `.env`, API keys, Telegram tokens, WatchFacts
   cookies, browser state, or full page HTML.
@@ -165,7 +165,7 @@ Policy:
 
 For every confirmed issue:
 
-1. Use Hermes MCP `list_issues`, `get_issue`, `suspicious_summary`, and
+1. Use MCP `list_issues`, `get_issue`, `suspicious_summary`, and
    `update_issue` for triage.
 2. Classify the finding as `bad_extraction`, `wrong_reference`,
    `wrong_descriptor`, `bad_rank`, `missing_price`, `stale_cache`, or
@@ -215,7 +215,7 @@ python scripts/fixtures/generate_audit_fixtures.py audit-report.jsonl > tests/te
 By default, the generator emits only non-clean rows. Add `--include-clean` when
 you need to lock an accepted clean shorthand or a known-good ranking example.
 
-Hermes maintainer prompt examples:
+MCP client maintainer prompt examples:
 
 ```text
 List open WatchFacts issues.
@@ -270,8 +270,7 @@ Mark issue S8 ignored with note raw source lacks info.
 - [x] `make predeploy-quality-check` runs local checks plus audit.
 - [x] MCP predeploy checks run the bounded audit gate.
 - [x] Standard `make deploy` performs the normal production release, while
-  `make deploy-hermes-mcp` waits for MCP health and runs post-deploy MCP smoke when
-  Hermes schema/config reload is needed.
+  `make deploy-mcp` handles MCP-only releases.
 - [ ] Rerun focused production audit after deploy for the changed query class.
 - [ ] Capture unresolved findings into PMO or docs before stopping when requested.
 
@@ -281,7 +280,7 @@ Mark issue S8 ignored with note raw source lacks info.
 - Audit output explains top result quality without reading application code.
 - Confirmed production issues have regression tests before fixes are merged.
 - Cache version is updated when scoring or gate changes affect cached output.
-- Hermes can list, inspect, classify, and update issue status through MCP
+- MCP clients can list, inspect, classify, and update issue status through MCP
   without SSH or direct SQLite access.
 - Documentation states which shorthand prices are accepted and which material
   terms are not prices.

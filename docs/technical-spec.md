@@ -3,7 +3,7 @@
 ## Tech Stack
 
 - Python 3.11+
-- MCP server for Hermes tool access
+- MCP server for structured tool access
 - `python-telegram-bot[job-queue]` for Telegram integration
 - HTTPX for lightweight authenticated WatchFacts search requests
 - Playwright Chromium for authenticated login and session checks
@@ -11,7 +11,7 @@
 - BeautifulSoup4 + lxml for HTML parsing
 - SQLite for local cache, dedupe, and query history
 - Docker Compose for deployment
-- Hermes as the primary external agent runtime
+- MCP clients as the external integration surface
 - OpenWA chat draft API for seller handoff
 - Optional OpenAI API integration for controlled AI refinement
 - Makefile for repeatable local commands
@@ -22,7 +22,7 @@
 app/
   main.py          # application entrypoint
   telegram_bot.py  # legacy Telegram handlers and message formatting
-  mcp_server.py    # WatchFacts MCP tools for Hermes
+  mcp_server.py    # WatchFacts MCP tools
   tool_runtime.py  # non-Telegram payload runtime used by MCP and diagnostics
   search_result.py # shared search result dataclass
   scraper.py       # HTTPX search plus Playwright browser/session helpers
@@ -97,7 +97,6 @@ Expected environment:
 | `OPENWA_API_KEY` | Required for OpenWA handoff | None | OpenWA operator API key |
 | `OPENWA_DASHBOARD_URL` | No | None | Public OpenWA dashboard URL used for returned links |
 | `OPENWA_CHAT_DRAFT_ENDPOINT` | No | `/api/chats/drafts` | OpenWA draft endpoint path |
-| `HERMES_DOCKER_NETWORK` | Server deploy only | `hermes-network` | Docker network joined by `watchfacts-mcp` so Hermes can call it |
 
 Configuration rules:
 
@@ -109,7 +108,7 @@ Configuration rules:
 - Load MCP/search runtime settings without requiring `TELEGRAM_BOT_TOKEN`.
 - Validate Telegram result limit as a positive integer.
 - Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
-- Use `SEARCH_MAX_CONCURRENT_SEARCHES` to serialize or bound Hermes/MCP WatchFacts browser searches.
+- Use `SEARCH_MAX_CONCURRENT_SEARCHES` to serialize or bound MCP WatchFacts browser searches.
 - Keep `WATCHFACTS_HTTP_CLIENT_ENABLED=true` for normal Telegram/MCP search; disabling it disables query search instead of falling back to Playwright.
 - Use `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to reduce repeated WatchFacts form GETs while still refreshing on CSRF/auth failures.
 - Set `RESULT_PAGE_PUBLIC_BASE_URL` only when the MCP service is reachable through a public reverse proxy path for `/results/`; leave it empty to preserve legacy responses without page links.
@@ -128,8 +127,8 @@ Configuration rules:
 ## Runtime Architecture
 
 ```text
-Hermes user request
-  -> Hermes MCP client
+MCP client user request
+  -> MCP client
   -> watchfacts-mcp tool: search / health / create_chat_draft / issue tools
   -> tool_runtime payload function
   -> scraper loads saved browser state and posts the WatchFacts search form through HTTPX
@@ -141,7 +140,7 @@ Hermes user request
   -> optional OpenAI controlled refiner records suggestions or applies guarded refinements
   -> db records query/cache/dedupe state
   -> MCP payload returns structured results, pagination, images, and result handles
-  -> Hermes replies in Vietnamese and may call OpenWA/issue tools later
+  -> client replies in Vietnamese and may call OpenWA/issue tools later
 ```
 
 Legacy Telegram path:
@@ -191,7 +190,7 @@ Responsibilities:
 
 Responsibilities:
 
-- Expose the WatchFacts runtime as MCP tools for Hermes.
+- Expose the WatchFacts runtime as MCP tools.
 - Serve generated result pages at `GET /results/{token}`.
 - Serve result-page action routes for modal actions when enabled:
   `POST /results/{token}/actions/openwa-draft` and
@@ -202,7 +201,7 @@ Responsibilities:
 - Use `query`, `limit`, `offset`, and `include_similar` for `search`.
 - Use `issue_type`, `status`, `limit`, and optional `min_severity` for
   `list_issues`.
-- Use `include_raw_context` for `get_issue` when Hermes needs a bounded,
+- Use `include_raw_context` for `get_issue` when a client needs a bounded,
   redacted raw snippet for triage.
 - Let follow-up tools accept the short-lived `result_id`, the returned
   `stable_listing_id`, or absolute `rank` when the user refers to a result number.
