@@ -401,22 +401,6 @@
       return meta;
     }
 
-    function createModalFact(label, value) {
-      const fact = createNode("span", "modal-fact");
-      fact.setAttribute("aria-label", label + ": " + value);
-      fact.append(createNode("span", "modal-fact-label", label + ": "), createNode("strong", "", value));
-      return fact;
-    }
-
-    function createModalQuickFacts(item) {
-      const facts = createNode("div", "modal-quick-facts");
-      facts.appendChild(createModalFact("Seller", copyField(item.seller)));
-      facts.appendChild(createModalFact("Posted", formatCopyDate(item.posted_date)));
-      if (similarCount(item)) facts.appendChild(createModalFact("Similar", String(similarCount(item))));
-      facts.appendChild(createModalFact("Media", hasImage(item) ? "Image" : "No image"));
-      return facts;
-    }
-
     function createThumb(item) {
       const thumb = createNode("div", "thumb");
       if (hasImage(item)) {
@@ -426,10 +410,17 @@
         img.loading = "lazy";
         img.addEventListener("error", () => {
           img.remove();
+          thumb.classList.add("is-missing-image");
+          const card = thumb.closest(".result-card");
+          if (card) {
+            card.classList.remove("has-image");
+            card.classList.add("no-image", "image-load-failed");
+          }
           thumb.textContent = "No image";
         });
         thumb.appendChild(img);
       } else {
+        thumb.classList.add("is-missing-image");
         thumb.textContent = "No image";
       }
       return thumb;
@@ -523,7 +514,7 @@
         button.title = stateValue.dashboardUrl ? "Open OpenWA draft" : "OpenWA draft created";
         button.setAttribute("aria-label", stateValue.dashboardUrl ? "Open OpenWA draft" : "OpenWA draft created");
       } else if (stateValue.status === "error") {
-        button.textContent = "Retry OpenWA";
+        button.textContent = "Retry";
         button.title = "Retry creating an OpenWA chat draft";
         button.setAttribute("aria-label", "Retry creating an OpenWA chat draft");
       } else {
@@ -541,25 +532,6 @@
         applyOpenWaButtonState(button, stateValue);
       });
 
-      const statuses = document.querySelectorAll("[data-openwa-status-result-id]");
-      statuses.forEach(status => {
-        if (status.dataset.openwaStatusResultId !== key) return;
-        const message = stateValue.message || "";
-        status.className = "modal-action-status" + (
-          stateValue.status === "success" ? " success" : stateValue.status === "error" ? " error" : ""
-        );
-        status.textContent = message;
-        if (stateValue.status === "success" && stateValue.dashboardUrl) {
-          const link = document.createElement("a");
-          link.className = "draft-link";
-          link.href = stateValue.dashboardUrl;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          link.textContent = "Open draft";
-          status.append(" ");
-          status.appendChild(link);
-        }
-      });
     }
 
     async function handleOpenWaDraft(item) {
@@ -611,27 +583,6 @@
       applyOpenWaButtonState(button, getOpenWaDraftState(item));
       updateOpenWaDraftControls(key);
       return button;
-    }
-
-    function createOpenWaDraftAction(item) {
-      const actions = resultActionConfig();
-      const container = createNode("div", "modal-primary-action");
-      container.appendChild(createNode("div", "action-card-title", "OpenWA handoff"));
-      container.appendChild(createNode("p", "action-card-description", "Create a seller chat draft from this exact result_id."));
-      const status = createActionStatus();
-      const key = openWaResultKey(item);
-      status.dataset.openwaStatusResultId = key;
-      if (!actions.openwa_draft_url || !actions.action_nonce) {
-        container.appendChild(makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft", () => copyText(openWaPrompt(item), "OpenWA prompt")));
-        container.appendChild(status);
-        setActionStatus(status, "Draft creation is not available on this page.");
-        return container;
-      }
-
-      const button = createOpenWaDraftButton(item);
-      container.append(button, status);
-      updateOpenWaDraftControls(key);
-      return container;
     }
 
     function createReportIssueForm(item) {
@@ -699,10 +650,9 @@
       return form;
     }
 
-    function createOverflowActions(item, similarPanel, className = "") {
+    function createModalActions(item, similarPanel, className = "") {
       const secondaryClass = ["result-actions-secondary", className].filter(Boolean).join(" ");
       const secondary = createNode("div", secondaryClass);
-      secondary.appendChild(createOpenWaDraftAction(item));
       secondary.appendChild(createReportIssueForm(item));
       const utilities = createNode("div", "modal-utility-actions");
       const count = similarCount(item);
@@ -735,10 +685,10 @@
     function createResultDetailsContent(item) {
       const details = createNode("section", "result-details");
       const listingSection = createNode("section", "modal-section modal-listing-section");
-      const hero = createNode("div", "modal-hero");
+      const hero = createNode("div", "modal-overview");
       const mediaCard = createNode("div", "modal-media-card");
       if (!hasImage(item)) mediaCard.classList.add("modal-media-card-no-image");
-      mediaCard.append(createThumb(item), createModalQuickFacts(item));
+      mediaCard.appendChild(createThumb(item));
       const listingCopy = createNode("div", "modal-listing-copy");
       listingCopy.append(
         createNode("div", "modal-section-label", "Listing snapshot"),
@@ -751,11 +701,9 @@
       const similar = createNode("section", "similar-panel");
       similar.hidden = true;
       similar.id = "modal-similar-" + text(item.rank, "result").replace(/[^a-zA-Z0-9_-]/g, "-");
-      const actionsSection = createNode("section", "modal-actions-section");
-      actionsSection.appendChild(createOverflowActions(item, similar, "modal-actions"));
-      details.appendChild(actionsSection);
 
       const metaSection = createNode("section", "modal-section modal-meta-section");
+      metaSection.appendChild(createNode("div", "modal-section-label", "Result data"));
       const idWrap = createNode("div", "result-id-wrap");
       const idIcon = createNode("span", "result-id-icon", "ID: ");
       idIcon.setAttribute("aria-hidden", "true");
@@ -767,7 +715,17 @@
 
       const detailsMeta = createDetailsMeta(item);
       if (detailsMeta.childElementCount) metaSection.appendChild(detailsMeta);
-      details.appendChild(metaSection);
+
+      const actionsSection = createNode("section", "modal-actions-section");
+      actionsSection.appendChild(createModalActions(item, similar, "modal-actions"));
+
+      const dataPanel = createNode("div", "modal-data-panel");
+      dataPanel.appendChild(metaSection);
+      const feedbackPanel = createNode("div", "modal-feedback-panel");
+      feedbackPanel.appendChild(actionsSection);
+      const workflowSection = createNode("section", "modal-section modal-workflow-section");
+      workflowSection.append(dataPanel, feedbackPanel);
+      details.appendChild(workflowSection);
 
       if (similarCount(item)) {
         const similarSection = createNode("section", "modal-section modal-similar-section");

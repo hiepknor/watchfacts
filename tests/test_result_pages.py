@@ -140,7 +140,7 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "article.append(media, body);" in html
     assert "function hasImage(item)" in html
     assert "function createDetailsMeta(item)" in html
-    assert 'function createOverflowActions(item, similarPanel, className = "")' in html
+    assert 'function createModalActions(item, similarPanel, className = "")' in html
     assert "function createResultDetailsContent(item)" in html
     assert "function formattedListingFields(item)" in html
     assert 'function createFormattedListingDisplay(item, className = "", titleTag = "h2")' in html
@@ -184,6 +184,8 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert ".listing-display-card .listing-icon" in html
     assert ".listing-display-card .listing-icon {\n      display: none;" in html
     assert ".has-image .thumb" in html
+    assert 'thumb.classList.add("is-missing-image");' in html
+    assert 'card.classList.add("no-image", "image-load-failed");' in html
     assert "padding: 0;" in html
     assert "position: relative;" in html
     assert ".thumb img {\n      position: absolute;\n      inset: 0;" in html
@@ -191,6 +193,22 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "grid-template-columns: var(--result-media-mobile) minmax(0, 1fr)" in html
     assert ".result-actions-primary,\n      .results.density-dense .result-actions-primary {\n        display: grid;" in html
     assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
+    assert "Responsive standardization pass." in html
+    assert "Breakpoints: desktop base, tablet 761-1024, mobile 421-760, narrow <=420." in html
+    assert "@media (min-width: 761px) and (max-width: 1024px)" in html
+    assert "@media (max-width: 760px)" in html
+    assert "@media (max-width: 420px)" in html
+    assert "grid-template-columns: repeat(3, minmax(5.25rem, 5.25rem));" in html
+    assert ".result-actions-primary .source-link,\n    .results.density-dense .result-actions-primary .source-link" in html
+    assert ".result-actions-primary .source-link,\n      .results.density-dense .result-actions-primary .source-link {\n        display: none;" in html
+    assert "order: 3;" in html
+    assert ".result-actions-primary .action-button:first-child" in html
+    assert "order: 1;" in html
+    assert "order: 2;" in html
+    assert "min-width: 5.25rem;" in html
+    assert ".result-card.no-image .thumb,\n      .result-card.image-load-failed .thumb," in html
+    assert "place-items: center;" in html
+    assert 'grid-template-areas: "body";' not in html
     assert ".result-id-icon" in html
     assert ".modal-heading" in html
     assert ".modal-section" in html
@@ -210,7 +228,9 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "border-radius: 999px" in html
     assert "box-shadow: 0 1px 0 rgba(17, 24, 23, 0.03)" in html
     assert 'listingSection.appendChild(hero);' in html
-    assert 'mediaCard.append(createThumb(item), createModalQuickFacts(item));' in html
+    assert 'mediaCard.appendChild(createThumb(item));' in html
+    assert "createModalQuickFacts" not in html
+    assert "modal-quick-facts" not in html
     assert 'createFormattedListingDisplay(item, "listing-display-detail", "div")' in html
     assert 'row.appendChild(createFormattedListingDisplay(similarItem, "listing-display-similar", "div"));' in html
     assert 'const listingDisplay = createFormattedListingDisplay(item, "listing-display-card");' in html
@@ -261,47 +281,51 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert "unlockModalScroll();" in html
     assert "focusWithoutScroll(lastModalTrigger);" in html
     assert 'return "WatchFacts listing";' in html
-    assert 'createModalFact("Media", hasImage(item) ? "Image" : "No image")' in html
+    assert "createModalFact" not in html
     assert 'class="modal-fact-label"' not in html
-    assert 'fact.setAttribute("aria-label", label + ": " + value);' in html
-    assert 'createNode("span", "modal-fact-label", label + ": ")' in html
-    assert 'createModalFact("Source"' not in html
-    assert 'Create a seller chat draft from this exact result_id.' in html
     assert 'Report missing details or a wrong match for review.' in html
-    assert 'function createOpenWaDraftAction(item)' in html
+    assert 'function createOpenWaDraftAction(item)' not in html
     assert 'function createReportIssueForm(item)' in html
     assert 'function postResultAction(url, item, extra = {})' in html
-    assert 'button.textContent = "Creating...";' in html
     assert 'submit.textContent = "Submitting...";' in html
     assert 'makeButton("OpenWA", "Create an OpenWA chat draft"' in html
     assert '"Submit report"' in html
-    assert 'function createModalQuickFacts(item)' in html
-    assert 'const hero = createNode("div", "modal-hero");' in html
+    assert 'function createModalQuickFacts(item)' not in html
+    assert 'const hero = createNode("div", "modal-overview");' in html
     assert 'const mediaCard = createNode("div", "modal-media-card");' in html
     assert 'mediaCard.classList.add("modal-media-card-no-image")' in html
     assert 'const listingCopy = createNode("div", "modal-listing-copy");' in html
     assert ".modal-media-card .thumb" in html
     assert "grid-template-columns: 7rem minmax(0, 1fr)" not in html
+    assert ".modal-media-card {\n        grid-template-columns: 1fr;" in html
+    assert "max-height: 7rem" not in html
+    assert "max-height: clamp(14rem, 42vh, 19rem)" in html
+    assert "aspect-ratio: 4 / 3" in html
     assert "max-height: 5.5rem" not in html
     assert "max-height: 6rem" not in html
     assert "border-right-style: dashed" in html
     assert "position: relative;" in html
     assert 'createNode("div", "modal-section-label", "Listing snapshot")' in html
-    assert 'createNode("div", "action-card-title", "OpenWA handoff")' in html
+    assert 'createNode("div", "action-card-title", "OpenWA handoff")' not in html
     assert 'createNode("div", "action-card-title", "Quality feedback")' in html
     assert "const openWaDraftStateByResultId = new Map();" in html
     assert "function createOpenWaDraftButton(item, options = {})" in html
     assert "function handleOpenWaDraft(item)" in html
     assert 'primary.appendChild(createOpenWaDraftButton(item, { compact: true }));' in html
     assert 'button.dataset.openwaActionButton = "true";' in html
-    assert 'status.dataset.openwaStatusResultId = key;' in html
     assert 'status: "success",' in html
     assert ".openwa-action" in html
+    assert ".openwa-action[disabled]" in html
+    assert "display: inline-flex;" in html
+    assert 'button.textContent = "Retry";' in html
+    assert 'button.textContent = "Retry OpenWA";' not in html
+    assert ".action-button[disabled] {\n        display: none;" not in html
+    assert ".action-button[disabled]:not(.openwa-action)" in html
     assert '"wrong_result", "Wrong result"' in html
     assert '"missing_info", "Missing info"' in html
     assert 'copyValue: text(item.source_url)' in html
     assert 'makeButton("Copy", "Copy " + value.copyLabel' in html
-    assert 'makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft"' in html
+    assert 'makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft"' not in html
     assert 'makeButton("Copy Report", "Copy prompt to report this result"' in html
     assert '"reason: wrong_result | missing_info | other"' in html
     assert 'const idIcon = createNode("span", "result-id-icon", "ID: ");' in html
@@ -313,9 +337,13 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert 'const metaSection = createNode("section", "modal-section modal-meta-section");' in html
     assert 'metaSection.appendChild(idWrap);' in html
     assert 'const actionsSection = createNode("section", "modal-actions-section");' in html
-    assert 'actionsSection.appendChild(createOverflowActions(item, similar, "modal-actions"));' in html
-    assert html.index('const actionsSection = createNode("section", "modal-actions-section");') < html.index('const metaSection = createNode("section", "modal-section modal-meta-section");')
-    assert html.index('const metaSection = createNode("section", "modal-section modal-meta-section");') < html.index('const similarSection = createNode("section", "modal-section modal-similar-section");')
+    assert 'actionsSection.appendChild(createModalActions(item, similar, "modal-actions"));' in html
+    assert 'const dataPanel = createNode("div", "modal-data-panel");' in html
+    assert 'const feedbackPanel = createNode("div", "modal-feedback-panel");' in html
+    assert 'const workflowSection = createNode("section", "modal-section modal-workflow-section");' in html
+    assert 'workflowSection.append(dataPanel, feedbackPanel);' in html
+    assert html.index('const metaSection = createNode("section", "modal-section modal-meta-section");') < html.index('const actionsSection = createNode("section", "modal-actions-section");')
+    assert html.index('const workflowSection = createNode("section", "modal-section modal-workflow-section");') < html.index('const similarSection = createNode("section", "modal-section modal-similar-section");')
     assert 'const similarSection = createNode("section", "modal-section modal-similar-section");' in html
     assert 'document.body.classList.add("modal-open");' in html
     assert 'document.body.classList.remove("modal-open");' in html
