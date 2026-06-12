@@ -8,12 +8,14 @@ from app.application import (
     AuditTriageUseCase,
     IssueTriageUseCase,
     OpenWAHandoffUseCase,
+    ResultReferenceUseCase,
     SearchPayloadUseCase,
     SearchUseCase,
+    StoredResult,
 )
 from app.config import load_search_settings
 from app.openwa_handoff import OpenWAChatDraftResponse, OpenWAHandoffConfig
-from app.search_result import SearchResult
+from app.search_result import SearchResult, source_result_id, stable_listing_id
 
 
 class FakeSearchWorkflow:
@@ -28,6 +30,53 @@ class FakeSearchWorkflow:
         return self.results
 
 
+class FakeResultReferenceRepository:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str | int]] = []
+        self.result_id_rows: dict[tuple[str, str], tuple[int, SearchResult]] = {}
+        self.stable_id_rows: dict[tuple[str, str], tuple[int, SearchResult]] = {}
+        self.rank_rows: dict[tuple[str, int], tuple[str, SearchResult]] = {}
+
+    def get_by_result_id(
+        self,
+        *,
+        cache_key: str,
+        result_id: str,
+    ) -> tuple[int, SearchResult] | None:
+        self.calls.append(("result_id", result_id))
+        return self.result_id_rows.get((cache_key, result_id))
+
+    def get_by_stable_listing_id(
+        self,
+        *,
+        cache_key: str,
+        stable_listing_id: str,
+    ) -> tuple[int, SearchResult] | None:
+        self.calls.append(("stable_listing_id", stable_listing_id))
+        return self.stable_id_rows.get((cache_key, stable_listing_id))
+
+    def get_by_rank(
+        self,
+        *,
+        cache_key: str,
+        result_rank: int,
+    ) -> tuple[str, SearchResult] | None:
+        self.calls.append(("rank", result_rank))
+        return self.rank_rows.get((cache_key, result_rank))
+
+
+def _failing_workflow_factory():
+    raise AssertionError("workflow factory should not run")
+
+
+def _unused_store_results(
+    query: str,
+    results: list[SearchResult],
+    cache_ttl_seconds: int,
+) -> None:
+    raise AssertionError("store_results should not run")
+
+
 def test_search_use_case_delegates_to_workflow_and_exposes_runtime_metadata() -> None:
     workflow = FakeSearchWorkflow([SearchResult("5712G Used")])
     use_case = SearchUseCase(workflow)
@@ -38,6 +87,158 @@ def test_search_use_case_delegates_to_workflow_and_exposes_runtime_metadata() ->
     assert workflow.queries == ["5712g"]
     assert use_case.last_search_diagnostics == {"final_count": 1}
     assert use_case.last_search_audit_events == ("final",)
+
+
+def test_result_reference_use_case_resolves_memory_result_without_refresh() -> None:
+    result = SearchResult("5712G Used")
+    stored = StoredResult(query="5712g", rank=1, result=result, stored_at=100.0)
+    repository = FakeResultReferenceRepository()
+    use_case = ResultReferenceUseCase(
+        cache={"watchfacts:cached": stored},
+        repository=repository,
+        cache_key="search-cache:5712g",
+        cache_ttl_seconds=60,
+        monotonic=lambda: 120.0,
+    )
+
+    resolved = asyncio.run(
+        use_case.resolve_result_reference(
+            "5712G",
+            result_id="watchfacts:cached",
+            rank=None,
+            workflow=None,
+            workflow_factory=_failing_workflow_factory,
+            store_results=_unused_store_results,
+        )
+    )
+
+    assert resolved is stored
+    assert repository.calls == []
+
+
+def test_result_reference_use_case_resolves_stable_id_from_repository() -> None:
+    result = SearchResult("5712G Used", source_url="/listing/1")
+    stable_id = stable_listing_id(result)
+    repository = FakeResultReferenceRepository()
+    repository.stable_id_rows[("search-cache:5712g", stable_id)] = (2, result)
+    cache: dict[str, StoredResult] = {}
+    use_case = ResultReferenceUseCase(
+        cache=cache,
+        repository=repository,
+        cache_key="search-cache:5712g",
+        cache_ttl_seconds=60,
+        monotonic=lambda: 120.0,
+    )
+
+    resolved = asyncio.run(
+        use_case.resolve_result_reference(
+            "5712g",
+            result_id=stable_id,
+            rank=None,
+            workflow=None,
+            workflow_factory=_failing_workflow_factory,
+            store_results=_unused_store_results,
+        )
+    )
+
+    assert resolved == StoredResult(
+        query="5712g",
+        rank=2,
+        result=result,
+        stored_at=120.0,
+    )
+    assert cache[source_result_id("5712g", 2, result)] == resolved
+    assert cache[stable_id] == resolved
+    assert repository.calls == [
+        ("result_id", stable_id),
+        ("stable_listing_id", stable_id),
+    ]
+
+
+def test_result_reference_use_case_resolves_rank_from_repository() -> None:
+    result = SearchResult("5205R Green")
+    repository = FakeResultReferenceRepository()
+    repository.rank_rows[("search-cache:5205r-green", 3)] = (
+        "watchfacts:rank-3",
+        result,
+    )
+    cache: dict[str, StoredResult] = {}
+    use_case = ResultReferenceUseCase(
+        cache=cache,
+        repository=repository,
+        cache_key="search-cache:5205r-green",
+        cache_ttl_seconds=60,
+        monotonic=lambda: 120.0,
+    )
+
+    resolved = asyncio.run(
+        use_case.resolve_result_reference(
+            "5205r green",
+            result_id=None,
+            rank=3,
+            workflow=None,
+            workflow_factory=_failing_workflow_factory,
+            store_results=_unused_store_results,
+        )
+    )
+
+    assert resolved == StoredResult(
+        query="5205r green",
+        rank=3,
+        result=result,
+        stored_at=120.0,
+    )
+    assert cache["watchfacts:rank-3"] == resolved
+    assert repository.calls == [("rank", 3)]
+
+
+def test_result_reference_use_case_refreshes_search_when_reference_is_missing() -> None:
+    result = SearchResult("5712G Used")
+    result_id = source_result_id("5712g", 1, result)
+    repository = FakeResultReferenceRepository()
+    cache: dict[str, StoredResult] = {}
+    workflow = FakeSearchWorkflow([result])
+    stored_calls: list[tuple[str, list[SearchResult], int]] = []
+
+    def store_results(
+        query: str,
+        results: list[SearchResult],
+        cache_ttl_seconds: int,
+    ) -> None:
+        stored_calls.append((query, results, cache_ttl_seconds))
+        cache[result_id] = StoredResult(
+            query=query,
+            rank=1,
+            result=results[0],
+            stored_at=121.0,
+        )
+
+    use_case = ResultReferenceUseCase(
+        cache=cache,
+        repository=repository,
+        cache_key="search-cache:5712g",
+        cache_ttl_seconds=60,
+        monotonic=lambda: 120.0,
+    )
+
+    resolved = asyncio.run(
+        use_case.resolve_result_reference(
+            "5712g",
+            result_id=result_id,
+            rank=None,
+            workflow=workflow,
+            workflow_factory=_failing_workflow_factory,
+            store_results=store_results,
+        )
+    )
+
+    assert resolved == cache[result_id]
+    assert workflow.queries == ["5712g"]
+    assert stored_calls == [("5712g", [result], 60)]
+    assert repository.calls == [
+        ("result_id", result_id),
+        ("stable_listing_id", result_id),
+    ]
 
 
 def test_search_use_case_from_settings_builds_existing_workflow_shape(tmp_path) -> None:

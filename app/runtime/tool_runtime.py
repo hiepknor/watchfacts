@@ -4,15 +4,16 @@ import logging
 import re
 import time
 import urllib.parse
-from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Protocol
 
 from app.application import (
     IssueTriageUseCase,
     OpenWAHandoffUseCase,
+    ResultReferenceUseCase,
     SearchPayloadPage,
     SearchPayloadUseCase,
     SearchUseCase,
+    StoredResult,
 )
 from app.config import (
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
@@ -70,14 +71,6 @@ class SearchWorkflow(Protocol):
 SessionChecker = Callable[[Settings], Awaitable[BrowserSessionStatus]]
 ChatDraftClient = Callable[[dict[str, Any]], Awaitable[OpenWAChatDraftResponse]]
 HttpClientStatusProvider = Callable[[Settings], WatchFactsHttpClientStatus]
-
-
-@dataclass(frozen=True)
-class StoredResult:
-    query: str
-    rank: int
-    result: SearchResult
-    stored_at: float
 
 
 _RESULT_CACHE: dict[str, StoredResult] = {}
@@ -539,71 +532,6 @@ def _store_results(
         )
 
 
-async def _resolve_result(
-    query: str,
-    result_id: str,
-    *,
-    settings: Settings,
-    workflow: SearchWorkflow | None,
-) -> StoredResult:
-    now = time.monotonic()
-    cache_ttl_seconds = _cache_ttl_seconds(settings)
-    _prune_result_cache(now, ttl_seconds=cache_ttl_seconds)
-    stored = _RESULT_CACHE.get(result_id)
-    if stored is not None and _query_key(stored.query) == _query_key(query):
-        return stored
-
-    cache_key = _result_cache_key(query, settings)
-    result_reference_repository = ResultReferenceRepository.from_settings(settings)
-    cached = result_reference_repository.get_by_result_id(
-        cache_key=cache_key,
-        result_id=result_id,
-    )
-    if cached is not None:
-        rank, result = cached
-        stored = StoredResult(
-            query=query,
-            rank=rank,
-            result=result,
-            stored_at=now,
-        )
-        _RESULT_CACHE[result_id] = stored
-        return stored
-
-    cached = result_reference_repository.get_by_stable_listing_id(
-        cache_key=cache_key,
-        stable_listing_id=result_id,
-    )
-    if cached is not None:
-        rank, result = cached
-        result_id = _source_result_id(query, rank, result)
-        stored = StoredResult(
-            query=query,
-            rank=rank,
-            result=result,
-            stored_at=now,
-        )
-        _RESULT_CACHE[result_id] = stored
-        _RESULT_CACHE[stable_listing_id(result)] = stored
-        return stored
-
-    active_workflow = workflow or SearchUseCase.from_settings(
-        settings,
-        workflow_factory=WatchFactsSearchWorkflow,
-    )
-    results = await active_workflow.search(query)
-    _store_results(
-        query,
-        results,
-        settings=settings,
-        cache_ttl_seconds=cache_ttl_seconds,
-    )
-    stored = _RESULT_CACHE.get(result_id)
-    if stored is None:
-        raise ValueError("result_id was not found for query; run search again")
-    return stored
-
-
 async def _resolve_result_reference(
     query: str,
     *,
@@ -612,85 +540,32 @@ async def _resolve_result_reference(
     settings: Settings,
     workflow: SearchWorkflow | None,
 ) -> StoredResult:
-    if result_id is not None:
-        return await _resolve_result(
-            query,
-            result_id,
-            settings=settings,
-            workflow=workflow,
-        )
-    if rank is None:
-        raise ValueError("result_id or rank is required")
-    return await _resolve_result_by_rank(
-        query,
-        rank,
-        settings=settings,
-        workflow=workflow,
-    )
+    if result_id is None:
+        if rank is None:
+            raise ValueError("result_id or rank is required")
+        _validate_rank(rank)
 
-
-async def _resolve_result_by_rank(
-    query: str,
-    rank: int,
-    *,
-    settings: Settings,
-    workflow: SearchWorkflow | None,
-) -> StoredResult:
-    _validate_rank(rank)
-    now = time.monotonic()
-    cache_ttl_seconds = _cache_ttl_seconds(settings)
-    _prune_result_cache(now, ttl_seconds=cache_ttl_seconds)
-    stored = _lookup_stored_result_by_rank(query, rank, settings=settings)
-    if stored is not None:
-        return stored
-
-    active_workflow = workflow or SearchUseCase.from_settings(
-        settings,
-        workflow_factory=WatchFactsSearchWorkflow,
-    )
-    results = await active_workflow.search(query)
-    _store_results(
-        query,
-        results,
-        settings=settings,
-        cache_ttl_seconds=cache_ttl_seconds,
-    )
-    stored = _lookup_stored_result_by_rank(query, rank, settings=settings)
-    if stored is None:
-        raise ValueError("rank was not found for query; run search again")
-    return stored
-
-
-def _lookup_stored_result_by_rank(
-    query: str,
-    rank: int,
-    *,
-    settings: Settings,
-) -> StoredResult | None:
-    query_key = _query_key(query)
-    latest: StoredResult | None = None
-    for stored in _RESULT_CACHE.values():
-        if stored.rank == rank and _query_key(stored.query) == query_key:
-            if latest is None or stored.stored_at >= latest.stored_at:
-                latest = stored
-    if latest is not None:
-        return latest
-
-    cached = ResultReferenceRepository.from_settings(settings).get_by_rank(
+    return await ResultReferenceUseCase(
+        cache=_RESULT_CACHE,
+        repository=ResultReferenceRepository.from_settings(settings),
         cache_key=_result_cache_key(query, settings),
-        result_rank=rank,
-    )
-    if cached is None:
-        return None
-    result_id, result = cached
-    stored = StoredResult(
-        query=query,
+        cache_ttl_seconds=_cache_ttl_seconds(settings),
+    ).resolve_result_reference(
+        query,
+        result_id=result_id,
         rank=rank,
-        result=result,
-        stored_at=time.monotonic(),
+        workflow=workflow,
+        workflow_factory=lambda: SearchUseCase.from_settings(
+            settings,
+            workflow_factory=WatchFactsSearchWorkflow,
+        ),
+        store_results=lambda search_query, results, ttl_seconds: _store_results(
+            search_query,
+            results,
+            settings=settings,
+            cache_ttl_seconds=ttl_seconds,
+        ),
     )
-    _RESULT_CACHE[result_id] = stored
-    return stored
 
 
 def _prune_result_cache(now: float, ttl_seconds: int = RESULT_CACHE_TTL_SECONDS) -> None:
@@ -947,7 +822,3 @@ def _clean_optional_text(value: str | None) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
-
-
-def _query_key(value: str) -> str:
-    return " ".join(value.casefold().split())

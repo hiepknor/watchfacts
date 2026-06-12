@@ -112,6 +112,19 @@ def test_tool_runtime_search_payload_uses_application_use_case() -> None:
     assert "generate_result_page(" not in function_source
 
 
+def test_tool_runtime_result_reference_resolution_uses_application_use_case() -> None:
+    source = Path("app/runtime/tool_runtime.py").read_text(encoding="utf-8")
+    function_source = source.split("async def _resolve_result_reference", 1)[1].split(
+        "\n\ndef _prune_result_cache",
+        1,
+    )[0]
+
+    assert "ResultReferenceUseCase" in function_source
+    assert "def _resolve_result(" not in source
+    assert "def _resolve_result_by_rank(" not in source
+    assert "def _lookup_stored_result_by_rank(" not in source
+
+
 def test_search_workflow_uses_repository_boundary_for_search_cache() -> None:
     source = Path("app/searching/search.py").read_text(encoding="utf-8")
 

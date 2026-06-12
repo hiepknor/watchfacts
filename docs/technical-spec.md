@@ -32,6 +32,7 @@ app/
   application/
     search_use_case.py # search workflow shell shared by Telegram, MCP, diagnostics
     search_payload_use_case.py # search pagination/result-page orchestration shell
+    result_reference_use_case.py # result_id/stable_listing_id/rank follow-up resolution shell
     openwa_handoff_use_case.py # OpenWA chat draft orchestration shell
     issue_triage_use_case.py # feedback/suspicious issue orchestration shell
     audit_triage_use_case.py # offline audit triage orchestration shell

@@ -353,10 +353,12 @@ Reduce Telegram/MCP modules to adapters:
 - handle transport-specific errors
 
 Initial implementation adds `SearchPayloadUseCase` for the MCP/tool-runtime
-search path. `app/runtime/tool_runtime.py` still validates MCP-style arguments
-and serializes the response payload, while search execution, result caching,
-pagination metadata, diagnostics attachment, and optional result-page generation
-are coordinated through the application use-case.
+search path and `ResultReferenceUseCase` for follow-up actions that resolve a
+selected listing by `result_id`, `stable_listing_id`, or rank.
+`app/runtime/tool_runtime.py` still validates MCP-style arguments and serializes
+response payloads, while search execution, result caching, pagination metadata,
+diagnostics attachment, optional result-page generation, and result-reference
+refresh behavior are coordinated through application use-cases.
 
 Acceptance:
 

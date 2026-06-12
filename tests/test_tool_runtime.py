@@ -272,6 +272,70 @@ def test_watchfacts_create_chat_draft_uses_db_reference_when_memory_cache_missin
     assert requests[0]["sourceResultId"] == result_id
 
 
+def test_watchfacts_create_chat_draft_prefers_result_id_when_rank_is_also_supplied(
+    tmp_path,
+) -> None:
+    settings = load_search_settings(
+        env={
+            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
+            "OPENWA_BASE_URL": "https://openwa.example",
+            "OPENWA_API_KEY": "secret",
+            "OPENWA_DASHBOARD_URL": "https://dashboard.example",
+        },
+        project_root=tmp_path,
+    )
+    search_workflow = FakeWorkflow(
+        [
+            SearchResult(
+                listing_text="5712G Used 2015 - 76k usdt",
+                seller="Issac",
+                source_url="/listing/1",
+            )
+        ]
+    )
+    original_cache = dict(_RESULT_CACHE)
+    _RESULT_CACHE.clear()
+    requests = []
+
+    async def fake_client(payload):
+        requests.append(payload)
+        return OpenWAChatDraftResponse(
+            draft_id="draft-1",
+            chat_id="chat-1",
+            dashboard_url="https://dashboard.example/chats/drafts/draft-1",
+        )
+
+    try:
+        search_payload = asyncio.run(
+            watchfacts_search_payload(
+                "5712g",
+                workflow=search_workflow,
+                settings=settings,
+            )
+        )
+        result_id = search_payload["results"][0]["result_id"]
+        followup_workflow = FakeWorkflow([])
+
+        draft_payload = asyncio.run(
+            watchfacts_create_chat_draft_payload(
+                "5712g",
+                result_id,
+                rank=0,
+                settings=settings,
+                workflow=followup_workflow,
+                openwa_client=fake_client,
+            )
+        )
+    finally:
+        _RESULT_CACHE.clear()
+        _RESULT_CACHE.update(original_cache)
+
+    assert followup_workflow.queries == []
+    assert draft_payload["status"] == "created"
+    assert draft_payload["result_id"] == result_id
+    assert requests
+
+
 def test_watchfacts_create_chat_draft_uses_db_reference_by_stable_listing_id(
     tmp_path,
 ) -> None:
