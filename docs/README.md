@@ -14,6 +14,7 @@ service for structured integrations, result pages, diagnostics, and handoff.
 | [Project Soul](../SOUL.md) | Short operational context for humans and agents joining the project |
 | [Product Spec](product-spec.md) | Product goals, users, behavior, acceptance criteria, and non-goals |
 | [Technical Spec](technical-spec.md) | Architecture, modules, data model, matching rules, and error handling |
+| [Architecture Redesign](architecture-redesign.md) | Layered runtime target, dependency rules, migration phases, and AI/use-case boundaries |
 | [System Design Review](system-design-review.md) | Architecture review snapshot, strengths, risks, and prioritized follow-ups |
 | [Search Quality Improvement Plan](search-quality-improvement-plan.md) | One-month plan for image attribution, stock-list scoping, audit visibility, and deploy verification |
 | [Continuous Improvement Spec](continuous-improvement.md) | Feedback buttons, issue storage, suspicious-result detection, and regression loop |
@@ -41,12 +42,14 @@ Architecture Decision Records live in [decisions/](decisions/):
 | [ADR-005](decisions/005-controlled-hybrid-ai-refinement.md) | Use OpenAI controlled AI for result refinement |
 | [ADR-006](decisions/006-result-identity-and-followup-caching.md) | Separate short-lived follow-up `result_id` from durable `stable_listing_id` identity |
 | [ADR-007](decisions/007-result-page-server-side-actions.md) | Use server-side result page actions with page nonces |
+| [ADR-008](decisions/008-runtime-architecture-boundaries.md) | Adopt layered runtime architecture boundaries |
 
 ## Agent Usage
 
 Agents should read documents selectively:
 
 - For new features: start with `product-spec.md`, then `technical-spec.md`, then `implementation-plan.md`.
+- For architecture redesign or boundary refactors: read `architecture-redesign.md`, ADR-008, then `technical-spec.md`.
 - For architecture review or system-risk triage: read `system-design-review.md`, then the relevant spec or ADR it references.
 - For MCP changes: read `../SOUL.md`, `technical-spec.md`, `operations.md`, and `security-compliance.md`.
 - For infrastructure changes: read `operations.md`, `security-compliance.md`, and ADR-004.
