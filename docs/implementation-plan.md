@@ -990,18 +990,20 @@ Likely files:
 
 ### Task 11.3: Normalize Ambiguous Price Policy
 
+Status: complete.
+
 Description: Keep accepted dealer shorthand explicit while preventing material
 terms such as karat gold from counting as price evidence.
 
 Acceptance:
 
-- [ ] Document accepted shorthand examples such as `465k`, `HKD785K`,
+- [x] Document accepted shorthand examples such as `465k`, `HKD785K`,
   `$36k`, `30+lbl`, `26299 + lab`, `USDT 485`, `110k€`, and `248 €`.
-- [ ] Document non-price material examples such as `18k rose gold`, `22k gold`,
+- [x] Document non-price material examples such as `18k rose gold`, `22k gold`,
   and `24k yellow gold`.
-- [ ] Add or maintain tests proving material karat terms do not count as price
+- [x] Add or maintain tests proving material karat terms do not count as price
   evidence.
-- [ ] Avoid demoting dealer shorthand without a production issue fixture.
+- [x] Avoid demoting dealer shorthand without a production issue fixture.
 
 Verify:
 
@@ -1019,14 +1021,18 @@ Likely files:
 
 ### Task 11.4: Production Verification Checklist
 
+Status: in progress; local predeploy gate passed on 2026-06-12 for the
+ambiguous-price scoring policy update. Production deploy, health verification,
+and post-deploy focused audit remain per-release steps.
+
 Description: Make production audit part of the deploy flow for matcher,
 scoring, and quality-gate changes.
 
 Acceptance:
 
-- [ ] Run focused audit before deploy when behavior changes.
-- [ ] Run full local tests before commit.
-- [ ] Bump `SEARCH_CACHE_VERSION` when ranking/gate output can change.
+- [x] Run focused audit before deploy when behavior changes.
+- [x] Run full local tests before commit.
+- [x] Bump `SEARCH_CACHE_VERSION` when ranking/gate output can change.
 - [ ] Deploy with `make deploy`.
 - [ ] Verify production container health and production git HEAD.
 - [ ] Rerun focused production audit after deploy.
@@ -1127,22 +1133,21 @@ Acceptance:
 
 ## Phase 13: Result Page Real Actions
 
-Status: planned.
+Status: complete.
 
-Follow [Result Page Real Actions Plan](result-page-actions-plan.md) and
-[ADR-007](decisions/007-result-page-server-side-actions.md). Implement one task
-at a time. After each task, run verification, self-review the diff, commit, and
-only then continue.
+This phase is implemented. Keep [Result Page Real Actions Plan](result-page-actions-plan.md)
+and [ADR-007](decisions/007-result-page-server-side-actions.md) as the detailed
+behavior and security references for future result-page action work.
 
 ### Task 13.1: Add Result Page Action Sidecar
 
 Acceptance:
 
-- [ ] Result page generation writes `{token}.html` and `{token}.json`.
-- [ ] Sidecar contains sanitized result payload plus random `action_nonce`.
-- [ ] Existing `GET /results/{token}` behavior remains unchanged.
-- [ ] Cleanup removes expired HTML and JSON files together.
-- [ ] Missing, invalid, and expired sidecars are covered by tests.
+- [x] Result page generation writes `{token}.html` and `{token}.json`.
+- [x] Sidecar contains sanitized result payload plus random `action_nonce`.
+- [x] Existing `GET /results/{token}` behavior remains unchanged.
+- [x] Cleanup removes expired HTML and JSON files together.
+- [x] Missing, invalid, and expired sidecars are covered by tests.
 
 Verify:
 
@@ -1160,14 +1165,14 @@ Commit gate:
 
 Acceptance:
 
-- [ ] `POST /results/{token}/actions/openwa-draft` validates token, TTL,
+- [x] `POST /results/{token}/actions/openwa-draft` validates token, TTL,
   `action_nonce`, and `result_id`.
-- [ ] `POST /results/{token}/actions/report` validates token, TTL,
+- [x] `POST /results/{token}/actions/report` validates token, TTL,
   `action_nonce`, `result_id`, reason, and notes.
-- [ ] OpenWA draft creation uses server-side OpenWA config only.
-- [ ] Report action records a feedback issue and returns a safe `issue_ref`.
-- [ ] Action routes are rate-limited by client IP and token/action.
-- [ ] All errors return safe structured JSON.
+- [x] OpenWA draft creation uses server-side OpenWA config only.
+- [x] Report action records a feedback issue and returns a safe `issue_ref`.
+- [x] Action routes are rate-limited by client IP and token/action.
+- [x] All errors return safe structured JSON.
 
 Verify:
 
@@ -1185,14 +1190,14 @@ Commit gate:
 
 Acceptance:
 
-- [ ] `Copy OpenWA` becomes `Create OpenWA draft`.
-- [ ] `Copy Report` becomes an in-modal report form with reason and optional
+- [x] `Copy OpenWA` becomes `Create OpenWA draft`.
+- [x] `Copy Report` becomes an in-modal report form with reason and optional
   notes.
-- [ ] UI shows loading, success, and retryable error states.
-- [ ] `Copy URL`, `Copy ID`, and similar-list toggle remain available as
+- [x] UI shows loading, success, and retryable error states.
+- [x] `Copy URL`, `Copy ID`, and similar-list toggle remain available as
   utility actions.
-- [ ] Modal layout remains responsive at 320, 390, 768, 1024, and 1440 px.
-- [ ] CSP allows same-origin action POSTs without console errors.
+- [x] Modal layout remains responsive at 320, 390, 768, 1024, and 1440 px.
+- [x] CSP allows same-origin action POSTs without console errors.
 
 Verify:
 
@@ -1217,12 +1222,12 @@ Commit gate:
 
 Acceptance:
 
-- [ ] Operations docs explain result page actions, OpenWA config, smoke checks,
+- [x] Operations docs explain result page actions, OpenWA config, smoke checks,
   and rollback.
-- [ ] Security docs explain public-token action risk and nonce/rate-limit
+- [x] Security docs explain public-token action risk and nonce/rate-limit
   controls.
-- [ ] Technical spec documents route contracts and sidecar behavior.
-- [ ] Production deploy checklist includes OpenWA draft and report issue smoke
+- [x] Technical spec documents route contracts and sidecar behavior.
+- [x] Production deploy checklist includes OpenWA draft and report issue smoke
   checks.
 
 Verify:

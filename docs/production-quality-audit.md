@@ -262,10 +262,10 @@ Mark issue S8 ignored with note raw source lacks info.
 
 ### Phase 10.3: Ambiguous Price Policy
 
-- [ ] Centralize accepted and rejected shorthand examples in docs.
-- [ ] Add regression tests for accepted shorthand that must stay clean.
-- [ ] Add regression tests for rejected material/karat terms.
-- [ ] Avoid tightening ambiguous shorthand without production evidence.
+- [x] Centralize accepted and rejected shorthand examples in docs.
+- [x] Add regression tests for accepted shorthand that must stay clean.
+- [x] Add regression tests for rejected material/karat terms.
+- [x] Avoid tightening ambiguous shorthand without production evidence.
 
 ### Phase 10.4: Production Verification Loop
 

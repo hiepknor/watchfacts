@@ -229,6 +229,43 @@ def test_detect_suspicious_result_ignores_euro_symbol_price() -> None:
     assert issues == []
 
 
+def test_detect_suspicious_result_accepts_documented_dealer_shorthand_prices() -> None:
+    cases = (
+        "5712R full set 465k",
+        "FPJ Elegante Titanium fullset HKD785K",
+        "5712R full set $36k",
+        "116500 panda 30+lbl",
+        "116500 panda 26299 + lab",
+        "RM65-01 Lebron USDT 485",
+        "5712R full set 110k€",
+        "5990/1R 2026 248 € inc shipment",
+    )
+
+    for listing_text in cases:
+        issues = detect_suspicious_result(
+            listing_text=listing_text,
+            raw_listing_text=listing_text,
+        )
+
+        assert issues == [], listing_text
+
+
+def test_detect_suspicious_result_rejects_documented_karat_material_terms() -> None:
+    cases = (
+        "5712R Patek original movement customized 18k rose gold case reservation",
+        "5712R Patek original movement customized 22k gold case reservation",
+        "5712R Patek original movement customized 24k yellow gold case reservation",
+    )
+
+    for listing_text in cases:
+        issues = detect_suspicious_result(
+            listing_text=listing_text,
+            raw_listing_text=listing_text,
+        )
+
+        assert [issue.reason for issue in issues] == ["missing_price_evidence"]
+
+
 def test_detect_suspicious_result_ignores_best_price_tail_with_prices() -> None:
     issues = detect_suspicious_result(
         listing_text="5712/1R fress date 265,000 hkd or 32,800 usd deal to best price",

@@ -72,16 +72,42 @@ def test_score_result_does_not_demote_missing_descriptor_as_conflict() -> None:
 
 
 def test_score_result_does_not_treat_karat_gold_as_price_evidence() -> None:
-    result = SearchResult(
+    cases = (
         "5712R Patek original movement customized 18k rose gold case reservation",
-        posted_date="May 17, 2026",
+        "5712R Patek original movement customized 22k gold case reservation",
+        "5712R Patek original movement customized 24k yellow gold case reservation",
     )
 
-    score = score_result(result, original_rank=0, query="5712r")
+    for listing_text in cases:
+        score = score_result(
+            SearchResult(listing_text, posted_date="May 17, 2026"),
+            original_rank=0,
+            query="5712r",
+        )
 
-    assert score.quality_group == 1
-    assert score.price_evidence_score == 0
-    assert "price.missing_visible" in score.reasons
+        assert score.quality_group == 1
+        assert score.price_evidence_score == 0
+        assert "price.missing_visible" in score.reasons
+
+
+def test_score_result_counts_documented_dealer_shorthand_as_price_evidence() -> None:
+    cases = (
+        "5712R full set 465k",
+        "FPJ Elegante Titanium fullset HKD785K",
+        "5712R full set $36k",
+        "116500 panda 30+lbl",
+        "116500 panda 26299 + lab",
+        "RM65-01 Lebron USDT 485",
+        "5712R full set 110k€",
+        "5990/1R 2026 248 € inc shipment",
+    )
+
+    for listing_text in cases:
+        score = score_result(SearchResult(listing_text), original_rank=0)
+
+        assert score.quality_group == 0
+        assert score.price_evidence_score == 1
+        assert "price.visible" in score.reasons
 
 
 def test_score_result_demotes_stronger_suspicious_cases_after_missing_price() -> None:
