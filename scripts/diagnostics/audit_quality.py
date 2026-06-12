@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.ai_refiner import refine_search_results
+from app.application import SearchUseCase
 from app.config import load_search_settings
 from app.db import Database
 from app.fuzzy_diagnostics import score_fuzzy_match
@@ -403,8 +404,9 @@ def load_queries(args: argparse.Namespace) -> list[str]:
 async def run_audit(queries: list[str], *, limit: int) -> list[AuditQueryReport]:
     settings = load_search_settings()
     database = Database(settings.db_path)
-    workflow = WatchFactsSearchWorkflow(
+    workflow = SearchUseCase.from_settings(
         settings,
+        workflow_factory=WatchFactsSearchWorkflow,
         database=database,
         refine_results=(
             lambda query, results: refine_search_results(

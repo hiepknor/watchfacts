@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Protocol
 
+from app.application import IssueTriageUseCase, OpenWAHandoffUseCase, SearchUseCase
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, DEFAULT_WATCHFACTS_URL, Settings
 from app.db import (
     AIRefinementSuggestionRecord,
@@ -24,7 +25,6 @@ from app.integrations.openwa_handoff import (
     OpenWAHandoffConfig,
     OpenWAHandoffConfigError,
     OpenWAHandoffResponseError,
-    create_openwa_chat_draft,
 )
 from app.results.result_pages import ResultPageConfig, generate_result_page
 from app.integrations.scraper import BrowserSessionError, BrowserSessionStatus
@@ -217,8 +217,11 @@ async def issues_command(update, context) -> None:
     if message is None:
         return
 
-    database = _issue_database(context)
-    issues = database.list_open_feedback_issues(limit=10)
+    issues = _issue_triage_use_case(context).list_issues(
+        issue_type="feedback",
+        status="open",
+        limit=10,
+    )
     await _maybe_await(message.reply_text(format_issues_message(issues)))
 
 
@@ -230,7 +233,9 @@ async def suspicious_command(update, context) -> None:
         return
 
     min_severity = _suspicious_min_severity_arg(context)
-    issues = _issue_database(context).list_open_suspicious_issues(
+    issues = _issue_triage_use_case(context).list_issues(
+        issue_type="suspicious",
+        status="open",
         limit=10,
         min_severity=min_severity,
     )
@@ -246,7 +251,7 @@ async def suspicious_summary_command(update, context) -> None:
     if message is None:
         return
 
-    summary = _issue_database(context).summarize_open_suspicious_issues(limit=20)
+    summary = _issue_triage_use_case(context).summarize_suspicious(limit=20)
     await _maybe_await(message.reply_text(format_suspicious_summary_message(summary)))
 
 
@@ -603,7 +608,7 @@ async def handle_feedback(update, context) -> None:
 
     result = feedback_context["result"]
     try:
-        _issue_database(context).record_result_feedback(
+        _issue_triage_use_case(context).record_feedback(
             query_text=str(feedback_context["query"]),
             result_rank=int(feedback_context["rank"]),
             reason=reason,
@@ -612,6 +617,7 @@ async def handle_feedback(update, context) -> None:
             seller=result.seller,
             posted_date=result.posted_date,
             source_url=result.source_url,
+            notes=None,
             telegram_user_id=_telegram_user_id(update),
         )
     except Exception as exc:
@@ -1175,8 +1181,9 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     openwa_config = OpenWAHandoffConfig.from_settings(settings)
     application.bot_data[OPENWA_HANDOFF_CONFIG_KEY] = openwa_config
     if openwa_config.is_ready:
+        openwa_use_case = OpenWAHandoffUseCase(config=openwa_config)
         application.bot_data[OPENWA_CHAT_DRAFT_CLIENT_KEY] = (
-            lambda payload: create_openwa_chat_draft(openwa_config, payload)
+            lambda payload: openwa_use_case.create_chat_draft(payload)
         )
     application.bot_data[SEARCH_SEMAPHORE_KEY] = asyncio.Semaphore(
         settings.telegram_max_concurrent_searches
@@ -1215,7 +1222,10 @@ def run_bot(settings: Settings, workflow: SearchWorkflow | None = None) -> None:
     if workflow is None:
         from app.searching.search import WatchFactsSearchWorkflow
 
-        workflow = WatchFactsSearchWorkflow(settings)
+        workflow = SearchUseCase.from_settings(
+            settings,
+            workflow_factory=WatchFactsSearchWorkflow,
+        )
 
     application = build_application(settings, workflow)
     logger.info("event=bot.starting")
@@ -1285,6 +1295,10 @@ def _issue_database(context) -> Database:
     raise RuntimeError("Issue database is not configured")
 
 
+def _issue_triage_use_case(context) -> IssueTriageUseCase:
+    return IssueTriageUseCase(_issue_database(context))
+
+
 def _watchfacts_session_checker(context) -> SessionChecker | None:
     application = getattr(context, "application", None)
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
@@ -1309,9 +1323,10 @@ def _openwa_chat_draft_client(context) -> OpenWAChatDraftClient:
     config = _openwa_handoff_config(context)
     if config is None:
         raise OpenWAHandoffConfigError("OpenWA chat draft handoff is not configured")
+    openwa_use_case = OpenWAHandoffUseCase(config=config)
 
     async def create(payload: dict) -> OpenWAChatDraftResponse:
-        return await create_openwa_chat_draft(config, payload)
+        return await openwa_use_case.create_chat_draft(payload)
 
     return create
 
@@ -1413,7 +1428,7 @@ async def _mark_issue_command(update, context, *, status: str) -> None:
 
     issue_type, issue_id = issue_ref
     notes = _issue_notes_arg(context)
-    issue = _issue_database(context).mark_issue_status(
+    issue = _issue_triage_use_case(context).update_issue(
         issue_id,
         issue_type=issue_type,
         status=status,

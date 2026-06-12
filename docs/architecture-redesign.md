@@ -293,6 +293,11 @@ Create small use-case wrappers without moving core logic yet:
 - `IssueTriageUseCase`
 - `AuditTriageUseCase`
 
+Initial implementation lives under `app/application/`. Runtime and diagnostics
+adapters can call these shells while existing deterministic search, payload
+formatting, SQLite schema, OpenWA client, and audit parsing logic remain in
+their current modules.
+
 Acceptance:
 
 - Telegram, MCP, and diagnostics still call the same search behavior.

@@ -29,6 +29,11 @@ app/
     telegram_bot.py # primary Telegram handlers and message formatting
     mcp_server.py   # WatchFacts MCP tools and result-page routes
     tool_runtime.py # non-Telegram payload runtime used by MCP and diagnostics
+  application/
+    search_use_case.py # search workflow shell shared by Telegram, MCP, diagnostics
+    openwa_handoff_use_case.py # OpenWA chat draft orchestration shell
+    issue_triage_use_case.py # feedback/suspicious issue orchestration shell
+    audit_triage_use_case.py # offline audit triage orchestration shell
   searching/
     search.py       # deterministic search workflow
     search_result.py # shared search result dataclass

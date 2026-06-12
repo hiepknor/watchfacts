@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.application import AuditTriageUseCase
 from app.config import Settings, load_search_settings
 
 
@@ -272,12 +273,19 @@ def main() -> int:
     if args.max_rows <= 0:
         parser.error("--max-rows must be positive")
 
-    artifact = load_audit_artifact(Path(args.artifact))
+    use_case = AuditTriageUseCase(
+        load_artifact=load_audit_artifact,
+        summarize_artifact=summarize_artifact,
+        render_markdown_report=render_markdown_report,
+        render_json_report=render_json_report,
+        run_ai_triage=run_ai_triage,
+    )
+    artifact = use_case.load(Path(args.artifact))
     ai_report = None
     if args.use_openai:
         settings = load_search_settings()
         ai_report = asyncio.run(
-            run_ai_triage(
+            use_case.run_ai(
                 artifact,
                 complete=build_openai_complete(settings),
                 max_rows=args.max_rows,
@@ -285,9 +293,9 @@ def main() -> int:
         )
 
     if args.format == "json":
-        print(render_json_report(artifact, ai_report=ai_report), end="")
+        print(use_case.render_json(artifact, ai_report=ai_report), end="")
     else:
-        print(render_markdown_report(artifact, ai_report=ai_report), end="")
+        print(use_case.render_markdown(artifact, ai_report=ai_report), end="")
     return 0
 
 

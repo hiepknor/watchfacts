@@ -10,13 +10,9 @@ from typing import Any, Deque
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
+from app.application import IssueTriageUseCase, OpenWAHandoffUseCase
 from app.config import ConfigError, Settings, load_search_settings
-from app.db import Database
-from app.integrations.openwa_handoff import (
-    OpenWAHandoffConfig,
-    OpenWAHandoffError,
-    create_openwa_chat_draft,
-)
+from app.integrations.openwa_handoff import OpenWAHandoffError
 from app.results.result_pages import (
     ResultPageConfig,
     read_result_page_action_payload,
@@ -175,10 +171,9 @@ async def result_page_openwa_draft_action(request: Request):
         watchfacts_url=settings.watchfacts_url,
     )
     try:
-        response = await create_openwa_chat_draft(
-            OpenWAHandoffConfig.from_settings(settings),
-            draft_payload,
-        )
+        response = await OpenWAHandoffUseCase.from_settings(
+            settings,
+        ).create_chat_draft(draft_payload)
     except OpenWAHandoffError:
         logger.warning(
             "event=result_page.openwa_failed token=%s ip=%s",
@@ -225,7 +220,7 @@ async def result_page_report_action(request: Request):
     item = context["item"]
     payload = context["payload"]
     settings = context["settings"]
-    issue_id = Database(settings.db_path).record_result_feedback(
+    issue = IssueTriageUseCase.from_settings(settings).record_feedback(
         query_text=str(payload.get("query") or ""),
         result_rank=_int_value(item.get("rank"), fallback=0),
         reason=reason,
@@ -236,14 +231,14 @@ async def result_page_report_action(request: Request):
         source_url=_optional_action_text(item.get("source_url")),
         notes=_optional_action_text(body.get("notes")),
     )
-    issue = Database(settings.db_path).get_issue(issue_id, issue_type="feedback")
+    issue_id = issue.id if issue is not None else None
 
     return JSONResponse(
         {
             "ok": True,
             "status": "recorded",
             "result_id": item.get("result_id"),
-            "issue_ref": f"F{issue_id}",
+            "issue_ref": f"F{issue_id}" if issue_id is not None else None,
             "issue": _safe_issue_payload(issue),
         }
     )

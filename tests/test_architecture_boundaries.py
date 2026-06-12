@@ -32,6 +32,11 @@ PROHIBITED_DOMAIN_IMPORT_PREFIXES = (
     "sqlite3",
     "telegram",
 )
+PROHIBITED_APPLICATION_IMPORT_PREFIXES = (
+    "app.runtime",
+    "mcp",
+    "telegram",
+)
 
 
 def test_deterministic_domain_modules_do_not_import_runtime_or_infrastructure() -> None:
@@ -61,6 +66,18 @@ def test_search_orchestration_exceptions_are_explicit() -> None:
     assert existing_files == DETERMINISTIC_DOMAIN_FILES | documented_exceptions
 
 
+def test_application_use_cases_do_not_import_interface_adapters() -> None:
+    violations: list[str] = []
+    for path in sorted(Path("app/application").glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        for imported in _imported_modules(path):
+            if _is_prohibited_application_import(imported):
+                violations.append(f"{path} imports {imported}")
+
+    assert violations == []
+
+
 def _imported_modules(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     imports: set[str] = set()
@@ -76,4 +93,11 @@ def _is_prohibited_domain_import(module_name: str) -> bool:
     return any(
         module_name == prefix or module_name.startswith(f"{prefix}.")
         for prefix in PROHIBITED_DOMAIN_IMPORT_PREFIXES
+    )
+
+
+def _is_prohibited_application_import(module_name: str) -> bool:
+    return any(
+        module_name == prefix or module_name.startswith(f"{prefix}.")
+        for prefix in PROHIBITED_APPLICATION_IMPORT_PREFIXES
     )

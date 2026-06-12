@@ -263,20 +263,22 @@ def test_result_page_openwa_action_uses_sidecar_payload(
     result_id = action_page.payload["results"][0]["result_id"]
     calls: list[dict[str, object]] = []
 
-    async def fake_create_openwa_chat_draft(config, payload):
-        calls.append(payload)
-        return OpenWAChatDraftResponse(
-            draft_id="draft-1",
-            chat_id=None,
-            dashboard_url="https://openwa.example/chats/drafts/draft-1",
-        )
+    class FakeOpenWAHandoffUseCase:
+        @classmethod
+        def from_settings(cls, settings_arg):
+            assert settings_arg == settings
+            return cls()
+
+        async def create_chat_draft(self, payload):
+            calls.append(payload)
+            return OpenWAChatDraftResponse(
+                draft_id="draft-1",
+                chat_id=None,
+                dashboard_url="https://openwa.example/chats/drafts/draft-1",
+            )
 
     monkeypatch.setattr(mcp_server, "load_search_settings", lambda: settings)
-    monkeypatch.setattr(
-        mcp_server,
-        "create_openwa_chat_draft",
-        fake_create_openwa_chat_draft,
-    )
+    monkeypatch.setattr(mcp_server, "OpenWAHandoffUseCase", FakeOpenWAHandoffUseCase)
 
     response = TestClient(mcp_server.app.streamable_http_app()).post(
         f"/results/{token}/actions/openwa-draft",

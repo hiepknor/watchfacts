@@ -7,6 +7,7 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Protocol
 
+from app.application import IssueTriageUseCase, OpenWAHandoffUseCase, SearchUseCase
 from app.config import (
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
     Settings,
@@ -16,7 +17,6 @@ from app.db import Database, IssueRecord
 from app.integrations.openwa_handoff import (
     OpenWAChatDraftResponse,
     OpenWAHandoffConfig,
-    create_openwa_chat_draft,
 )
 from app.results.result_pages import ResultPageConfig, generate_result_page
 from app.integrations.scraper import BrowserSessionStatus, check_watchfacts_session
@@ -121,8 +121,9 @@ async def watchfacts_search_payload(
     active_workflow = (
         workflow
         if workflow is not None
-        else WatchFactsSearchWorkflow(
+        else SearchUseCase.from_settings(
             active_settings,
+            workflow_factory=WatchFactsSearchWorkflow,
             refine_results=_build_search_refiner(active_settings),
         )
     )
@@ -281,17 +282,16 @@ async def watchfacts_create_chat_draft_payload(
     )
     resolved_result_id = _source_result_id(stored.query, stored.rank, stored.result)
 
-    config = OpenWAHandoffConfig.from_settings(active_settings)
     payload = _build_openwa_chat_draft_payload(
         query=stored.query,
         rank=stored.rank,
         result=stored.result,
         watchfacts_url=active_settings.watchfacts_url,
     )
-    client = openwa_client or (
-        lambda draft_payload: create_openwa_chat_draft(config, draft_payload)
-    )
-    response = await client(payload)
+    response = await OpenWAHandoffUseCase.from_settings(
+        active_settings,
+        client=openwa_client,
+    ).create_chat_draft(payload)
 
     return {
         "status": "created",
@@ -331,7 +331,7 @@ async def watchfacts_report_issue_payload(
     resolved_result_id = _source_result_id(stored.query, stored.rank, stored.result)
     result = stored.result
     issue_database = database or Database(active_settings.db_path)
-    issue_id = issue_database.record_result_feedback(
+    issue = IssueTriageUseCase(issue_database).record_feedback(
         query_text=stored.query,
         result_rank=stored.rank,
         reason=normalized_reason,
@@ -342,7 +342,6 @@ async def watchfacts_report_issue_payload(
         source_url=result.source_url,
         notes=_clean_optional_text(notes),
     )
-    issue = issue_database.get_issue(issue_id, issue_type="feedback")
 
     return {
         "status": "recorded",
@@ -369,29 +368,12 @@ def watchfacts_list_issues_payload(
 
     active_settings = settings or load_search_settings()
     issue_database = database or Database(active_settings.db_path)
-    if normalized_issue_type == "feedback":
-        issues = issue_database.list_feedback_issues(
-            status=normalized_status,
-            limit=limit,
-        )
-    elif normalized_issue_type == "suspicious":
-        issues = issue_database.list_suspicious_issues(
-            status=normalized_status,
-            limit=limit,
-            min_severity=min_severity,
-        )
-    else:
-        issues = (
-            issue_database.list_feedback_issues(
-                status=normalized_status,
-                limit=limit,
-            )
-            + issue_database.list_suspicious_issues(
-                status=normalized_status,
-                limit=limit,
-                min_severity=min_severity,
-            )
-        )[:limit]
+    issues = IssueTriageUseCase(issue_database).list_issues(
+        issue_type=normalized_issue_type,
+        status=normalized_status,
+        limit=limit,
+        min_severity=min_severity,
+    )
 
     return {
         "issue_type": normalized_issue_type,
@@ -412,7 +394,10 @@ def watchfacts_get_issue_payload(
     parsed_type, issue_id = _parse_issue_ref(issue_ref, issue_type=issue_type)
     active_settings = settings or load_search_settings()
     issue_database = database or Database(active_settings.db_path)
-    issue = issue_database.get_issue(issue_id, issue_type=parsed_type)
+    issue = IssueTriageUseCase(issue_database).get_issue(
+        issue_id,
+        issue_type=parsed_type,
+    )
     return {
         "found": issue is not None,
         "issue": _issue_payload(issue, include_raw_context=include_raw_context),
@@ -435,7 +420,7 @@ def watchfacts_update_issue_payload(
     parsed_type, issue_id = _parse_issue_ref(issue_ref, issue_type=issue_type)
     active_settings = settings or load_search_settings()
     issue_database = database or Database(active_settings.db_path)
-    issue = issue_database.mark_issue_status(
+    issue = IssueTriageUseCase(issue_database).update_issue(
         issue_id,
         issue_type=parsed_type,
         status=normalized_status,
@@ -456,7 +441,7 @@ def watchfacts_suspicious_summary_payload(
     _validate_limit(limit)
     active_settings = settings or load_search_settings()
     issue_database = database or Database(active_settings.db_path)
-    summary = issue_database.summarize_open_suspicious_issues(limit=limit)
+    summary = IssueTriageUseCase(issue_database).summarize_suspicious(limit=limit)
     return {
         "result_count": len(summary),
         "summary": [
@@ -578,7 +563,10 @@ async def _resolve_result(
         _RESULT_CACHE[stable_listing_id(result)] = stored
         return stored
 
-    active_workflow = workflow or WatchFactsSearchWorkflow(settings)
+    active_workflow = workflow or SearchUseCase.from_settings(
+        settings,
+        workflow_factory=WatchFactsSearchWorkflow,
+    )
     results = await active_workflow.search(query)
     _store_results(
         query,
@@ -632,7 +620,10 @@ async def _resolve_result_by_rank(
     if stored is not None:
         return stored
 
-    active_workflow = workflow or WatchFactsSearchWorkflow(settings)
+    active_workflow = workflow or SearchUseCase.from_settings(
+        settings,
+        workflow_factory=WatchFactsSearchWorkflow,
+    )
     results = await active_workflow.search(query)
     _store_results(
         query,
