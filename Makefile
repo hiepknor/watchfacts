@@ -16,6 +16,8 @@ MCP_BENCHMARK_FORMAT ?= markdown
 MCP_BENCHMARK_LIMIT ?= 3
 MCP_PREWARM_FORMAT ?= text
 MCP_PREWARM_LIMIT ?= 5
+MCP_POSTDEPLOY_PREWARM ?= 1
+MCP_POSTDEPLOY_PREWARM_BENCHMARK_DEFAULTS ?= 1
 MCP_COMPOSE_SUFFIX ?= -f docker-compose.watchfacts-mcp.yml
 MCP_SERVICE ?= watchfacts-mcp
 
@@ -27,7 +29,7 @@ export IMAGE
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-runtime-config mcp-wait-healthy quality-audit predeploy-quality-check
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy quality-audit predeploy-quality-check
 
 help:
 	@printf "%s\n" "watchfacts commands"
@@ -62,6 +64,8 @@ help:
 	@printf "%s\n" "  make mcp-smoke-set  Validate MCP search response shape for representative queries"
 	@printf "%s\n" "  make mcp-benchmark  Benchmark representative MCP search queries"
 	@printf "%s\n" "  make mcp-prewarm    Prewarm representative MCP search cache entries"
+	@printf "%s\n" "  make mcp-prewarm-benchmark-defaults Prewarm benchmark/common brand queries"
+	@printf "%s\n" "  make mcp-postdeploy-prewarm Best-effort cache prewarm after MCP deploy"
 	@printf "%s\n" "  make mcp-runtime-config Print safe effective MCP runtime config values"
 	@printf "%s\n" "  make quality-audit  Run the default production quality audit query set"
 	@printf "%s\n" "  make predeploy-quality-check Run local checks plus the default quality audit"
@@ -102,6 +106,8 @@ deploy-bot: verify-env pull build predeploy-check
 deploy-mcp: verify-env pull mcp-build mcp-predeploy-check
 	$(MCP_COMPOSE_CMD) up -d --force-recreate --remove-orphans $(MCP_SERVICE)
 	$(MCP_COMPOSE_CMD) ps
+	$(MAKE) mcp-wait-healthy
+	$(MAKE) mcp-postdeploy-prewarm
 	$(MCP_COMPOSE_CMD) logs --tail=$(LOG_LINES) $(MCP_SERVICE)
 
 deploy-bot-mcp: deploy-bot deploy-mcp
@@ -169,6 +175,19 @@ mcp-benchmark:
 
 mcp-prewarm:
 	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/prewarm_mcp_cache.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_PREWARM_LIMIT) --format $(MCP_PREWARM_FORMAT)
+
+mcp-prewarm-benchmark-defaults:
+	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/prewarm_mcp_cache.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_PREWARM_LIMIT) --format $(MCP_PREWARM_FORMAT) --use-benchmark-defaults
+
+mcp-postdeploy-prewarm:
+	@if [ "$(MCP_POSTDEPLOY_PREWARM)" = "1" ]; then \
+		$(MAKE) mcp-prewarm || printf "%s\n" "Warning: MCP cache prewarm failed; deploy remains active."; \
+		if [ "$(MCP_POSTDEPLOY_PREWARM_BENCHMARK_DEFAULTS)" = "1" ]; then \
+			$(MAKE) mcp-prewarm-benchmark-defaults || printf "%s\n" "Warning: MCP benchmark-default prewarm failed; deploy remains active."; \
+		fi; \
+	else \
+		printf "%s\n" "Skipping MCP cache prewarm because MCP_POSTDEPLOY_PREWARM=$(MCP_POSTDEPLOY_PREWARM)"; \
+	fi
 
 mcp-runtime-config:
 	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/runtime_config.py

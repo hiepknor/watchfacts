@@ -270,7 +270,14 @@ pytest and compile checks inside the Compose image, force-recreates the
 logs.
 
 `make deploy-mcp` does the same for `watchfacts-mcp`, runs the bounded quality
-audit gate, force-recreates the MCP container, and shows recent MCP logs.
+audit gate, force-recreates the MCP container, waits for health, then prewarms
+representative MCP search queries on a best-effort basis before showing recent
+MCP logs. The prewarm step covers both hard quality cases and benchmark/common
+brand queries, reducing first-query latency by populating the shared SQLite
+search cache used by both MCP and the Telegram bot. Set
+`MCP_POSTDEPLOY_PREWARM=0` to skip all warmup, or
+`MCP_POSTDEPLOY_PREWARM_BENCHMARK_DEFAULTS=0` to skip the extra benchmark/common
+brand warmup pass.
 
 `make deploy` deploys both `watchfacts-bot` and `watchfacts-mcp`.
 
