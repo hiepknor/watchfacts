@@ -29,8 +29,8 @@
     - `curl -I https://watchfacts.onio.cc/results/health` should return 200
     - `curl https://watchfacts.onio.cc/mcp` should still be 404
 
-7. Run `make deploy` for the standard Telegram bot + MCP deploy. Use `make deploy-mcp`
-   for MCP only or `make deploy-bot` for bot only.
+7. Run `make deploy` for the standard `watchfacts-bot` + `watchfacts-mcp`
+   deploy. Use `make deploy-mcp` for MCP only or `make deploy-bot` for bot only.
 8. Inspect startup with `make mcp-logs` or `make logs` if needed.
 
 The bot expects `data/watchfacts_state.json` to exist before the first real search.
@@ -52,13 +52,16 @@ make deploy
 This target:
 
 - runs `git pull --ff-only`
-- builds and force-recreates the Telegram bot and `watchfacts-mcp`
+- uses the shared Docker image `watchfacts:local`
+- builds and force-recreates `watchfacts-bot` and `watchfacts-mcp`
+- removes the legacy pre-rename bot container `watchfacts` before starting
+  `watchfacts-bot`
 - runs pytest, compile checks, and the default bounded quality audit inside the
   MCP Compose service
 - prints Compose status and recent startup logs for each service
 
-Use `make deploy-mcp` for MCP-only changes and `make deploy-bot` for bot-only
-changes:
+Use `make deploy-mcp` for `watchfacts-mcp` changes and `make deploy-bot` for
+`watchfacts-bot` changes:
 
 ```bash
 make deploy-mcp
@@ -68,6 +71,13 @@ make deploy-bot
 Do not use `SKIP_PULL=1` for normal production deploys. If the server working
 tree is dirty, fix the deploy checkout first rather than layering rsync changes
 over it.
+
+Runtime naming:
+
+- Docker image: `watchfacts:local`
+- Telegram service/container: `watchfacts-bot`
+- MCP service/container: `watchfacts-mcp`
+- Legacy container removed during bot deploy: `watchfacts`
 
 ## Local Setup
 
@@ -241,7 +251,7 @@ Restart:
 make restart
 ```
 
-Restart Telegram bot after updating code:
+Restart `watchfacts-bot` after updating code:
 
 ```bash
 make deploy-bot
@@ -254,13 +264,14 @@ make deploy-mcp
 ```
 
 `make deploy-bot` runs `git pull --ff-only`, builds the Docker image, runs
-pytest and compile checks inside the Compose image, force-recreates the Telegram
-bot container, prints Compose status, and shows recent startup logs.
+pytest and compile checks inside the Compose image, force-recreates the
+`watchfacts-bot` container, prints Compose status, and shows recent startup
+logs.
 
 `make deploy-mcp` does the same for `watchfacts-mcp`, runs the bounded quality
 audit gate, force-recreates the MCP container, and shows recent MCP logs.
 
-`make deploy` deploys both the Telegram bot and `watchfacts-mcp`.
+`make deploy` deploys both `watchfacts-bot` and `watchfacts-mcp`.
 
 Status:
 
@@ -346,7 +357,7 @@ Run the default set locally or inside the production container:
 ```bash
 make quality-audit
 python scripts/diagnostics/audit_quality.py --limit 5
-docker compose exec -T bot python scripts/diagnostics/audit_quality.py --limit 5
+docker compose exec -T watchfacts-bot python scripts/diagnostics/audit_quality.py --limit 5
 ```
 
 Run focused queries:
@@ -405,8 +416,9 @@ Checklist:
 - Run focused tests, then the full suite.
 - Bump `SEARCH_CACHE_VERSION` in `app/search.py` when extraction, scoring,
   quality gates, ranking, or serialized result shape can change cached output.
-- Deploy with `make deploy` for the standard production Telegram bot + MCP deploy. Use
-  `make deploy-mcp` or `make deploy-bot` for scoped service deploys.
+- Deploy with `make deploy` for the standard production `watchfacts-bot` +
+  `watchfacts-mcp` deploy. Use `make deploy-mcp` or `make deploy-bot` for
+  scoped service deploys.
 - Verify the container is healthy and the production git HEAD matches the
   deployed commit.
 - Rerun the focused production audit after deploy and keep `make mcp-smoke-set`

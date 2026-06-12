@@ -155,7 +155,7 @@ The production path is Telegram:
 
 ```text
 Telegram user
-  -> app.telegram_bot
+  -> watchfacts-bot / app.telegram_bot
   -> WatchFactsSearchWorkflow
   -> scraper, parser, matcher, dedupe, scoring, similarity grouping
   -> suspicious issue detection, optional guarded AI refinement, SQLite cache
@@ -196,7 +196,7 @@ Cloudflare, or anti-bot systems.
 - The scraper respects the authenticated-browser boundary and fails clearly when
   browser state is missing or expired.
 - Default `make deploy` encodes the intended production deployment path:
-  pull, build, run checks, recreate Telegram bot and `watchfacts-mcp`.
+  pull, build, run checks, recreate `watchfacts-bot` and `watchfacts-mcp`.
 - `make deploy-mcp` is used for MCP-only deploys; it pulls, builds, runs the
   MCP predeploy checks, and recreates the MCP service.
 

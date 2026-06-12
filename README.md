@@ -34,8 +34,9 @@ references returned by search.
 - One-tap result feedback and owner issue review commands
 - SQLite local cache
 - Non-Telegram search payload runtime for MCP-style wrappers
+- Shared Docker image `watchfacts:local`
 - Docker Compose service for `watchfacts-mcp`
-- Makefile deploy targets for MCP only, bot only, or both services
+- Makefile deploy targets for `watchfacts-bot`, `watchfacts-mcp`, or both services
 - Optional OpenAI controlled refinement for hard cases
 - Docker deployment
 - Fully async architecture
@@ -128,14 +129,14 @@ Run the bot locally:
 python -m app.main
 ```
 
-Run the Telegram bot with Docker:
+Run `watchfacts-bot` with Docker:
 
 ```bash
 make init
 make deploy-bot
 ```
 
-Run Telegram bot + MCP for standard deployment:
+Run `watchfacts-bot` + `watchfacts-mcp` for standard deployment:
 
 ```bash
 make deploy
@@ -153,16 +154,22 @@ separate OpenWA compose override.
 
 ## Commands
 
+Runtime naming:
+
+- Docker image: `watchfacts:local`
+- Telegram service/container: `watchfacts-bot`
+- MCP service/container: `watchfacts-mcp`
+
 | Command | Description |
 | --- | --- |
 | `make init` | Create `data/`, `logs/`, and `.env` from `.env.example` when missing |
 | `make verify-env` | Check `.env` and `data/watchfacts_state.json` before deploy |
 | `make predeploy-check` | Run pytest plus repository checks |
-| `make deploy` | Deploy both the Telegram bot and `watchfacts-mcp` |
-| `make deploy-bot` | Pull latest code, build, recreate the Telegram bot, and show startup logs |
+| `make deploy` | Deploy both `watchfacts-bot` and `watchfacts-mcp` |
+| `make deploy-bot` | Pull latest code, build, recreate `watchfacts-bot`, and show startup logs |
 | `make deploy-mcp` | Pull latest code, build, test, audit, and recreate `watchfacts-mcp` |
-| `make deploy-bot-mcp` | Alias for the standard bot + MCP deploy path |
-| `make deploy-bot OPENWA_COMPOSE=1` | Deploy Telegram bot with the OpenWA network override |
+| `make deploy-bot-mcp` | Alias for the standard `watchfacts-bot` + `watchfacts-mcp` deploy path |
+| `make deploy-bot OPENWA_COMPOSE=1` | Deploy `watchfacts-bot` with the OpenWA network override |
 | `make pull` | Pull latest git changes unless `SKIP_PULL=1` |
 | `make build` | Build the Docker image |
 | `make mcp-predeploy-check` | Run MCP predeploy checks inside the MCP Compose service |
@@ -173,12 +180,12 @@ separate OpenWA compose override.
 | `make mcp-smoke-set` | Validate MCP `search` shape for representative queries |
 | `make quality-audit` | Run the default bounded quality audit query set |
 | `make predeploy-quality-check` | Run local checks plus the default quality audit |
-| `make up` | Start the bot with Docker Compose |
+| `make up` | Start `watchfacts-bot` with Docker Compose |
 | `make down` | Stop Docker Compose services |
-| `make restart` | Restart the bot service |
-| `make logs` | Follow bot logs |
+| `make restart` | Restart `watchfacts-bot` |
+| `make logs` | Follow `watchfacts-bot` logs |
 | `make ps` | Show Compose service status |
-| `make shell` | Open a shell in the bot container |
+| `make shell` | Open a shell in the `watchfacts-bot` container |
 | `make run` | Run the bot locally on the host |
 | `make login` | Run the WatchFacts browser login locally on the host |
 | `make check` | Run repository checks |
@@ -186,7 +193,7 @@ separate OpenWA compose override.
 | `python scripts/diagnostics/debug_match.py <query> <listing>` | Inspect matcher trace and result score locally |
 | `python -m app.main` | Run the Telegram bot locally |
 | `docker compose build` | Build the Docker image |
-| `docker compose up -d` | Start the bot in the background |
+| `docker compose up -d` | Start `watchfacts-bot` in the background |
 | `docker compose logs -f` | Follow container logs |
 
 ## Project Structure
@@ -559,7 +566,7 @@ Example `docker-compose.yml` service:
 
 ```yaml
 services:
-  bot:
+  watchfacts-bot:
     build: .
     restart: unless-stopped
     volumes:

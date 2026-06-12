@@ -11,7 +11,8 @@
 - BeautifulSoup4 + lxml for HTML parsing
 - SQLite for local cache, dedupe, and query history
 - Docker Compose for deployment
-- Telegram bot as the primary user-facing runtime
+- Shared Docker image `watchfacts:local`
+- `watchfacts-bot` as the primary user-facing Telegram runtime
 - MCP clients as a supporting structured integration surface
 - OpenWA chat draft API for seller handoff
 - Optional OpenAI API integration for controlled AI refinement
@@ -129,7 +130,7 @@ Configuration rules:
 
 ```text
 Telegram user request
-  -> telegram_bot handler
+  -> watchfacts-bot / telegram_bot handler
   -> WatchFactsSearchWorkflow
   -> scraper loads saved browser state and posts the WatchFacts search form through HTTPX
   -> parser extracts listing candidates from JSON response or HTML fallback

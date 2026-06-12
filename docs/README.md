@@ -2,10 +2,10 @@
 
 This directory is the project knowledge base for humans and AI agents.
 
-Current production direction: the Telegram bot is the primary user-facing
-runtime. WatchFacts search logic lives in a reusable runtime, and trusted MCP
-clients access the same pipeline through the `watchfacts-mcp` Docker service for
-structured integrations, result pages, diagnostics, and handoff.
+Current production direction: `watchfacts-bot` is the primary user-facing
+Telegram runtime. WatchFacts search logic lives in a reusable runtime, and
+trusted MCP clients access the same pipeline through the `watchfacts-mcp` Docker
+service for structured integrations, result pages, diagnostics, and handoff.
 
 ## Documents
 
@@ -59,7 +59,7 @@ Agents should read documents selectively:
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.
 - For result page modal actions: read `result-page-actions-plan.md`, `technical-spec.md`, `security-compliance.md`, and ADR-007.
 - For OpenAI controlled refinement: read `roadmap.md` Milestone 7, `implementation-plan.md` Phase 7, `technical-spec.md`, `security-compliance.md`, and ADR-005.
-- For deploys: use `make deploy` on the server for bot + MCP, `make deploy-mcp` for MCP only, or `make deploy-bot` for bot only.
+- For deploys: use `make deploy` on the server for `watchfacts-bot` + `watchfacts-mcp`, `make deploy-mcp` for MCP only, or `make deploy-bot` for bot only.
 - For commits: follow `AGENTS.md` and the workflow in `contributing.md`.
 
 Do not load every document into context by default. Load the smallest set that applies to the task.

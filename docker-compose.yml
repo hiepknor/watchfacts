@@ -1,10 +1,10 @@
 services:
-  bot:
+  watchfacts-bot:
     build:
       context: .
       dockerfile: Dockerfile
-    image: watchfacts:local
-    container_name: watchfacts
+    image: ${IMAGE:-watchfacts:local}
+    container_name: watchfacts-bot
     restart: unless-stopped
     env_file:
       - path: .env
@@ -36,7 +36,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: watchfacts:local
+    image: ${IMAGE:-watchfacts:local}
     container_name: watchfacts-mcp
     restart: unless-stopped
     env_file:

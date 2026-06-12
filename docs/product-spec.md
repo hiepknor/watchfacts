@@ -21,7 +21,8 @@ must use the shared runtime instead of reimplementing search.
 ## Users
 
 - Primary user: a watch trader or collector using Telegram to search WatchFacts.
-- Operator: the person who deploys the Telegram bot and WatchFacts MCP service, manages `.env`, creates the browser login session, and monitors logs.
+- Operator: the person who deploys `watchfacts-bot` and `watchfacts-mcp`,
+  manages `.env`, creates the browser login session, and monitors logs.
 - Maintainer: a developer or AI agent extending crawler, parser, matcher, database, MCP tools, OpenWA handoff, or Telegram behavior.
 
 ## User Stories
@@ -99,9 +100,11 @@ must use the shared runtime instead of reimplementing search.
 - Persist local cache, query history, and dedupe records in SQLite.
 - Reuse `data/watchfacts_state.json` for authenticated browser state.
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
-- Support Docker deployment of `watchfacts-mcp`.
-- Support Makefile deployment with `make deploy` for standard bot+MCP release,
-  `make deploy-mcp` for MCP only, and `make deploy-bot` for bot only.
+- Support Docker deployment of `watchfacts-bot` and `watchfacts-mcp` from the
+  shared `watchfacts:local` image.
+- Support Makefile deployment with `make deploy` for the standard
+  `watchfacts-bot` + `watchfacts-mcp` release, `make deploy-mcp` for MCP only,
+  and `make deploy-bot` for bot only.
 - Limit Telegram photo captions and text messages to platform-safe lengths.
 - Notify the owner in Vietnamese when WatchFacts browser session state is missing or expired.
 - Support one-tap feedback for incomplete/wrong results, owner issue review commands, suspicious-result auto-flagging, and regression fixture export. See [Continuous Improvement Spec](continuous-improvement.md).
@@ -152,10 +155,10 @@ must use the shared runtime instead of reimplementing search.
 | Run repository checks | `make check` |
 | Run bot locally | `python -m app.main` |
 | Run login locally | `python scripts/ops/login.py` |
-| Deploy Telegram bot | `make deploy-bot` |
-| Deploy WatchFacts MCP | `make deploy-mcp` |
-| Deploy Telegram bot + MCP | `make deploy-bot-mcp` |
-| Deploy bot and WatchFacts MCP | `make deploy` |
+| Deploy `watchfacts-bot` | `make deploy-bot` |
+| Deploy `watchfacts-mcp` | `make deploy-mcp` |
+| Deploy `watchfacts-bot` + `watchfacts-mcp` | `make deploy-bot-mcp` |
+| Deploy both services | `make deploy` |
 
 Telegram commands:
 

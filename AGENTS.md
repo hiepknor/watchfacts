@@ -121,8 +121,8 @@ Use these commands when the matching files exist:
 | Initialize local runtime files | `make init` |
 | Build Docker image | `make build` |
 | Deploy MCP only | `make deploy-mcp` |
-| Deploy Telegram bot only | `make deploy-bot` |
-| Deploy bot and MCP | `make deploy` |
+| Deploy watchfacts-bot only | `make deploy-bot` |
+| Deploy watchfacts-bot and watchfacts-mcp | `make deploy` |
 | Start Telegram bot Docker service | `make up` |
 | Stop Docker services | `make down` |
 | Follow MCP logs | `make mcp-logs` |

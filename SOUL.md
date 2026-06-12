@@ -3,9 +3,9 @@
 ## What This Project Is
 
 WatchFacts is a deterministic search runtime for authenticated WatchFacts
-listings. The Telegram bot is the primary production runtime and user-facing
-flow. The `watchfacts-mcp` service remains a supporting structured-tool bridge
-for result pages, diagnostics, OpenWA handoff, and operator integrations.
+listings. `watchfacts-bot` is the Telegram bot service and primary user-facing
+flow. `watchfacts-mcp` is the supporting structured-tool service for result
+pages, diagnostics, OpenWA handoff, and operator integrations.
 
 ## Current Production Flow
 
@@ -76,6 +76,12 @@ Scoped deploys:
 make deploy-mcp
 make deploy-bot
 ```
+
+Service names:
+
+- `watchfacts:local`: shared Docker image.
+- `watchfacts-bot`: Telegram bot runtime.
+- `watchfacts-mcp`: MCP runtime.
 
 The server checkout should be clean and track `origin/master`. Normal deploys
 should not use `sudo` or `SKIP_PULL`.

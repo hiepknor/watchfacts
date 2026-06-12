@@ -44,10 +44,33 @@ def test_makefile_has_quality_audit_gate_targets() -> None:
 def test_makefile_deploy_targets_are_scoped() -> None:
     makefile = Path("Makefile").read_text()
 
+    assert "IMAGE ?= watchfacts:local" in makefile
+    assert "BOT_SERVICE ?= watchfacts-bot" in makefile
+    assert "LEGACY_BOT_CONTAINER ?= watchfacts" in makefile
+    assert "MCP_SERVICE ?= watchfacts-mcp" in makefile
+    assert "SERVICE ?= bot" not in makefile
+    assert "export IMAGE" in makefile
     assert "\ndeploy: deploy-bot-mcp\n" in makefile
     assert "\ndeploy-bot: verify-env pull build predeploy-check\n" in makefile
     assert "\ndeploy-mcp: verify-env pull mcp-build mcp-predeploy-check\n" in makefile
     assert "\ndeploy-bot-mcp: deploy-bot deploy-mcp\n" in makefile
+    assert "docker rm -f $(LEGACY_BOT_CONTAINER)" in makefile
+    assert "$(COMPOSE) up -d --force-recreate --remove-orphans $(BOT_SERVICE)" in makefile
+    assert "$(MCP_COMPOSE_CMD) up -d --force-recreate --remove-orphans $(MCP_SERVICE)" in makefile
+
+
+def test_compose_services_use_explicit_runtime_names() -> None:
+    compose = Path("docker-compose.yml").read_text()
+    openwa_compose = Path("docker-compose.openwa.yml").read_text()
+
+    assert "\n  watchfacts-bot:\n" in compose
+    assert "image: ${IMAGE:-watchfacts:local}" in compose
+    assert "container_name: watchfacts-bot" in compose
+    assert "\n  watchfacts-mcp:\n" in compose
+    assert "container_name: watchfacts-mcp" in compose
+    assert "\n  bot:\n" not in compose
+    assert "\n  watchfacts-bot:\n" in openwa_compose
+    assert "\n  bot:\n" not in openwa_compose
 
 
 def test_makefile_has_mcp_smoke_set_target() -> None:

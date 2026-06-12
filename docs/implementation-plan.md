@@ -11,13 +11,14 @@ For new work, add a focused task under "Future Work" before implementing if the 
 
 Current baseline:
 
-- The Telegram bot is the primary user-facing production runtime.
+- `watchfacts-bot` is the primary user-facing Telegram production runtime.
 - Shared WatchFacts search logic lives in reusable runtime modules used by both
   Telegram and MCP.
 - MCP clients use `app.mcp_server` through the `watchfacts-mcp` Docker service
   as a supporting structured integration.
-- Production deploy path is `make deploy` for bot + MCP. Use `make deploy-mcp`
-  for MCP only and `make deploy-bot` for bot only.
+- Production deploy path is `make deploy` for `watchfacts-bot` +
+  `watchfacts-mcp`. Use `make deploy-mcp` for MCP only and `make deploy-bot`
+  for bot only.
 - Server deploy should not require `sudo` or `SKIP_PULL`.
 
 ## Phase 0: Foundation
@@ -31,7 +32,8 @@ Acceptance:
 - [x] `Dockerfile` exists and installs Python dependencies plus Playwright Chromium.
 - [x] `docker-compose.yml` mounts `data/` and `logs/`.
 - [x] `Makefile` wraps common commands.
-- [x] `Makefile` includes `deploy-mcp`, `deploy-bot`, and `deploy-bot-mcp`.
+- [x] `Makefile` includes `deploy-mcp`, `deploy-bot`, `deploy-bot-mcp`,
+  `BOT_SERVICE`, and `MCP_SERVICE`.
 - [x] `.env.example`, `.gitignore`, and `.dockerignore` exist.
 
 Verify:

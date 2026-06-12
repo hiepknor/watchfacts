@@ -1,8 +1,9 @@
 # Roadmap
 
-Current operating model: WatchFacts search is a shared runtime. The Telegram bot
-is the primary user-facing runtime. MCP clients access the same pipeline through
-the `watchfacts-mcp` Docker service for structured integrations.
+Current operating model: WatchFacts search is a shared runtime.
+`watchfacts-bot` is the primary user-facing Telegram runtime. MCP clients access
+the same pipeline through the `watchfacts-mcp` Docker service for structured
+integrations.
 
 ## Milestone 0: Project Foundation
 
@@ -337,7 +338,8 @@ Deliverables:
 - [x] MCP tools for search, health, OpenWA draft handoff, feedback, issue
   review, and suspicious QA summary.
 - [x] Pagination contract with `offset`, `has_more`, and `next_offset`.
-- [x] Makefile deploy target `make deploy` (alias for `make deploy-bot-mcp`).
+- [x] Makefile deploy target `make deploy` for `watchfacts-bot` +
+  `watchfacts-mcp`.
 - [x] Server deploy path that does not require `sudo` or `SKIP_PULL`.
 
 Exit criteria:
@@ -345,8 +347,8 @@ Exit criteria:
 - [x] MCP clients can list WatchFacts MCP tools.
 - [x] MCP clients can call `search` with `query`, `limit`, `offset`, and
   `include_similar`.
-- [x] `make deploy` pulls, builds, tests, recreates bot and MCP services, and is used
-  for standard production releases.
+- [x] `make deploy` pulls, builds, tests, recreates `watchfacts-bot` and
+  `watchfacts-mcp`, and is used for standard production releases.
 - [x] Search results include enough structured fields for clients to answer in
   Vietnamese and perform follow-up handoff/feedback.
 
@@ -359,10 +361,10 @@ review surfaces into shared runtime modules.
 
 Required before changing defaults:
 
-- Keep `app.main` Telegram bot as the primary production entrypoint.
+- Keep `watchfacts-bot` / `app.main` as the primary production entrypoint.
 - Move reusable owner review flows to shared runtime modules where they also
   benefit MCP tools or another operator UI.
-- Keep `make deploy` deploying both Telegram bot and MCP.
+- Keep `make deploy` deploying both `watchfacts-bot` and `watchfacts-mcp`.
 - Keep `TELEGRAM_BOT_TOKEN` as required server setup for the primary bot.
 - Keep regression tests for the shared runtime independent of Telegram.
 
