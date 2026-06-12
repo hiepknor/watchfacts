@@ -67,3 +67,25 @@ def test_makefile_has_mcp_benchmark_target() -> None:
     assert "scripts/diagnostics/benchmark_mcp_queries.py" in benchmark_target
     assert '--url "$(MCP_SMOKE_URL)"' in benchmark_target
     assert "--format $(MCP_BENCHMARK_FORMAT)" in benchmark_target
+
+
+def test_makefile_has_mcp_prewarm_target() -> None:
+    makefile = Path("Makefile").read_text()
+    prewarm_target = makefile.split("\nmcp-prewarm:", 1)[1].split(
+        "\n\nmcp-wait-healthy:",
+        1,
+    )[0]
+
+    assert "scripts/diagnostics/prewarm_mcp_cache.py" in prewarm_target
+    assert '--url "$(MCP_SMOKE_URL)"' in prewarm_target
+    assert "--format $(MCP_PREWARM_FORMAT)" in prewarm_target
+
+
+def test_makefile_has_mcp_runtime_config_target() -> None:
+    makefile = Path("Makefile").read_text()
+    runtime_config_target = makefile.split("\nmcp-runtime-config:", 1)[1].split(
+        "\n\nmcp-wait-healthy:",
+        1,
+    )[0]
+
+    assert "scripts/diagnostics/runtime_config.py" in runtime_config_target

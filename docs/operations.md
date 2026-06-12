@@ -122,10 +122,16 @@ Access control:
   button click sends when generated result pages are unavailable.
 - `TELEGRAM_MAX_CONCURRENT_SEARCHES=1` serializes WatchFacts searches and shows
   a queue notice for extra concurrent queries.
-- `SEARCH_CACHE_TTL_SECONDS=300` serves repeated identical normalized searches
+- `SEARCH_CACHE_TTL_SECONDS=1800` serves repeated identical normalized searches
   from SQLite before calling WatchFacts again.
 - `SEARCH_MAX_CONCURRENT_SEARCHES=1` serializes non-Telegram WatchFacts searches,
   including Hermes/MCP requests, while identical queries still coalesce.
+- Use `make mcp-prewarm` after deploy or from a light cron to warm common
+  production query cache entries. Add `MCP_PREWARM_FORMAT=jsonl` when the output
+  should be archived as an ops artifact.
+- Existing production `.env` files are not overwritten by `.env.example`.
+  After changing cache policy, run `make mcp-runtime-config` on the server and
+  verify `search_cache_ttl_seconds=1800`.
 
 Telegram behavior:
 
@@ -385,6 +391,9 @@ MCP service:
 ```bash
 make mcp-benchmark
 MCP_BENCHMARK_FORMAT=jsonl make mcp-benchmark > mcp-benchmark.jsonl
+make mcp-runtime-config
+make mcp-prewarm
+MCP_PREWARM_FORMAT=jsonl make mcp-prewarm > mcp-prewarm.jsonl
 docker compose -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml exec -T watchfacts-mcp \
   python scripts/diagnostics/benchmark_mcp_queries.py \
   --query "Panerai Luminor" --query "Lange 1" --format markdown --allow-empty

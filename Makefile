@@ -12,6 +12,8 @@ MCP_SMOKE_URL ?= http://127.0.0.1:8765/mcp
 MCP_SMOKE_TIMEOUT_SECONDS ?= 120
 MCP_BENCHMARK_FORMAT ?= markdown
 MCP_BENCHMARK_LIMIT ?= 3
+MCP_PREWARM_FORMAT ?= text
+MCP_PREWARM_LIMIT ?= 5
 MCP_COMPOSE_SUFFIX ?= -f docker-compose.watchfacts-mcp.yml
 MCP_SERVICE ?= watchfacts-mcp
 export HERMES_DOCKER_NETWORK ?= hermes-network
@@ -25,7 +27,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-wait-healthy quality-audit predeploy-quality-check restart-hermes hermes-ps hermes-logs
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp deploy-hermes-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-runtime-config mcp-wait-healthy quality-audit predeploy-quality-check restart-hermes hermes-ps hermes-logs
 
 help:
 	@printf "%s\n" "watchfacts commands"
@@ -60,6 +62,8 @@ help:
 	@printf "%s\n" "  make mcp-smoke      Run one authorized HTTPX search smoke check"
 	@printf "%s\n" "  make mcp-smoke-set  Validate MCP search response shape for representative queries"
 	@printf "%s\n" "  make mcp-benchmark  Benchmark representative MCP search queries"
+	@printf "%s\n" "  make mcp-prewarm    Prewarm representative MCP search cache entries"
+	@printf "%s\n" "  make mcp-runtime-config Print safe effective MCP runtime config values"
 	@printf "%s\n" "  make quality-audit  Run the default production quality audit query set"
 	@printf "%s\n" "  make predeploy-quality-check Run local checks plus the default quality audit"
 	@printf "%s\n" "  make restart-hermes Recreate Hermes service after MCP schema/config changes"
@@ -167,6 +171,12 @@ mcp-smoke-set:
 
 mcp-benchmark:
 	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/benchmark_mcp_queries.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_BENCHMARK_LIMIT) --format $(MCP_BENCHMARK_FORMAT) --allow-empty
+
+mcp-prewarm:
+	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/prewarm_mcp_cache.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_PREWARM_LIMIT) --format $(MCP_PREWARM_FORMAT)
+
+mcp-runtime-config:
+	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/runtime_config.py
 
 mcp-wait-healthy:
 	@elapsed=0; \

@@ -404,7 +404,7 @@ TELEGRAM_MAX_CONCURRENT_SEARCHES=1
 Control fresh search cache TTL:
 
 ```bash
-SEARCH_CACHE_TTL_SECONDS=300
+SEARCH_CACHE_TTL_SECONDS=1800
 ```
 
 Control Hermes/MCP WatchFacts search concurrency:

@@ -72,7 +72,7 @@ Expected environment:
 | `WATCHFACTS_URL` | Yes | `https://watchfacts.com/simon-match-making` | WatchFacts page to crawl |
 | `HEADLESS` | No | `true` | Browser headless mode |
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
-| `SEARCH_CACHE_TTL_SECONDS` | No | `300` | Fresh-result cache lifetime for identical normalized searches before calling WatchFacts again |
+| `SEARCH_CACHE_TTL_SECONDS` | No | `1800` | Fresh-result cache lifetime for identical normalized searches before calling WatchFacts again |
 | `SEARCH_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum non-Telegram WatchFacts searches running at the same time; identical queries still coalesce |
 | `WATCHFACTS_HTTP_CLIENT_ENABLED` | No | `true` | Enable the lightweight HTTPX search client used by the normal Telegram/MCP runtime |
 | `WATCHFACTS_FORM_CACHE_TTL_SECONDS` | No | `900` | Lifetime for cached WatchFacts search form action and CSRF token used by HTTPX |
