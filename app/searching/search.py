@@ -81,6 +81,7 @@ class SearchDiagnostics:
     intent_reason_codes: tuple[str, ...] = ()
     guardrail_action_counts: dict[str, int] | None = None
     rejection_reasons: dict[str, int] | None = None
+    stage_timings_ms: dict[str, int] | None = None
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -106,6 +107,7 @@ class SearchDiagnostics:
             "cache_hit": self.cache_hit,
             "source_truncation_suspected": self.source_truncation_suspected,
             "rejection_reasons": self.rejection_reasons or {},
+            "stage_timings_ms": self.stage_timings_ms or {},
         }
 
 
@@ -127,6 +129,20 @@ class SearchAuditEvent:
     guardrail_action: str | None = None
     stable_audit_id: str | None = None
     kept_audit_id: str | None = None
+
+
+def _stage_elapsed_ms(started_at: float) -> int:
+    return max(0, int((time.perf_counter() - started_at) * 1000))
+
+
+def _add_stage_timing(
+    stage_timings_ms: dict[str, int],
+    stage: str,
+    started_at: float,
+) -> None:
+    stage_timings_ms[stage] = stage_timings_ms.get(stage, 0) + _stage_elapsed_ms(
+        started_at
+    )
 
 
 class WatchFactsSearchWorkflow:
@@ -157,14 +173,28 @@ class WatchFactsSearchWorkflow:
 
     async def search(self, query: str) -> list[SearchResult]:
         logger.info("event=query.start query_length=%d", len(query))
+        search_started_at = time.perf_counter()
+        stage_timings_ms: dict[str, int] = {}
         query_intent = classify_query_intent(query)
         cache_key = _search_cache_key(query, self.settings)
         in_flight_key = f"{self.settings.db_path.resolve()}:{cache_key}"
         try:
+            cache_read_started_at = time.perf_counter()
             cached_results = self._get_cached_results(cache_key)
+            _add_stage_timing(stage_timings_ms, "cache_read", cache_read_started_at)
             if cached_results is not None:
                 results, cache_metrics = cached_results
                 self.last_search_audit_events = ()
+                persist_started_at = time.perf_counter()
+                self.search_cache_repository.record_query_results(
+                    query,
+                    results,
+                    image_missing_count=cache_metrics["image_missing_count"],
+                    server_filtered_hit_count=cache_metrics["server_filtered_hit_count"],
+                    playwright_fallback_count=cache_metrics["playwright_fallback_count"],
+                )
+                _add_stage_timing(stage_timings_ms, "persist", persist_started_at)
+                stage_timings_ms["total"] = _stage_elapsed_ms(search_started_at)
                 self.last_search_diagnostics = SearchDiagnostics(
                     parsed_count=None,
                     matched_count=None,
@@ -180,24 +210,27 @@ class WatchFactsSearchWorkflow:
                     required_descriptor_tokens=query_intent.required_descriptor_tokens,
                     optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
                     intent_reason_codes=query_intent.reason_codes,
-                )
-                self.search_cache_repository.record_query_results(
-                    query,
-                    results,
-                    image_missing_count=cache_metrics["image_missing_count"],
-                    server_filtered_hit_count=cache_metrics["server_filtered_hit_count"],
-                    playwright_fallback_count=cache_metrics["playwright_fallback_count"],
+                    stage_timings_ms=dict(stage_timings_ms),
                 )
                 logger.info("event=query.cache_hit result_count=%d", len(results))
                 return results
 
+            in_flight_wait_started_at: float | None = None
             task = _IN_FLIGHT_SEARCHES.get(in_flight_key)
             if task is None:
-                task = asyncio.create_task(self._search_uncached(query, cache_key))
+                task = asyncio.create_task(
+                    self._search_uncached(
+                        query,
+                        cache_key,
+                        stage_timings_ms=stage_timings_ms,
+                        search_started_at=search_started_at,
+                    )
+                )
                 _IN_FLIGHT_SEARCHES[in_flight_key] = task
                 owner = True
             else:
                 owner = False
+                in_flight_wait_started_at = time.perf_counter()
                 logger.info("event=query.coalesced")
 
             try:
@@ -207,9 +240,25 @@ class WatchFactsSearchWorkflow:
                     _IN_FLIGHT_SEARCHES.pop(in_flight_key, None)
 
             if not owner:
+                if in_flight_wait_started_at is not None:
+                    _add_stage_timing(
+                        stage_timings_ms,
+                        "in_flight_wait",
+                        in_flight_wait_started_at,
+                    )
                 cache_metrics = self.search_cache_repository.get_quality_metrics(cache_key)
+                persist_started_at = time.perf_counter()
+                self.search_cache_repository.record_query_results(
+                    query,
+                    results,
+                    image_missing_count=self._count_missing_images(results),
+                    server_filtered_hit_count=cache_metrics["server_filtered_hit_count"],
+                    playwright_fallback_count=cache_metrics["playwright_fallback_count"],
+                )
+                _add_stage_timing(stage_timings_ms, "persist", persist_started_at)
                 if self.last_search_diagnostics is None:
                     self.last_search_audit_events = ()
+                    stage_timings_ms["total"] = _stage_elapsed_ms(search_started_at)
                     self.last_search_diagnostics = SearchDiagnostics(
                         parsed_count=None,
                         matched_count=None,
@@ -225,14 +274,8 @@ class WatchFactsSearchWorkflow:
                         required_descriptor_tokens=query_intent.required_descriptor_tokens,
                         optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
                         intent_reason_codes=query_intent.reason_codes,
+                        stage_timings_ms=dict(stage_timings_ms),
                     )
-                self.search_cache_repository.record_query_results(
-                    query,
-                    results,
-                    image_missing_count=self._count_missing_images(results),
-                    server_filtered_hit_count=cache_metrics["server_filtered_hit_count"],
-                    playwright_fallback_count=cache_metrics["playwright_fallback_count"],
-                )
             return results
         except Exception as exc:
             logger.error(
@@ -241,19 +284,46 @@ class WatchFactsSearchWorkflow:
             )
             raise
 
-    async def _search_uncached(self, query: str, cache_key: str) -> list[SearchResult]:
+    async def _search_uncached(
+        self,
+        query: str,
+        cache_key: str,
+        *,
+        stage_timings_ms: dict[str, int] | None = None,
+        search_started_at: float | None = None,
+    ) -> list[SearchResult]:
         semaphore = _search_concurrency_semaphore(self.settings)
         if semaphore is None:
-            return await self._search_uncached_inner(query, cache_key)
+            return await self._search_uncached_inner(
+                query,
+                cache_key,
+                stage_timings_ms=stage_timings_ms,
+                search_started_at=search_started_at,
+            )
+        wait_started_at = time.perf_counter()
         async with semaphore:
-            return await self._search_uncached_inner(query, cache_key)
+            stage_timings_ms = dict(stage_timings_ms or {})
+            _add_stage_timing(stage_timings_ms, "concurrency_wait", wait_started_at)
+            return await self._search_uncached_inner(
+                query,
+                cache_key,
+                stage_timings_ms=stage_timings_ms,
+                search_started_at=search_started_at,
+            )
 
     async def _search_uncached_inner(
         self,
         query: str,
         cache_key: str,
+        *,
+        stage_timings_ms: dict[str, int] | None = None,
+        search_started_at: float | None = None,
     ) -> list[SearchResult]:
+        stage_timings_ms = dict(stage_timings_ms or {})
+        search_started_at = search_started_at or time.perf_counter()
+        fetch_started_at = time.perf_counter()
         scrape_result = await self.fetch_html(self.settings, query=query)
+        _add_stage_timing(stage_timings_ms, "watchfacts_fetch", fetch_started_at)
         query_intent = classify_query_intent(query)
         audit_events: list[SearchAuditEvent] = []
         self._audit_raw_scrape(
@@ -265,6 +335,7 @@ class WatchFactsSearchWorkflow:
         )
         server_filtered_hit_count = int(scrape_result.server_filtered)
         playwright_fallback_count = int(scrape_result.used_playwright_fallback)
+        parse_started_at = time.perf_counter()
         parsed = parse_listings(scrape_result.html)
         self._audit_listing_candidates(
             audit_events,
@@ -273,6 +344,8 @@ class WatchFactsSearchWorkflow:
             stage="parsed",
             listings=parsed,
         )
+        _add_stage_timing(stage_timings_ms, "parse", parse_started_at)
+        match_started_at = time.perf_counter()
         matched = (
             _filter_server_filtered_listings(query, parsed)
             if scrape_result.server_filtered
@@ -292,13 +365,20 @@ class WatchFactsSearchWorkflow:
             parsed=parsed,
             matched=matched,
         )
+        _add_stage_timing(stage_timings_ms, "match", match_started_at)
         parsed_count = len(parsed)
         if _should_expand_year_query(query, len(matched)):
             expanded_query = _query_without_year_descriptors(query)
             if expanded_query is not None:
+                fetch_started_at = time.perf_counter()
                 expanded_scrape_result = await self.fetch_html(
                     self.settings,
                     query=expanded_query,
+                )
+                _add_stage_timing(
+                    stage_timings_ms,
+                    "watchfacts_fetch",
+                    fetch_started_at,
                 )
                 self._audit_raw_scrape(
                     audit_events,
@@ -312,6 +392,7 @@ class WatchFactsSearchWorkflow:
                 playwright_fallback_count += int(
                     expanded_scrape_result.used_playwright_fallback
                 )
+                parse_started_at = time.perf_counter()
                 expanded_parsed = parse_listings(expanded_scrape_result.html)
                 self._audit_listing_candidates(
                     audit_events,
@@ -322,6 +403,8 @@ class WatchFactsSearchWorkflow:
                     candidate_prefix="expanded-parsed",
                 )
                 parsed_count += len(expanded_parsed)
+                _add_stage_timing(stage_timings_ms, "parse", parse_started_at)
+                match_started_at = time.perf_counter()
                 expanded_matched = filter_matching_listings(query, expanded_parsed)
                 self._audit_listing_candidates(
                     audit_events,
@@ -344,6 +427,8 @@ class WatchFactsSearchWorkflow:
                 )
                 weak_match_count += expanded_weak_count
                 ambiguous_candidate_count += expanded_ambiguous_count
+                _add_stage_timing(stage_timings_ms, "match", match_started_at)
+        result_pipeline_started_at = time.perf_counter()
         results = [_to_search_result(query, listing) for listing in matched]
         self._audit_search_results(
             audit_events,
@@ -405,7 +490,32 @@ class WatchFactsSearchWorkflow:
             results=unique,
         )
         deduped_drop_count = latest_drop_count + text_drop_count
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_pipeline",
+            result_pipeline_started_at,
+        )
         self.last_search_audit_events = tuple(audit_events)
+
+        persist_started_at = time.perf_counter()
+        self.search_cache_repository.record_query_results(
+            query,
+            unique,
+            image_missing_count=self._count_missing_images(unique),
+            server_filtered_hit_count=server_filtered_hit_count,
+            playwright_fallback_count=playwright_fallback_count,
+        )
+        self._record_suspicious_results(query, unique)
+        self._record_cached_results(
+            cache_key=cache_key,
+            query=query,
+            results=unique,
+            image_missing_count=self._count_missing_images(unique),
+            server_filtered_hit_count=server_filtered_hit_count,
+            playwright_fallback_count=playwright_fallback_count,
+        )
+        _add_stage_timing(stage_timings_ms, "persist", persist_started_at)
+        stage_timings_ms["total"] = _stage_elapsed_ms(search_started_at)
         self.last_search_diagnostics = SearchDiagnostics(
             parsed_count=parsed_count,
             matched_count=len(matched),
@@ -441,23 +551,7 @@ class WatchFactsSearchWorkflow:
                 "dedupe.text": text_drop_count,
                 "guardrail.blocked_final": blocked_final_count,
             },
-        )
-
-        self.search_cache_repository.record_query_results(
-            query,
-            unique,
-            image_missing_count=self._count_missing_images(unique),
-            server_filtered_hit_count=server_filtered_hit_count,
-            playwright_fallback_count=playwright_fallback_count,
-        )
-        self._record_suspicious_results(query, unique)
-        self._record_cached_results(
-            cache_key=cache_key,
-            query=query,
-            results=unique,
-            image_missing_count=self._count_missing_images(unique),
-            server_filtered_hit_count=server_filtered_hit_count,
-            playwright_fallback_count=playwright_fallback_count,
+            stage_timings_ms=dict(stage_timings_ms),
         )
         logger.info(
             "event=query.end parsed_count=%d matched_count=%d result_count=%d",

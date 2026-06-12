@@ -477,6 +477,9 @@ Responsibilities:
   evidence, and score reason codes.
 - Include additive JSONL metadata for query intent, candidate decision, fuzzy
   score, guardrail action, stable audit id, and dedupe keep/drop relation.
+- Expose safe stage timing summaries through diagnostics and benchmark tooling
+  so maintainers can distinguish upstream WatchFacts latency from local
+  parse/match/scoring/cache overhead.
 - Summarize and compare saved JSONL artifacts with DuckDB without requiring
   WatchFacts credentials.
 - Avoid printing secrets, browser state, full page HTML, or unbounded raw

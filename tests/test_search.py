@@ -61,10 +61,23 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
     assert 0 <= diagnostics_payload["fuzzy_score_min"] <= 100
     assert isinstance(diagnostics_payload["fuzzy_score_avg"], float)
     assert 0 <= diagnostics_payload["fuzzy_score_avg"] <= 100
+    assert diagnostics_payload["stage_timings_ms"].keys() >= {
+        "cache_read",
+        "watchfacts_fetch",
+        "parse",
+        "match",
+        "result_pipeline",
+        "persist",
+        "total",
+    }
+    assert all(
+        isinstance(value, int) and value >= 0
+        for value in diagnostics_payload["stage_timings_ms"].values()
+    )
     diagnostics_payload = {
         key: value
         for key, value in diagnostics_payload.items()
-        if key not in {"fuzzy_score_min", "fuzzy_score_avg"}
+        if key not in {"fuzzy_score_min", "fuzzy_score_avg", "stage_timings_ms"}
     }
     assert diagnostics_payload == {
         "raw_candidate_count": 1,
@@ -293,6 +306,12 @@ def test_search_workflow_serves_repeated_query_from_cache(tmp_path) -> None:
     assert workflow.last_search_diagnostics.final_count == len(second)
     assert workflow.last_search_diagnostics.parsed_count is None
     assert workflow.last_search_diagnostics.source_truncation_suspected is None
+    assert workflow.last_search_diagnostics.stage_timings_ms is not None
+    assert workflow.last_search_diagnostics.stage_timings_ms.keys() >= {
+        "cache_read",
+        "persist",
+        "total",
+    }
     assert workflow.last_search_audit_events == ()
     with sqlite3.connect(settings.db_path) as connection:
         query_count = connection.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
@@ -512,6 +531,50 @@ def test_search_workflow_coalesces_concurrent_same_query_fetches(tmp_path) -> No
         query_count = connection.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
 
     assert query_count == 2
+
+
+def test_search_workflow_reports_in_flight_wait_for_coalesced_workflows(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = FIXTURE.read_text()
+    fetch_count = 0
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal fetch_count
+        fetch_count += 1
+        await asyncio.sleep(0.01)
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    owner_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+    coalesced_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    async def run_searches() -> tuple[list[SearchResult], list[SearchResult]]:
+        owner_task = asyncio.create_task(owner_workflow.search("228253a choco"))
+        await asyncio.sleep(0)
+        coalesced = await coalesced_workflow.search("228253a choco")
+        owner = await owner_task
+        return owner, coalesced
+
+    owner, coalesced = asyncio.run(run_searches())
+
+    assert fetch_count == 1
+    assert owner == coalesced
+    assert coalesced_workflow.last_search_diagnostics is not None
+    assert coalesced_workflow.last_search_diagnostics.cache_hit is True
+    assert coalesced_workflow.last_search_diagnostics.stage_timings_ms is not None
+    assert coalesced_workflow.last_search_diagnostics.stage_timings_ms.keys() >= {
+        "cache_read",
+        "in_flight_wait",
+        "persist",
+        "total",
+    }
 
 
 def test_search_workflow_limits_search_runtime_concurrent_distinct_queries(tmp_path) -> None:

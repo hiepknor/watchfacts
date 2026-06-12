@@ -32,6 +32,15 @@ def test_row_from_payload_extracts_latency_quality_and_diagnostics() -> None:
             "weak_match_count": 1,
             "ambiguous_candidate_count": 2,
             "final_count": 2,
+            "stage_timings_ms": {
+                "cache_read": 1,
+                "watchfacts_fetch": 5100,
+                "parse": 40,
+                "match": 15,
+                "result_pipeline": 30,
+                "persist": 20,
+                "total": 5206,
+            },
         },
         "results": [
             {
@@ -74,6 +83,15 @@ def test_row_from_payload_extracts_latency_quality_and_diagnostics() -> None:
     assert row.matched_count == 10
     assert row.weak_match_count == 1
     assert row.ambiguous_candidate_count == 2
+    assert row.stage_timings_ms == {
+        "cache_read": 1,
+        "watchfacts_fetch": 5100,
+        "parse": 40,
+        "match": 15,
+        "result_pipeline": 30,
+        "persist": 20,
+        "total": 5206,
+    }
     assert row.image_missing_count == 1
     assert row.source_missing_count == 1
     assert row.warning_count == 5
@@ -90,6 +108,11 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
             total_count=26,
             query_intent="reference_with_descriptor",
             cache_hit=True,
+            stage_timings_ms={
+                "cache_read": 1,
+                "watchfacts_fetch": 0,
+                "total": 80,
+            },
             top_results=("5205R Green",),
         ),
         BenchmarkRow(
@@ -106,10 +129,13 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     jsonl = render_jsonl(rows)
 
     assert "MCP_BENCH query='5205r green' ok=true" in text
+    assert "stages=cache_read:1,watchfacts_fetch:0,total:80" in text
     assert "SUMMARY" in text
     assert "| 5205r green | yes | 100 | 26 |" in markdown
+    assert "cache_read:1,watchfacts_fetch:0,total:80" in markdown
     decoded = [json.loads(line) for line in jsonl.splitlines()]
     assert decoded[0]["query"] == "5205r green"
+    assert decoded[0]["stage_timings_ms"]["total"] == 80
     assert decoded[1]["error_type"] == "RuntimeError"
 
 

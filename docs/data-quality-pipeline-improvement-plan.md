@@ -133,10 +133,14 @@ Extend `search_diagnostics` with additional optional fields:
 | `intent_reason_codes` | Short reason codes explaining intent classification |
 | `guardrail_action_counts` | Counts of emitted `warn` / `demote` guardrail actions |
 | `rejection_reasons` | Stage-level reason code counts for rejected/dropped candidates |
+| `stage_timings_ms` | Safe per-stage elapsed milliseconds for cache read, in-flight coalesced search wait, concurrency wait, WatchFacts fetch, parse, match, local result pipeline, persistence, and total search time |
 
 Rules:
 
 - Fields may be `null` on cache hits when stage-level data is unavailable.
+- `stage_timings_ms` may contain only the stages that actually ran; cache hits
+  normally include cache/persistence/total timings but not parse or match
+  timings.
 - Unknown fields must not break MCP clients, Telegram, or result templates.
 - Do not expose full raw HTML or sensitive browser/session data.
 

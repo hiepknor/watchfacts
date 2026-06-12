@@ -7,7 +7,7 @@ import os
 import statistics
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +47,7 @@ class BenchmarkRow:
     ambiguous_candidate_count: int | None = None
     image_missing_count: int | None = None
     source_missing_count: int | None = None
+    stage_timings_ms: dict[str, int] = field(default_factory=dict)
     validation_errors: tuple[str, ...] = ()
     top_results: tuple[str, ...] = ()
     error_type: str | None = None
@@ -212,6 +213,7 @@ def _row_from_payload(
         ),
         image_missing_count=image_missing_count,
         source_missing_count=source_missing_count,
+        stage_timings_ms=_stage_timings_value(diagnostics.get("stage_timings_ms")),
         validation_errors=validation_errors,
         top_results=top_results,
     )
@@ -230,8 +232,8 @@ def render_markdown(rows: list[BenchmarkRow]) -> str:
             f"max: {summary.get('max_ms', '-')}ms"
         ),
         "",
-        "| Query | OK | ms | total | intent | cache | warnings | top result |",
-        "| --- | --- | ---: | ---: | --- | --- | ---: | --- |",
+        "| Query | OK | ms | total | intent | cache | warnings | stages | top result |",
+        "| --- | --- | ---: | ---: | --- | --- | ---: | --- | --- |",
     ]
     for row in rows:
         top = row.top_results[0] if row.top_results else row.error or ""
@@ -246,6 +248,7 @@ def render_markdown(rows: list[BenchmarkRow]) -> str:
                     _md(row.query_intent or "-"),
                     _md(_bool_label(row.cache_hit)),
                     str(row.warning_count),
+                    _md(_stage_timing_summary(row.stage_timings_ms)),
                     _md(top),
                 )
             )
@@ -267,6 +270,8 @@ def render_text(rows: list[BenchmarkRow]) -> str:
             f"cache_hit={row.cache_hit}",
             f"warnings={row.warning_count}",
         ]
+        if row.stage_timings_ms:
+            details.append(f"stages={_stage_timing_summary(row.stage_timings_ms)}")
         if row.error_type:
             details.append(f"error_type={row.error_type}")
         lines.append("MCP_BENCH " + " ".join(details))
@@ -350,6 +355,46 @@ def _optional_int(value: object) -> int | None:
 
 def _optional_str(value: object) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
+
+
+def _stage_timings_value(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): int(timing)
+        for key, timing in value.items()
+        if isinstance(key, str)
+        and isinstance(timing, int)
+        and not isinstance(timing, bool)
+        and timing >= 0
+    }
+
+
+def _stage_timing_summary(stage_timings_ms: dict[str, int]) -> str:
+    if not stage_timings_ms:
+        return "-"
+    ordered_keys = (
+        "cache_read",
+        "in_flight_wait",
+        "concurrency_wait",
+        "watchfacts_fetch",
+        "parse",
+        "match",
+        "result_pipeline",
+        "persist",
+        "total",
+    )
+    parts = [
+        f"{key}:{stage_timings_ms[key]}"
+        for key in ordered_keys
+        if key in stage_timings_ms
+    ]
+    parts.extend(
+        f"{key}:{value}"
+        for key, value in sorted(stage_timings_ms.items())
+        if key not in ordered_keys
+    )
+    return ",".join(parts)
 
 
 def _non_empty_str(value: object) -> bool:
