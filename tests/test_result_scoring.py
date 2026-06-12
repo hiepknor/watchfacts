@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from app.searching.result_scoring import (
+from app.result_scoring import (
     parse_posted_date,
     rank_results_by_quality,
     score_result,
 )
-from app.runtime.telegram_bot import SearchResult
+from app.telegram_bot import SearchResult
 
 
 def test_score_result_marks_clean_result_and_parses_date() -> None:

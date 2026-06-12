@@ -257,6 +257,9 @@ Top-level modules such as `app.matcher`, `app.search`, `app.tool_runtime`,
 `app.telegram_bot`, and `app.mcp_server` remain compatibility/public import
 paths. New internal code should prefer the domain packages under
 `app/searching`, `app/integrations`, `app/runtime`, and `app/results`.
+Tests, generated regression fixtures, scripts, Docker commands, and external
+callers should continue using the public top-level paths unless they are
+explicitly validating implementation-package behavior.
 
 ## Documentation
 

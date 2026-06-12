@@ -7,10 +7,10 @@ import pytest
 
 from app.config import load_search_settings
 from app.db import Database
-from app.integrations.openwa_handoff import OpenWAChatDraftResponse
-from app.integrations.scraper import BrowserSessionStatus
-from app.searching.search_result import SearchResult
-from app.runtime.tool_runtime import (
+from app.openwa_handoff import OpenWAChatDraftResponse
+from app.scraper import BrowserSessionStatus
+from app.search_result import SearchResult
+from app.tool_runtime import (
     watchfacts_create_chat_draft_payload,
     watchfacts_get_issue_payload,
     watchfacts_health_payload,
@@ -21,7 +21,7 @@ from app.runtime.tool_runtime import (
     watchfacts_suspicious_summary_payload,
     watchfacts_update_issue_payload,
 )
-from app.integrations.watchfacts_http import WatchFactsHttpClientStatus
+from app.watchfacts_http import WatchFactsHttpClientStatus
 
 
 class FakeWorkflow:
@@ -62,7 +62,7 @@ def test_watchfacts_search_payload_includes_hybrid_refiner_when_enabled(tmp_path
             return [SearchResult("5712G Used")]
 
     monkeypatch.setattr(
-        "app.runtime.tool_runtime.WatchFactsSearchWorkflow",
+        "app.tool_runtime.WatchFactsSearchWorkflow",
         FakeRefinedWorkflow,
     )
 
@@ -928,7 +928,7 @@ def test_watchfacts_health_payload_warms_http_client_when_enabled(
         warmed.append(active_settings)
 
     monkeypatch.setattr(
-        "app.runtime.tool_runtime.warm_watchfacts_http_client",
+        "app.tool_runtime.warm_watchfacts_http_client",
         fake_warmup,
     )
 

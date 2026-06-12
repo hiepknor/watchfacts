@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.integrations.scraper import (
+from app.scraper import (
     BrowserSessionError,
     BrowserSessionStatus,
     ScrapeResult,
@@ -16,7 +16,7 @@ from app.integrations.scraper import (
     check_watchfacts_session,
     fetch_watchfacts_html,
 )
-from app.integrations.watchfacts_http import WatchFactsHttpClient
+from app.watchfacts_http import WatchFactsHttpClient
 
 
 class FakeResponse:
@@ -646,7 +646,7 @@ def test_fetch_watchfacts_html_raises_when_http_timeout(
 ) -> None:
     settings = make_settings(tmp_path, http_client_enabled=True)
 
-    import app.integrations.watchfacts_http as watchfacts_http
+    import app.watchfacts_http as watchfacts_http
 
     async def failing_http_search(active_settings, query: str, *, timeout_ms: int):
         assert active_settings == settings

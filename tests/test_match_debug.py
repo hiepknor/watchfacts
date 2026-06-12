@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.searching.match_debug import MAX_DEBUG_TEXT_LENGTH, format_match_debug
+from app.match_debug import MAX_DEBUG_TEXT_LENGTH, format_match_debug
 
 
 def test_format_match_debug_includes_trace_and_score_reasons() -> None:

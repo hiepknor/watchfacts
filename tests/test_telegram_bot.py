@@ -4,15 +4,15 @@ import asyncio
 import logging
 from types import SimpleNamespace
 
-import app.runtime.telegram_bot as telegram_bot
+import app.telegram_bot as telegram_bot
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
 from app.db import Database
-from app.integrations.openwa_handoff import (
+from app.openwa_handoff import (
     OpenWAChatDraftResponse,
     OpenWAHandoffConfig,
 )
-from app.integrations.scraper import BrowserSessionError, BrowserSessionStatus
-from app.runtime.telegram_bot import (
+from app.scraper import BrowserSessionError, BrowserSessionStatus
+from app.telegram_bot import (
     EMPTY_QUERY_MESSAGE,
     ALLOWED_USER_IDS_KEY,
     CANCEL_EMPTY_MESSAGE,
@@ -73,7 +73,7 @@ from app.runtime.telegram_bot import (
     settings_command,
     start_command,
 )
-from app.results.result_pages import ResultPageConfig
+from app.result_pages import ResultPageConfig
 
 
 def make_settings(tmp_path, *, hybrid_ai_mode: str = "shadow") -> Settings:
@@ -280,7 +280,7 @@ def test_build_result_refiner_shadow_records_suggestions_without_changing_output
     async def refine_search_results(query, results, settings, *, database=None):
         return [suggested]
 
-    monkeypatch.setattr("app.integrations.ai_refiner.refine_search_results", refine_search_results)
+    monkeypatch.setattr("app.ai_refiner.refine_search_results", refine_search_results)
 
     refiner = _build_result_refiner(settings)
     assert refiner is not None
@@ -310,7 +310,7 @@ def test_build_result_refiner_guarded_rejects_unsafe_suggestion(tmp_path, monkey
     async def refine_search_results(query, results, settings, *, database=None):
         return [suggested]
 
-    monkeypatch.setattr("app.integrations.ai_refiner.refine_search_results", refine_search_results)
+    monkeypatch.setattr("app.ai_refiner.refine_search_results", refine_search_results)
 
     refiner = _build_result_refiner(settings)
     assert refiner is not None

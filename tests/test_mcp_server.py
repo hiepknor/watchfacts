@@ -11,9 +11,9 @@ from starlette.testclient import TestClient
 
 from app.config import load_search_settings
 from app import mcp_server
-from app.integrations.openwa_handoff import OpenWAChatDraftResponse
-from app.results.result_pages import generate_result_page, read_result_page_action_payload
-from app.searching.search_result import SearchResult
+from app.openwa_handoff import OpenWAChatDraftResponse
+from app.result_pages import generate_result_page, read_result_page_action_payload
+from app.search_result import SearchResult
 
 
 def test_search_tool_calls_payload(monkeypatch) -> None:

@@ -8,7 +8,7 @@ import json
 import pytest
 
 from app.config import load_search_settings
-from app.searching.search_result import SearchResult
+from app.search_result import SearchResult
 from scripts.diagnostics import audit_quality
 from scripts.diagnostics.audit_quality import (
     DEFAULT_AUDIT_QUERIES,

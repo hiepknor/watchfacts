@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from app.searching.matcher import (
+from app.matcher import (
     RULEBOOK,
     extract_relevant_listing_text,
     explain_extraction,
@@ -11,8 +11,8 @@ from app.searching.matcher import (
     normalize_text,
     tokenize_query,
 )
-from app.searching.matcher_aliases import canonicalize_descriptor_token
-from app.searching.matcher_token_classification import parse_query_terms
+from app.matcher_aliases import canonicalize_descriptor_token
+from app.matcher_token_classification import parse_query_terms
 
 
 @dataclass(frozen=True)

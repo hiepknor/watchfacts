@@ -1,4 +1,4 @@
-from app.searching.issues import detect_suspicious_result
+from app.issues import detect_suspicious_result
 
 
 def test_detect_suspicious_result_flags_standalone_currency_suffix() -> None:

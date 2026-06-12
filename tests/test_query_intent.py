@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.searching.query_intent import classify_query_intent
+from app.query_intent import classify_query_intent
 
 
 def test_classify_reference_only_query() -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.searching.search_contracts import validate_search_diagnostics
+from app.search_contracts import validate_search_diagnostics
 from scripts.diagnostics.mcp_smoke import validate_search_payload
 
 

@@ -5,13 +5,13 @@ import logging
 import sqlite3
 from pathlib import Path
 
-import app.searching.search as search_module
+import app.search as search_module
 from app.config import Settings
 from app.db import Database
-from app.searching.parser import ListingCandidate
-from app.integrations.scraper import ScrapeResult
-from app.searching.search import SEARCH_CACHE_VERSION, WatchFactsSearchWorkflow
-from app.runtime.telegram_bot import SearchResult
+from app.parser import ListingCandidate
+from app.scraper import ScrapeResult
+from app.search import SEARCH_CACHE_VERSION, WatchFactsSearchWorkflow
+from app.telegram_bot import SearchResult
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "watchfacts_listing.html"

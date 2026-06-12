@@ -11,15 +11,15 @@ from pathlib import Path
 
 import pytest
 
-import app.results.result_pages as result_pages
-from app.results.result_pages import (
+import app.result_pages as result_pages
+from app.result_pages import (
     ResultPageConfig,
     generate_result_page,
     read_result_page_action_payload,
     read_result_page_html,
     render_result_page_template,
 )
-from app.searching.search_result import SearchResult
+from app.search_result import SearchResult
 
 
 def make_config(tmp_path, *, public_base_url: str = "https://mcp.example/results"):

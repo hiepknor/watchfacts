@@ -77,6 +77,11 @@ Top-level modules such as `app.matcher`, `app.search`, `app.tool_runtime`,
 paths for older clients, tests, scripts, and Docker entrypoints. New internal
 code should import from the domain packages above.
 
+Use public top-level paths for public contracts, generated fixtures, CLI scripts,
+and tests that exercise externally supported behavior. Use implementation paths
+under `app/searching`, `app/integrations`, `app/runtime`, and `app/results` only
+inside implementation modules or tests that explicitly validate those boundaries.
+
 The repository is implemented through the production-hardening milestone. Agents must still inspect the filesystem before editing because behavior changes quickly.
 
 ## Configuration

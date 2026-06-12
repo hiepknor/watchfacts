@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def main() -> None:
-    from app.searching.match_debug import format_match_debug
+    from app.match_debug import format_match_debug
 
     parser = argparse.ArgumentParser(
         description="Inspect deterministic matcher trace and result score.",
