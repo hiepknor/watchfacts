@@ -540,6 +540,21 @@ def test_result_page_template_keeps_in_app_browser_header_compact(tmp_path) -> N
     if chrome is None:
         pytest.skip("Chrome or Chromium is not installed")
 
+    results = [
+        {
+            "rank": rank,
+            "result_id": f"watchfacts-result-{rank:03d}",
+            "source_result_id": f"watchfacts-result-{rank:03d}",
+            "listing_text": f"5205R GREEN NEW {rank}/2026 $416,000 HKD",
+            "seller": f"Seller {rank}",
+            "posted_date": "June 12, 2026",
+            "image_url": None,
+            "source_url": None,
+            "seller_phone": None,
+            "similar_results": [],
+        }
+        for rank in range(1, 7)
+    ]
     payload = {
         "query": "5205r green",
         "created_at": "2026-06-13T04:44:00Z",
@@ -548,21 +563,8 @@ def test_result_page_template_keeps_in_app_browser_header_compact(tmp_path) -> N
         "offset": 0,
         "limit": 60,
         "next_offset": 26,
-        "result_count": 1,
-        "results": [
-            {
-                "rank": 1,
-                "result_id": "watchfacts-result-001",
-                "source_result_id": "watchfacts-result-001",
-                "listing_text": "5205R GREEN NEW 2/2026 $416,000 HKD",
-                "seller": "Mr Dain",
-                "posted_date": "June 12, 2026",
-                "image_url": None,
-                "source_url": None,
-                "seller_phone": None,
-                "similar_results": [],
-            },
-        ],
+        "result_count": len(results),
+        "results": results,
     }
     audit_script = """
     <script>
@@ -572,11 +574,13 @@ def test_result_page_template_keeps_in_app_browser_header_compact(tmp_path) -> N
           const box = node.getBoundingClientRect();
           return { y: box.y, height: box.height, bottom: box.bottom };
         };
+        const commandbarNode = document.querySelector(".commandbar");
         const chips = document.querySelectorAll(".meta-chip");
         const output = {
           viewportWidth: window.innerWidth,
           viewportHeight: window.innerHeight,
           overflowX: document.documentElement.scrollWidth > window.innerWidth,
+          commandbarPosition: getComputedStyle(commandbarNode).position,
           header: rect(".page-header"),
           commandbar: rect(".commandbar"),
           firstResult: rect(".result-card"),
@@ -584,10 +588,26 @@ def test_result_page_template_keeps_in_app_browser_header_compact(tmp_path) -> N
           expiresDisplay: getComputedStyle(chips[1]).display,
           pageDisplay: getComputedStyle(chips[2]).display
         };
-        const node = document.createElement("pre");
-        node.id = "layoutAudit";
-        node.textContent = JSON.stringify(output);
-        document.body.appendChild(node);
+        window.scrollTo(0, 380);
+        setTimeout(() => {
+          const commandbar = commandbarNode.getBoundingClientRect();
+          const visibleCards = Array.from(document.querySelectorAll(".result-card"))
+            .map((node, index) => ({ index: index + 1, rect: node.getBoundingClientRect() }))
+            .filter(item => item.rect.bottom > 0 && item.rect.top < window.innerHeight);
+          output.scrollY = window.scrollY;
+          output.commandbarAfterScroll = {
+            y: commandbar.y,
+            height: commandbar.height,
+            bottom: commandbar.bottom
+          };
+          output.commandbarOverlapsVisibleCard = visibleCards.some(item => (
+            commandbar.bottom > item.rect.top && commandbar.y < item.rect.bottom
+          ));
+          const node = document.createElement("pre");
+          node.id = "layoutAudit";
+          node.textContent = JSON.stringify(output);
+          document.body.appendChild(node);
+        }, 0);
       }, 0);
     </script>
     """
@@ -622,9 +642,12 @@ def test_result_page_template_keeps_in_app_browser_header_compact(tmp_path) -> N
     assert layout["generatedDisplay"] == "none"
     assert layout["expiresDisplay"] == "none"
     assert layout["pageDisplay"] == "inline-flex"
+    assert layout["commandbarPosition"] == "static"
     assert layout["header"]["height"] <= 125
     assert layout["commandbar"]["height"] <= 130
     assert layout["firstResult"]["y"] <= 330
+    assert layout["scrollY"] > 0
+    assert layout["commandbarOverlapsVisibleCard"] is False
 
 
 def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
