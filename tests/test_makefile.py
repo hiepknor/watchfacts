@@ -127,7 +127,9 @@ def test_makefile_has_mcp_prewarm_target() -> None:
 
     assert "scripts/diagnostics/prewarm_mcp_cache.py" in prewarm_target
     assert '--url "$(MCP_SMOKE_URL)"' in prewarm_target
+    assert "$(MCP_PREWARM_VERIFY_HOT_ARGS)" in prewarm_target
     assert "--format $(MCP_PREWARM_FORMAT)" in prewarm_target
+    assert "--use-benchmark-defaults" in prewarm_target
 
 
 def test_makefile_has_mcp_runtime_config_target() -> None:

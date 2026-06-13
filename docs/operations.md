@@ -277,7 +277,8 @@ brand queries, reducing first-query latency by populating the shared SQLite
 search cache used by both MCP and the Telegram bot. Set
 `MCP_POSTDEPLOY_PREWARM=0` to skip all warmup, or
 `MCP_POSTDEPLOY_PREWARM_BENCHMARK_DEFAULTS=0` to skip the extra benchmark/common
-brand warmup pass.
+brand warmup pass. Prewarm verifies the hot-cache path by default; set
+`MCP_PREWARM_VERIFY_HOT=0` to skip the second verification pass.
 
 `make deploy` deploys both `watchfacts-bot` and `watchfacts-mcp`.
 

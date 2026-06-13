@@ -17,6 +17,7 @@ MCP_BENCHMARK_LIMIT ?= 3
 MCP_BENCHMARK_REPEAT ?= 1
 MCP_PREWARM_FORMAT ?= text
 MCP_PREWARM_LIMIT ?= 5
+MCP_PREWARM_VERIFY_HOT ?= 1
 MCP_POSTDEPLOY_PREWARM ?= 1
 MCP_POSTDEPLOY_PREWARM_BENCHMARK_DEFAULTS ?= 1
 MCP_COMPOSE_SUFFIX ?= -f docker-compose.watchfacts-mcp.yml
@@ -67,7 +68,7 @@ help:
 	@printf "%s\n" "  make mcp-smoke      Run one authorized HTTPX search smoke check"
 	@printf "%s\n" "  make mcp-smoke-set  Validate MCP search response shape for representative queries"
 	@printf "%s\n" "  make mcp-benchmark  Benchmark representative MCP search queries"
-	@printf "%s\n" "  make mcp-prewarm    Prewarm representative MCP search cache entries"
+	@printf "%s\n" "  make mcp-prewarm    Prewarm representative MCP search cache entries and verify hot cache"
 	@printf "%s\n" "  make mcp-prewarm-benchmark-defaults Prewarm benchmark/common brand queries"
 	@printf "%s\n" "  make mcp-postdeploy-prewarm Best-effort cache prewarm after MCP deploy"
 	@printf "%s\n" "  make mcp-runtime-config Print safe effective MCP runtime config values"
@@ -144,6 +145,7 @@ login:
 	$(PYTHON) scripts/ops/login.py
 
 MCP_COMPOSE_CMD = docker compose -f docker-compose.yml $(MCP_COMPOSE_SUFFIX)
+MCP_PREWARM_VERIFY_HOT_ARGS = $(if $(filter 1 true yes on,$(MCP_PREWARM_VERIFY_HOT)),--verify-hot,)
 
 mcp-build:
 	$(MCP_COMPOSE_CMD) build $(MCP_SERVICE)
@@ -179,10 +181,10 @@ mcp-benchmark:
 	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/benchmark_mcp_queries.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_BENCHMARK_LIMIT) --repeat $(MCP_BENCHMARK_REPEAT) --format $(MCP_BENCHMARK_FORMAT) --allow-empty
 
 mcp-prewarm:
-	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/prewarm_mcp_cache.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_PREWARM_LIMIT) --format $(MCP_PREWARM_FORMAT)
+	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/prewarm_mcp_cache.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_PREWARM_LIMIT) --format $(MCP_PREWARM_FORMAT) $(MCP_PREWARM_VERIFY_HOT_ARGS)
 
 mcp-prewarm-benchmark-defaults:
-	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/prewarm_mcp_cache.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_PREWARM_LIMIT) --format $(MCP_PREWARM_FORMAT) --use-benchmark-defaults
+	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/prewarm_mcp_cache.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_PREWARM_LIMIT) --format $(MCP_PREWARM_FORMAT) $(MCP_PREWARM_VERIFY_HOT_ARGS) --use-benchmark-defaults
 
 mcp-postdeploy-prewarm:
 	@if [ "$(MCP_POSTDEPLOY_PREWARM)" = "1" ]; then \
