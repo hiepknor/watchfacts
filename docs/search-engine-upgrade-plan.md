@@ -399,11 +399,20 @@ Policy sketch:
 
 Acceptance:
 
-- [ ] `rm07-01 rg snow` returns only RG/Rosegold Snow, not WG Snow.
-- [ ] `rm07-01 rose gold` and `rm07-01 rosegold` have equivalent recall after
+- [x] `rm07-01 rg snow` returns only RG/Rosegold Snow, not WG Snow.
+- [x] `rm07-01 rose gold` and `rm07-01 rosegold` have equivalent recall after
   cache refresh.
-- [ ] Retrieval query count is bounded and visible in diagnostics.
-- [ ] Empty or low-result retrieval can expand only through documented rules.
+- [x] Retrieval query count is bounded and visible in diagnostics.
+- [x] Empty or low-result retrieval can expand only through documented rules.
+
+Implemented policy:
+
+- Reference queries with required descriptors and no optional descriptors fetch
+  the reference-only query, then use the original query for local eligibility.
+- Reference queries with optional year/date descriptors keep the exact initial
+  fetch and may expand through the existing documented no-year fallback.
+- Diagnostics expose `retrieval_query_count`, `retrieval_queries`, and
+  `retrieval_reason_codes`.
 
 Verification:
 

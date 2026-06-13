@@ -50,7 +50,7 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
 
     results = asyncio.run(workflow.search("228253a choco"))
 
-    assert fetch_calls == [(settings, "228253a choco")]
+    assert fetch_calls == [(settings, "228253a")]
     assert len(results) == 1
     assert results[0].listing_text == "Rolex 228253A choco N2 467000hkd"
     assert results[0].seller == "HK STOCKS"
@@ -106,6 +106,9 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
                 "descriptor.present",
             ],
         },
+        "retrieval_query_count": 1,
+        "retrieval_queries": ["228253a"],
+        "retrieval_reason_codes": ["retrieval.reference_with_descriptors"],
         "required_descriptor_tokens": ["choco"],
         "optional_descriptor_tokens": [],
         "intent_reason_codes": [
@@ -365,7 +368,7 @@ def test_search_workflow_serves_descriptor_alias_query_from_cache(tmp_path) -> N
     first = asyncio.run(workflow.search("rm07-01 rose gold"))
     second = asyncio.run(workflow.search("rm07-01 rg"))
 
-    assert fetch_queries == ["rm07-01 rose gold"]
+    assert fetch_queries == ["rm07-01"]
     assert second == first
     assert workflow.last_search_diagnostics is not None
     assert workflow.last_search_diagnostics.cache_hit is True
@@ -1230,6 +1233,7 @@ def test_search_workflow_falls_back_to_image_backed_reference_matches(tmp_path) 
 
 def test_search_workflow_matches_server_filtered_rg_snow_material_aliases(tmp_path) -> None:
     settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
     html = """
     {
       "listings": [
@@ -1266,6 +1270,7 @@ def test_search_workflow_matches_server_filtered_rg_snow_material_aliases(tmp_pa
     """
 
     async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
         return ScrapeResult(
             html=html,
             final_url="https://watchfacts.example/simon-search-matches",
@@ -1280,8 +1285,71 @@ def test_search_workflow_matches_server_filtered_rg_snow_material_aliases(tmp_pa
         "Rm07-01 Ladies 18K Rose Gold Diamonds Snow Setting Red Jasper Brand New Full Set Q4 2024 USD328,000",
         "RM07-01 Rosegold Snow Diamonds Red Lips Good Condition Watch Only 2,028,000HK",
     ]
+    assert fetch_queries == ["rm07-01"]
     assert workflow.last_search_diagnostics is not None
     assert workflow.last_search_diagnostics.matched_count == 2
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["retrieval_query_count"] == 1
+    assert diagnostics_payload["retrieval_queries"] == ["rm07-01"]
+    assert "retrieval.reference_with_descriptors" in diagnostics_payload[
+        "retrieval_reason_codes"
+    ]
+
+
+def test_search_workflow_uses_same_uncached_retrieval_for_compound_material_aliases(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+    html = """
+    {
+      "listings": [
+        {
+          "title": "RM07-01 RG Medset Black Lips Used 2018 / 204k usdt",
+          "companyName": "Dealer A",
+          "repostedAt": "2026-06-13 10:00:00",
+          "number": 111,
+          "frontImage": "https://watchfacts.example/rm07-rg.jpg"
+        },
+        {
+          "title": "RM07-01 Rose Gold Medset Likenew 2021 Fullset 199000USDT",
+          "companyName": "Dealer B",
+          "repostedAt": "2026-06-12 10:00:00",
+          "number": 222,
+          "frontImage": "https://watchfacts.example/rm07-rose-gold.jpg"
+        },
+        {
+          "title": "RM07-01 WG Medset Red Lips Used 2020 - 195k usdt",
+          "companyName": "Dealer C",
+          "repostedAt": "2026-06-11 10:00:00",
+          "number": 333,
+          "frontImage": "https://watchfacts.example/rm07-wg.jpg"
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    rose_gold_results = asyncio.run(workflow.search("rm07-01 rose gold"))
+    with sqlite3.connect(settings.db_path) as connection:
+        connection.execute("DELETE FROM search_cache")
+    rosegold_results = asyncio.run(workflow.search("rm07-01 rosegold"))
+
+    assert fetch_queries == ["rm07-01", "rm07-01"]
+    assert rose_gold_results == rosegold_results
+    assert [result.listing_text for result in rosegold_results] == [
+        "RM07-01 RG Medset Black Lips Used 2018 / 204k usdt",
+        "RM07-01 Rose Gold Medset Likenew 2021 Fullset 199000USDT",
+    ]
 
 
 def test_search_workflow_does_not_use_reference_only_fallback_for_multi_descriptor_query(

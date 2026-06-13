@@ -168,11 +168,23 @@ def test_validate_search_diagnostics_reports_bad_counts() -> None:
             "matched_count": 1,
             "final_count": 2,
             "deduped_drop_count": -1,
+            "retrieval_query_count": -1,
+            "retrieval_queries": "rm07-01",
+            "retrieval_reason_codes": [""],
         }
     )
 
     assert (
         "search_diagnostics.deduped_drop_count must be a non-negative integer"
+        in errors
+    )
+    assert (
+        "search_diagnostics.retrieval_query_count must be a non-negative integer"
+        in errors
+    )
+    assert "search_diagnostics.retrieval_queries must be a list" in errors
+    assert (
+        "search_diagnostics.retrieval_reason_codes[0] must be a non-empty string"
         in errors
     )
     assert "search_diagnostics.final_count must not exceed matched_count" in errors

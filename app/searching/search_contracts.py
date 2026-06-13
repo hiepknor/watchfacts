@@ -114,6 +114,7 @@ def validate_search_diagnostics(payload: dict[str, Any]) -> list[str]:
         "deduped_drop_count",
         "weak_match_count",
         "ambiguous_candidate_count",
+        "retrieval_query_count",
         "final_count",
     ):
         _validate_optional_non_negative_int(
@@ -134,6 +135,13 @@ def validate_search_diagnostics(payload: dict[str, Any]) -> list[str]:
             and final_count > matched_count
         ):
             errors.append("search_diagnostics.final_count must not exceed matched_count")
+    for field in ("retrieval_queries", "retrieval_reason_codes"):
+        if field in payload:
+            _validate_string_list(
+                payload.get(field),
+                errors,
+                prefix=f"search_diagnostics.{field}",
+            )
     _validate_query_plan(payload.get("query_plan"), errors)
     return errors
 

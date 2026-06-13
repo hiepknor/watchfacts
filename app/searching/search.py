@@ -45,7 +45,7 @@ from app.searching.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger("app.search")
-SEARCH_CACHE_VERSION = "search-v21"
+SEARCH_CACHE_VERSION = "search-v22"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -82,6 +82,9 @@ class SearchDiagnostics:
     fuzzy_score_avg: float | None = None
     query_intent: str | None = None
     query_plan: QueryPlan | None = None
+    retrieval_query_count: int | None = None
+    retrieval_queries: tuple[str, ...] = ()
+    retrieval_reason_codes: tuple[str, ...] = ()
     required_descriptor_tokens: tuple[str, ...] = ()
     optional_descriptor_tokens: tuple[str, ...] = ()
     intent_reason_codes: tuple[str, ...] = ()
@@ -104,6 +107,9 @@ class SearchDiagnostics:
             "fuzzy_score_avg": self.fuzzy_score_avg,
             "query_intent": self.query_intent,
             "query_plan": self.query_plan.to_payload() if self.query_plan else None,
+            "retrieval_query_count": self.retrieval_query_count,
+            "retrieval_queries": list(self.retrieval_queries),
+            "retrieval_reason_codes": list(self.retrieval_reason_codes),
             "required_descriptor_tokens": list(self.required_descriptor_tokens),
             "optional_descriptor_tokens": list(self.optional_descriptor_tokens),
             "intent_reason_codes": list(self.intent_reason_codes),
@@ -136,6 +142,13 @@ class SearchAuditEvent:
     guardrail_action: str | None = None
     stable_audit_id: str | None = None
     kept_audit_id: str | None = None
+
+
+@dataclass(frozen=True)
+class RetrievalPlan:
+    fetch_queries: tuple[str, ...]
+    local_filter_query: str
+    reason_codes: tuple[str, ...]
 
 
 def _stage_elapsed_ms(started_at: float) -> int:
@@ -184,6 +197,7 @@ class WatchFactsSearchWorkflow:
         stage_timings_ms: dict[str, int] = {}
         query_intent = classify_query_intent(query)
         query_plan = build_query_plan(query)
+        retrieval_plan = _build_retrieval_plan(query, query_plan)
         cache_key = _search_cache_key(query, self.settings)
         in_flight_key = f"{self.settings.db_path.resolve()}:{cache_key}"
         try:
@@ -216,6 +230,9 @@ class WatchFactsSearchWorkflow:
                     source_truncation_suspected=None,
                     query_intent=query_intent.kind,
                     query_plan=query_plan,
+                    retrieval_query_count=len(retrieval_plan.fetch_queries),
+                    retrieval_queries=retrieval_plan.fetch_queries,
+                    retrieval_reason_codes=retrieval_plan.reason_codes,
                     required_descriptor_tokens=query_intent.required_descriptor_tokens,
                     optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
                     intent_reason_codes=query_intent.reason_codes,
@@ -281,6 +298,9 @@ class WatchFactsSearchWorkflow:
                         source_truncation_suspected=None,
                         query_intent=query_intent.kind,
                         query_plan=query_plan,
+                        retrieval_query_count=len(retrieval_plan.fetch_queries),
+                        retrieval_queries=retrieval_plan.fetch_queries,
+                        retrieval_reason_codes=retrieval_plan.reason_codes,
                         required_descriptor_tokens=query_intent.required_descriptor_tokens,
                         optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
                         intent_reason_codes=query_intent.reason_codes,
@@ -331,11 +351,18 @@ class WatchFactsSearchWorkflow:
     ) -> list[SearchResult]:
         stage_timings_ms = dict(stage_timings_ms or {})
         search_started_at = search_started_at or time.perf_counter()
-        fetch_started_at = time.perf_counter()
-        scrape_result = await self.fetch_html(self.settings, query=query)
-        _add_stage_timing(stage_timings_ms, "watchfacts_fetch", fetch_started_at)
         query_intent = classify_query_intent(query)
         query_plan = build_query_plan(query)
+        retrieval_plan = _build_retrieval_plan(query, query_plan)
+        local_filter_query = retrieval_plan.local_filter_query
+        retrieval_queries = list(retrieval_plan.fetch_queries)
+        retrieval_reason_codes = list(retrieval_plan.reason_codes)
+        fetch_started_at = time.perf_counter()
+        scrape_result = await self.fetch_html(
+            self.settings,
+            query=retrieval_plan.fetch_queries[0],
+        )
+        _add_stage_timing(stage_timings_ms, "watchfacts_fetch", fetch_started_at)
         audit_events: list[SearchAuditEvent] = []
         self._audit_raw_scrape(
             audit_events,
@@ -343,6 +370,7 @@ class WatchFactsSearchWorkflow:
             query_intent=query_intent,
             scrape_result=scrape_result,
             candidate_id="raw:1",
+            reason_codes=retrieval_plan.reason_codes,
         )
         server_filtered_hit_count = int(scrape_result.server_filtered)
         playwright_fallback_count = int(scrape_result.used_playwright_fallback)
@@ -358,9 +386,9 @@ class WatchFactsSearchWorkflow:
         _add_stage_timing(stage_timings_ms, "parse", parse_started_at)
         match_started_at = time.perf_counter()
         matched = (
-            _filter_server_filtered_listings(query, parsed)
+            _filter_server_filtered_listings(local_filter_query, parsed)
             if scrape_result.server_filtered
-            else filter_matching_listings(query, parsed)
+            else filter_matching_listings(local_filter_query, parsed)
         )
         self._audit_listing_candidates(
             audit_events,
@@ -378,14 +406,17 @@ class WatchFactsSearchWorkflow:
         )
         _add_stage_timing(stage_timings_ms, "match", match_started_at)
         parsed_count = len(parsed)
-        if _should_expand_year_query(query, len(matched)):
-            expanded_query = _query_without_year_descriptors(query)
+        if _should_expand_year_query(local_filter_query, len(matched)):
+            expanded_query = _query_without_year_descriptors(local_filter_query)
             if expanded_query is not None:
                 fetch_started_at = time.perf_counter()
                 expanded_scrape_result = await self.fetch_html(
                     self.settings,
                     query=expanded_query,
                 )
+                if expanded_query not in retrieval_queries:
+                    retrieval_queries.append(expanded_query)
+                retrieval_reason_codes.append("retrieval.expand_without_year_descriptor")
                 _add_stage_timing(
                     stage_timings_ms,
                     "watchfacts_fetch",
@@ -416,7 +447,10 @@ class WatchFactsSearchWorkflow:
                 parsed_count += len(expanded_parsed)
                 _add_stage_timing(stage_timings_ms, "parse", parse_started_at)
                 match_started_at = time.perf_counter()
-                expanded_matched = filter_matching_listings(query, expanded_parsed)
+                expanded_matched = filter_matching_listings(
+                    local_filter_query,
+                    expanded_parsed,
+                )
                 self._audit_listing_candidates(
                     audit_events,
                     query=query,
@@ -554,6 +588,9 @@ class WatchFactsSearchWorkflow:
             ),
             query_intent=query_intent.kind,
             query_plan=query_plan,
+            retrieval_query_count=len(retrieval_queries),
+            retrieval_queries=tuple(retrieval_queries),
+            retrieval_reason_codes=_dedupe_strings(retrieval_reason_codes),
             required_descriptor_tokens=query_intent.required_descriptor_tokens,
             optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
             intent_reason_codes=query_intent.reason_codes,
@@ -1214,6 +1251,45 @@ def _looks_like_product_reference(token: str) -> bool:
 
 def _should_expand_year_query(query: str, matched_count: int) -> bool:
     return matched_count < 5 and _query_without_year_descriptors(query) is not None
+
+
+def _build_retrieval_plan(query: str, query_plan: QueryPlan) -> RetrievalPlan:
+    reference_query = _reference_retrieval_query(query_plan)
+    if (
+        reference_query
+        and query_plan.required_descriptors
+        and not query_plan.optional_descriptors
+    ):
+        return RetrievalPlan(
+            fetch_queries=(reference_query,),
+            local_filter_query=query,
+            reason_codes=("retrieval.reference_with_descriptors",),
+        )
+    return RetrievalPlan(
+        fetch_queries=(query,),
+        local_filter_query=query,
+        reason_codes=("retrieval.raw_query",),
+    )
+
+
+def _reference_retrieval_query(query_plan: QueryPlan) -> str:
+    references = [
+        " ".join(reference)
+        for reference in query_plan.references
+        if any(part for part in reference)
+    ]
+    return " ".join(references)
+
+
+def _dedupe_strings(values: list[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        deduped.append(value)
+        seen.add(value)
+    return tuple(deduped)
 
 
 COLOR_DESCRIPTOR_GROUP = {
