@@ -17,7 +17,7 @@ service for structured integrations, result pages, diagnostics, and handoff.
 | [Architecture Redesign](architecture-redesign.md) | Layered runtime target, dependency rules, migration phases, and AI/use-case boundaries |
 | [System Design Review](system-design-review.md) | Architecture review snapshot, strengths, risks, and prioritized follow-ups |
 | [Search Quality Improvement Plan](search-quality-improvement-plan.md) | One-month plan for image attribution, stock-list scoping, audit visibility, and deploy verification |
-| [Search Engine Upgrade Plan](search-engine-upgrade-plan.md) | Concrete plan for query recognition, retrieval planning, parser segmentation, ranking guardrails, and evaluation gates |
+| [Search Engine Upgrade Plan](search-engine-upgrade-plan.md) | Concrete plan for query recognition, multi-brand taxonomy, retrieval planning, parser segmentation, ranking guardrails, and evaluation gates |
 | [Continuous Improvement Spec](continuous-improvement.md) | Feedback buttons, issue storage, suspicious-result detection, and regression loop |
 | [Result Quality Scoring Spec](result-quality-scoring.md) | Next-phase ranking, matcher diagnostics, score reasons, and refactor guardrails |
 | [Production Quality Audit Spec](production-quality-audit.md) | Production query audit loop, issue classification, ambiguous price policy, and deploy verification |
@@ -58,7 +58,7 @@ Agents should read documents selectively:
 - For matching/parser changes: read `technical-spec.md` and ADR-001.
 - For result ranking or next-phase matcher diagnostics: read `result-quality-scoring.md`, `technical-spec.md`, and ADR-001.
 - For search quality improvement work: read `search-quality-improvement-plan.md`, `system-design-review.md`, `production-quality-audit.md`, and `result-quality-scoring.md`.
-- For search engine upgrades across query recognition, retrieval planning, parser segmentation, or ranking guardrails: read `search-engine-upgrade-plan.md`, `technical-spec.md`, `production-quality-audit.md`, and ADR-001.
+- For search engine upgrades across query recognition, brand/reference taxonomy, retrieval planning, parser segmentation, or ranking guardrails: read `search-engine-upgrade-plan.md`, `technical-spec.md`, `production-quality-audit.md`, and ADR-001.
 - For production query audits or quality gate changes: read `production-quality-audit.md`, `result-quality-scoring.md`, and `operations.md`.
 - For data pipeline quality, audit funnel exports, DuckDB/RapidFuzz diagnostics, or dedupe evidence work: read `data-quality-pipeline-improvement-plan.md`, `production-quality-audit.md`, and `result-quality-scoring.md`.
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.

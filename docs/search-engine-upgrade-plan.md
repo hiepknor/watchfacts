@@ -22,6 +22,11 @@ The goal is better recall and faster repeated searches without reducing result
 quality. Core matching, parsing, and ranking must remain deterministic. Do not
 introduce LLM matching or semantic search into the core WatchFacts path.
 
+The upgrade must work beyond one Richard Mille hard case. Brand-specific terms,
+references, collections, and nicknames should be recognized through small
+deterministic rulebooks layered on top of global descriptor rules, not through
+one-off patches for each query.
+
 ## Current Evidence
 
 Recent production audits showed that equivalent material queries can have very
@@ -48,6 +53,19 @@ and bumps the search cache version so stale phrase-query results are not reused.
 That patch fixes a narrow class of alias misses. This plan generalizes the same
 principle across query recognition, retrieval planning, and parser scoping.
 
+The same failure mode can happen for other brands:
+
+```text
+daytona panda        -> Rolex Daytona white/black dial context
+126500ln white       -> Rolex Daytona reference plus dial color
+5711 blue            -> Patek Philippe Nautilus reference plus dial color
+15500st blue         -> Audemars Piguet Royal Oak reference plus dial color
+```
+
+These cases should share the same recognition, retrieval, and filtering
+machinery. The only brand-specific part should be compact taxonomy data and
+reference grammar.
+
 ## Design Principles
 
 - Keep core search deterministic and auditable.
@@ -60,6 +78,15 @@ principle across query recognition, retrieval planning, and parser scoping.
   extraction decisions.
 - Back every behavior change with production audit evidence and regression
   tests.
+- Separate global descriptors from brand taxonomies. Material, color, condition,
+  set, size, and year rules should be reusable across Rolex, Patek Philippe,
+  Audemars Piguet, Richard Mille, and future brands.
+- Keep brand-specific logic data-driven where practical: brand aliases,
+  collection names, nickname expansions, and reference grammar should live in a
+  small rulebook instead of scattered `if brand == ...` branches.
+- Use recall-first retrieval and precision-first local matching. Retrieval may
+  broaden through documented aliases or nicknames, but matcher eligibility must
+  remain strict and explainable.
 - Avoid project bloat: add a module only when it replaces logic currently
   duplicated across parser, matcher, search, scoring, or diagnostics.
 
@@ -68,7 +95,10 @@ principle across query recognition, retrieval planning, and parser scoping.
 ```text
 raw user query
   -> query recognition
+       brand candidates
        references
+       collections/models
+       nicknames
        canonical descriptors
        optional descriptors
        conflict groups
@@ -91,7 +121,8 @@ raw user query
 ### Task 1.1: Introduce Descriptor Rulebook
 
 Description: Move descriptor aliases, compound phrases, semantic groups, and
-conflict rules into one deterministic rulebook.
+conflict rules into one deterministic global rulebook. This layer is brand
+agnostic.
 
 Initial descriptor groups:
 
@@ -103,6 +134,8 @@ Initial descriptor groups:
 | `gray` | `gray`, `grey` | color | other color group members |
 | `choco` | `choco`, `chocolate`, `cho` | color/dial | other color group members |
 | `mete` | `mete`, `meteorite` | dial/material detail | none initially |
+| `fullset` | `fullset`, `full set`, `complete set` | set | none initially |
+| `nos` | `nos`, `new old stock` | condition | none initially |
 
 Acceptance:
 
@@ -131,7 +164,9 @@ Likely files:
 ### Task 1.2: Add QueryPlan Metadata
 
 Description: Add a small query planning structure that records the normalized
-query intent without changing retrieval behavior yet.
+query intent without changing retrieval behavior yet. The structure should be
+brand-aware, but not brand-coupled: missing brand data must not block reference
+and descriptor matching.
 
 Suggested fields:
 
@@ -139,7 +174,10 @@ Suggested fields:
 | --- | --- |
 | `original_query` | Raw user query |
 | `canonical_query` | Query after phrase and alias folding |
+| `brand_candidates` | Detected brand aliases with confidence and source terms |
 | `references` | Parsed reference terms |
+| `collections` | Collection/model names such as Daytona, Nautilus, Royal Oak |
+| `nicknames` | Nickname expansions such as panda, pepsi, batman, sprite, hulk, root beer |
 | `required_descriptors` | Descriptor tokens required for eligibility |
 | `optional_descriptors` | Year/date/condition tokens treated as soft signals |
 | `conflict_descriptors` | Canonical descriptors that should reject or demote results |
@@ -166,6 +204,96 @@ Likely files:
 - `app/searching/query_intent.py`
 - `app/searching/search.py`
 - `scripts/diagnostics/audit_quality.py`
+- `tests/test_search.py`
+- `tests/test_audit_quality.py`
+
+### Task 1.3: Add Brand Taxonomy And Reference Grammar
+
+Description: Add a compact deterministic brand taxonomy for the highest-value
+WatchFacts brands. This should improve recognition without turning the codebase
+into a large catalog project.
+
+Initial taxonomy shape:
+
+| Layer | Examples | Purpose |
+| --- | --- | --- |
+| brand aliases | `rolex`, `patek`, `patek philippe`, `ap`, `audemars piguet`, `rm`, `richard mille` | Identify likely brand context |
+| collections | `daytona`, `submariner`, `gmt`, `nautilus`, `aquanaut`, `royal oak`, `offshore` | Add model/family context |
+| nicknames | `panda`, `pepsi`, `batman`, `batgirl`, `sprite`, `hulk`, `starbucks`, `root beer` | Expand common market shorthand |
+| reference grammar | `126500ln`, `116500ln`, `5711`, `5712`, `5167a`, `15500st`, `15510st`, `rm07-01` | Detect references consistently |
+
+Rulebook organization:
+
+```text
+global descriptor rules
+  material/color/dial/condition/set/year/size
+brand taxonomy rules
+  brand aliases
+  collections
+  nicknames
+  reference grammar
+query plan builder
+  merges both layers into one deterministic plan
+```
+
+Initial brand examples:
+
+```text
+126500ln white
+  brand_candidates: rolex
+  references: 126500ln
+  collections: daytona
+  required_descriptors: white
+
+daytona panda
+  brand_candidates: rolex
+  collections: daytona
+  nicknames: panda
+  required_descriptors: white, black-context
+
+5711 blue
+  brand_candidates: patek philippe
+  references: 5711
+  collections: nautilus
+  required_descriptors: blue
+
+15500st blue
+  brand_candidates: audemars piguet
+  references: 15500st
+  collections: royal oak
+  required_descriptors: blue
+```
+
+Acceptance:
+
+- [ ] Brand aliases, collections, nicknames, and reference grammar are defined in
+  data structures, not scattered conditional branches.
+- [ ] Unknown brands still flow through the global descriptor/reference matcher.
+- [ ] QueryPlan diagnostics show which terms came from global rules versus
+  brand taxonomy rules.
+- [ ] Nickname expansions are explainable and can be locally filtered to avoid
+  broad false positives.
+- [ ] The taxonomy starts with only high-value brands observed in audits, then
+  expands through benchmark evidence.
+
+Verification:
+
+```bash
+python -m pytest tests/test_matcher.py tests/test_search.py tests/test_audit_quality.py
+python scripts/diagnostics/audit_quality.py \
+  "126500ln white" \
+  "daytona panda" \
+  "5711 blue" \
+  "15500st blue" \
+  --limit 5
+```
+
+Likely files:
+
+- `app/searching/matcher_rulebook.py`
+- `app/searching/query_intent.py`
+- `app/searching/matcher_token_classification.py`
+- `tests/test_matcher.py`
 - `tests/test_search.py`
 - `tests/test_audit_quality.py`
 
@@ -226,7 +354,9 @@ Policy sketch:
 | reference + safe alias descriptor | Fetch canonical reference query | Required canonical descriptor |
 | reference + multiple descriptors | Fetch reference or reduced canonical query | All required descriptors local to reference |
 | reference + optional year | Fetch exact, optionally expand without year when under threshold | Year is soft/demote, not hard reject |
-| brand/model text | Prefer raw query | Descriptor/model term eligibility |
+| brand/model text | Prefer raw query, optionally add known collection or nickname expansions | Descriptor/model term eligibility |
+| brand nickname | Fetch bounded nickname/collection expansion | Nickname-expanded descriptor eligibility |
+| reference + brand taxonomy descriptors | Fetch reference or canonical reference query | Brand/reference/descriptors local to item |
 
 Acceptance:
 
@@ -253,6 +383,57 @@ Likely files:
 - `app/searching/search.py`
 - `tests/test_search.py`
 - `tests/test_scraper.py`
+
+### Task 2.3: Multi-Brand Retrieval Expansion Rules
+
+Description: Add bounded retrieval expansions for brand/model/nickname queries
+after QueryPlan diagnostics are stable. The retrieval planner may add alternate
+queries only when they are documented and locally filterable.
+
+Examples:
+
+```text
+daytona panda
+  retrieval candidates: "daytona panda", "daytona white", "126500ln white", "116500ln white"
+  local filter: Daytona context plus white/black dial context or matching reference
+
+5711 blue
+  retrieval candidates: "5711 blue", "nautilus 5711 blue"
+  local filter: 5711 reference plus blue descriptor
+
+15500st blue
+  retrieval candidates: "15500st blue", "royal oak 15500st blue"
+  local filter: 15500st reference plus blue descriptor
+```
+
+Acceptance:
+
+- [ ] Retrieval expansions are bounded per query and visible in diagnostics.
+- [ ] Each expansion has a local eligibility rule before it can affect output.
+- [ ] Brand/model/nickname expansions do not change reference-only behavior.
+- [ ] Equivalent canonical queries share cache keys when safe; broad nickname
+  expansions keep separate keys when they represent different retrieval intent.
+
+Verification:
+
+```bash
+python -m pytest tests/test_search.py tests/test_audit_quality.py
+python scripts/diagnostics/benchmark_mcp_queries.py \
+  --query "126500ln white" \
+  --query "daytona panda" \
+  --query "5711 blue" \
+  --query "15500st blue" \
+  --format markdown \
+  --allow-empty
+```
+
+Likely files:
+
+- `app/searching/search.py`
+- `app/searching/query_intent.py`
+- `scripts/diagnostics/benchmark_mcp_queries.py`
+- `tests/test_search.py`
+- `tests/test_audit_quality.py`
 
 ## Phase 3: Parser And Segmenter V2
 
@@ -409,7 +590,8 @@ Likely files:
 
 ### Task 5.1: Alias-Pair Benchmark Set
 
-Description: Keep a focused benchmark for equivalent query phrasings.
+Description: Keep a focused benchmark for equivalent query phrasings and
+multi-brand recognition coverage.
 
 Initial query pairs:
 
@@ -425,10 +607,21 @@ rm07-01 rg snow
 rm07-01 rose gold snow
 ```
 
+Initial multi-brand queries:
+
+```text
+126500ln white
+daytona panda
+5711 blue
+15500st blue
+```
+
 Acceptance:
 
 - [ ] Benchmark reports total count, top result, cache hit, and stage timings.
 - [ ] Alias-equivalent queries have comparable recall after canonicalization.
+- [ ] Brand/model/nickname queries report recognized brand, collection,
+  reference, descriptor, and retrieval expansion reason codes.
 - [ ] Benchmark output can be saved as JSONL for later comparison.
 
 Verification:
@@ -441,6 +634,10 @@ python scripts/diagnostics/benchmark_mcp_queries.py \
   --query "rm07-01 white gold" \
   --query "rm07-01 mop" \
   --query "rm07-01 mother of pearl" \
+  --query "126500ln white" \
+  --query "daytona panda" \
+  --query "5711 blue" \
+  --query "15500st blue" \
   --format markdown \
   --allow-empty
 ```
@@ -499,6 +696,8 @@ Track these before and after each phase:
 | cold-path WatchFacts fetch latency | Recorded, not regressed without reason |
 | weak match rate | Does not increase |
 | ambiguous candidate rate | Decreases or becomes better explained |
+| brand-recognition coverage | Increases for audited high-value brands |
+| nickname false-positive rate | Does not increase beyond benchmark threshold |
 | stock-list scoped rate | Decreases for queries improved by segmentation |
 | missing image rate | Does not improve by showing wrong images |
 | validation errors | Zero |
@@ -512,6 +711,8 @@ Track these before and after each phase:
 | Parser segmentation drops valid neighboring text | Medium | Keep parent raw preview in audit and add regression fixtures |
 | Ranking hides valid but incomplete results | Medium | Demote with reasons rather than delete unless matcher rejects |
 | Project grows too many modules | Medium | Add modules only when replacing duplicated logic |
+| Brand taxonomy grows into a full product catalog | Medium | Start with observed high-value aliases only; require benchmark evidence before adding new terms |
+| Nickname expansion over-fetches unrelated listings | Medium | Bound retrieval expansion count and require local eligibility checks |
 | Cached stale results mask improvements | Medium | Bump `SEARCH_CACHE_VERSION` for behavior-changing search patches |
 
 ## Non-Goals
@@ -519,11 +720,14 @@ Track these before and after each phase:
 - Replacing deterministic matching with LLM or semantic ranking.
 - Letting MCP clients reimplement WatchFacts search in prompts.
 - Fetching unbounded WatchFacts pages for one query.
+- Building a complete watch reference encyclopedia.
+- Guaranteeing every nickname for every brand before there is audit evidence.
 - Showing ambiguous parent images just to reduce missing-image rate.
 - Rewriting the whole parser, matcher, and ranking stack in one change.
 
 ## Recommended Next Step
 
-Start with Phase 1 Task 1.1 and Task 1.2. Query recognition is the foundation
-for retrieval planning and parser/ranking guardrails, and it has the smallest
-runtime risk when introduced with diagnostics first.
+Start with Phase 1 Task 1.1 and Task 1.2, then add Task 1.3 only for the
+highest-value audited brands. Query recognition is the foundation for retrieval
+planning and parser/ranking guardrails, and it has the smallest runtime risk
+when introduced with diagnostics first.

@@ -1252,15 +1252,18 @@ Use [Search Engine Upgrade Plan](search-engine-upgrade-plan.md) as the detailed
 task breakdown for improving the deterministic search engine across:
 
 - query recognition and canonical descriptor planning
+- brand/reference taxonomy for high-value audited brands
 - WatchFacts retrieval planning and canonical cache keys
 - parser/stock-list item segmentation
 - feature-based ranking and conflict guardrails
-- alias-pair benchmarks and deploy gates
+- alias-pair, multi-brand benchmarks, and deploy gates
 
 Acceptance:
 
 - [ ] Equivalent alias queries such as `rm07-01 rg`, `rm07-01 rosegold`, and
   `rm07-01 rose gold` have comparable recall after cache refresh.
+- [ ] Brand/model/nickname queries such as `126500ln white`, `daytona panda`,
+  `5711 blue`, and `15500st blue` expose deterministic recognition metadata.
 - [ ] Retrieval stays broad enough to avoid missed aliases while local matching
   remains strict and deterministic.
 - [ ] Parser segmentation reduces stock-list leakage without showing wrong
