@@ -5,7 +5,10 @@ from difflib import SequenceMatcher
 import re
 
 from app.searching.matcher_normalization import normalize_text
-from app.searching.matcher_aliases import canonicalize_descriptor_tokens_as_set
+from app.searching.matcher_aliases import (
+    canonicalize_descriptor_tokens_as_set,
+    descriptor_exists_in_tokens,
+)
 from app.searching.matcher_token_classification import parse_query_terms
 
 try:
@@ -85,9 +88,11 @@ def _descriptor_overlap_score(
 ) -> int:
     if not descriptor_tokens:
         return 100
-    listing_tokens = canonicalize_descriptor_tokens_as_set(normalized_listing.split())
+    listing_tokens = normalized_listing.split()
     query_tokens = canonicalize_descriptor_tokens_as_set(descriptor_tokens)
-    matched = sum(1 for token in query_tokens if token in listing_tokens)
+    matched = sum(
+        1 for token in query_tokens if descriptor_exists_in_tokens(token, listing_tokens)
+    )
     if not query_tokens:
         return 100
     return round((matched / len(query_tokens)) * 100)

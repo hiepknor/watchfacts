@@ -76,6 +76,25 @@ def test_descriptor_aliases_are_global_tokens() -> None:
     assert canonicalize_descriptor_token("cho") == "choco"
     assert canonicalize_descriptor_token("meteorite") == "mete"
     assert canonicalize_descriptor_token("grey") == "gray"
+    assert canonicalize_descriptor_token("rosegold") == "rg"
+    assert canonicalize_descriptor_token("rose-gold") == "rg"
+    assert canonicalize_descriptor_token("whitegold") == "wg"
+    assert canonicalize_descriptor_token("white-gold") == "wg"
+
+
+def test_listing_matches_material_alias_phrases_near_reference() -> None:
+    assert listing_matches(
+        "rm07-01 rg snow",
+        "RM07-01 Rose Gold Diamonds Snow Setting Red Jasper full set USD328000",
+    )
+    assert listing_matches(
+        "rm07-01 rg snow",
+        "RM07-01 Rosegold Snow Diamonds Red Lips Good Condition 260000US",
+    )
+    assert not listing_matches(
+        "rm07-01 rg snow",
+        "RM07-01 WG Snow Onyx N4-26 360000 USDT",
+    )
 
 
 def test_parse_query_terms_ignores_connector_tokens() -> None:

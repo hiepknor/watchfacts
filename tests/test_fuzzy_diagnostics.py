@@ -34,3 +34,14 @@ def test_score_fuzzy_match_uses_canonical_descriptor_aliases() -> None:
     assert score.reference_score == 100
     assert score.descriptor_overlap_score == 100
     assert "descriptor_overlap_low" not in score.reason_codes
+
+
+def test_score_fuzzy_match_uses_material_alias_phrases() -> None:
+    score = score_fuzzy_match(
+        "rm07-01 rg snow",
+        "RM07-01 Rose Gold Diamonds Snow Setting Red Jasper USD328000",
+    )
+
+    assert score.reference_score == 100
+    assert score.descriptor_overlap_score == 100
+    assert "descriptor_overlap_low" not in score.reason_codes

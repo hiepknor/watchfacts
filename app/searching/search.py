@@ -1270,6 +1270,9 @@ def _filter_server_filtered_listings(
     if strict_matches:
         return strict_matches
 
+    if not _server_filtered_image_backed_fallback_allowed(query):
+        return []
+
     return _merge_listing_candidates(
         strict_matches,
         _server_filtered_image_backed_fallback_matches(query, filtered),
@@ -1326,6 +1329,16 @@ def _server_filtered_image_backed_fallback_matches(
 def _server_filtered_reference_query(query: str) -> str:
     reference_terms, _ = parse_query_terms(query)
     return " ".join(" ".join(reference_term) for reference_term in reference_terms)
+
+
+def _server_filtered_image_backed_fallback_allowed(query: str) -> bool:
+    intent = classify_query_intent(query)
+    effective_descriptors = {
+        token
+        for token in intent.required_descriptor_tokens
+        if token not in SERVER_FILTERED_ALIAS_EXPANSION_DESCRIPTORS
+    }
+    return len(effective_descriptors) <= 1
 
 
 def _server_filtered_query_requires_local_matching(

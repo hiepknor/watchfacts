@@ -9,7 +9,10 @@ from app.searching.matcher_normalization import (
     normalize_text,
     tokenize_query,
 )
-from app.searching.matcher_aliases import canonicalize_descriptor_token as _canonicalize_descriptor_token
+from app.searching.matcher_aliases import (
+    canonicalize_descriptor_token as _canonicalize_descriptor_token,
+    descriptor_exists_in_tokens as _descriptor_exists_in_tokens,
+)
 from app.searching.matcher_rulebook import ExtractionTrace, QueryIntent
 from app.searching.matcher_token_classification import (
     CURRENCY_PREFIX_CHARS,
@@ -419,12 +422,10 @@ def _reference_has_local_descriptors(
         if match_length is None:
             continue
 
-        local_tokens = set(
-            _local_descriptor_tokens(
-                listing_tokens,
-                index + match_length - 1,
-                descriptor_tokens,
-            )
+        local_tokens = _local_descriptor_tokens(
+            listing_tokens,
+            index + match_length - 1,
+            descriptor_tokens,
         )
         if _descriptors_match_local_tokens(descriptor_tokens, local_tokens):
             return True
@@ -444,20 +445,17 @@ def _descriptors_match_local_tokens(
 
 
 def _descriptor_exists_in_listing(descriptor: str, listing_tokens: Iterable[str]) -> bool:
-    return any(
-        _descriptor_token_matches(descriptor, listing_token)
-        for listing_token in listing_tokens
-    )
-
-
-def _descriptor_token_matches(descriptor: str, listing_token: str) -> bool:
-    normalized_descriptor = _canonicalize_descriptor_token(descriptor)
-    normalized_listing_token = _canonicalize_descriptor_token(listing_token)
-    if normalized_descriptor == normalized_listing_token:
+    listing_token_list = list(listing_tokens)
+    if _descriptor_exists_in_tokens(descriptor, listing_token_list):
         return True
+
+    normalized_descriptor = _canonicalize_descriptor_token(descriptor)
     if not _looks_like_year_token(normalized_descriptor):
         return False
-    return _date_or_condition_token_contains_year(listing_token, normalized_descriptor)
+    return any(
+        _date_or_condition_token_contains_year(listing_token, normalized_descriptor)
+        for listing_token in listing_token_list
+    )
 
 
 def _date_or_condition_token_contains_year(token: str, year: str) -> bool:

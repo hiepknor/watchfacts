@@ -1096,6 +1096,148 @@ def test_search_workflow_falls_back_to_image_backed_reference_matches(tmp_path) 
     assert results[0].image_url == "https://watchfacts.example/228349rbr.jpg"
 
 
+def test_search_workflow_matches_server_filtered_rg_snow_material_aliases(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "rm07-01 Pink ceramic 2020y Full set 312K usdt",
+          "companyName": "Member 5805",
+          "repostedAt": "2026-06-09 10:00:00",
+          "number": 111,
+          "frontImage": "https://watchfacts.example/rm07-pink.jpg"
+        },
+        {
+          "title": "RM07-01 WG Snow Onyx N4-26 360,000 USDT",
+          "companyName": "member 656225",
+          "repostedAt": "2026-06-01 10:00:00",
+          "number": 222,
+          "frontImage": "https://watchfacts.example/rm07-wg-snow.jpg"
+        },
+        {
+          "title": "Rm07-01 Ladies 18K Rose Gold Diamonds Snow Setting Red Jasper Brand New Full Set Q4 2024 USD328,000",
+          "companyName": "Member 5555",
+          "repostedAt": "2026-04-11 10:00:00",
+          "number": 333,
+          "frontImage": "https://watchfacts.example/rm07-rg-snow-1.jpg"
+        },
+        {
+          "title": "RM07-01 Rosegold Snow Diamonds Red Lips Good Condition Watch Only 2,028,000HK",
+          "companyName": "Cici",
+          "repostedAt": "2026-03-30 10:00:00",
+          "number": 444,
+          "frontImage": "https://watchfacts.example/rm07-rg-snow-2.jpg"
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("rm07-01 rg snow"))
+
+    assert [result.listing_text for result in results] == [
+        "Rm07-01 Ladies 18K Rose Gold Diamonds Snow Setting Red Jasper Brand New Full Set Q4 2024 USD328,000",
+        "RM07-01 Rosegold Snow Diamonds Red Lips Good Condition Watch Only 2,028,000HK",
+    ]
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.matched_count == 2
+
+
+def test_search_workflow_does_not_use_reference_only_fallback_for_multi_descriptor_query(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "rm07-01 Pink ceramic 2020y Full set 312K usdt",
+          "companyName": "Member 5805",
+          "repostedAt": "2026-06-09 10:00:00",
+          "number": 111,
+          "frontImage": "https://watchfacts.example/rm07-pink.jpg"
+        },
+        {
+          "title": "RM07-01 WG Snow Onyx N4-26 360,000 USDT",
+          "companyName": "member 656225",
+          "repostedAt": "2026-06-01 10:00:00",
+          "number": 222,
+          "frontImage": "https://watchfacts.example/rm07-wg-snow.jpg"
+        },
+        {
+          "title": "6/20 Rm07-01 gold tpt 2026/06 1.98mill hkd",
+          "companyName": "Thomas Glory Watch Limited",
+          "repostedAt": "2026-05-30 10:00:00",
+          "number": 333,
+          "frontImage": "https://watchfacts.example/rm07-gold-tpt.jpg"
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("rm07-01 rg snow"))
+
+    assert results == []
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.matched_count == 0
+
+
+def test_search_workflow_allows_reference_only_fallback_for_optional_year_descriptor(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "126500LN White Daytona full set 279000 HKD",
+          "companyName": "Dealer A",
+          "repostedAt": "2026-06-01 10:00:00",
+          "number": 111,
+          "frontImage": "https://watchfacts.example/126500ln-white.jpg"
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("126500ln white 2026"))
+
+    assert [result.listing_text for result in results] == [
+        "126500LN White Daytona full set 279000 HKD"
+    ]
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.query_intent == "reference_with_year"
+    assert workflow.last_search_diagnostics.required_descriptor_tokens == ("white",)
+    assert workflow.last_search_diagnostics.optional_descriptor_tokens == ("2026",)
+
+
 def test_search_workflow_refilters_server_filtered_non_color_variant_descriptor_alias(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """
