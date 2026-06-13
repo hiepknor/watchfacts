@@ -402,11 +402,17 @@ MCP_PREWARM_FORMAT=jsonl make mcp-prewarm > mcp-prewarm.jsonl
 docker compose -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml exec -T watchfacts-mcp \
   python scripts/diagnostics/benchmark_mcp_queries.py \
   --query "Panerai Luminor" --query "Lange 1" --format markdown --allow-empty
+docker compose -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml exec -T watchfacts-mcp \
+  python scripts/diagnostics/benchmark_mcp_queries.py \
+  --query "5205r green" --repeat 2 --format markdown --allow-empty
 ```
 
 Use the benchmark for pass/fail, latency, result counts, intent/cache
-diagnostics, and top-result snippets. Use `audit_quality.py` when a query needs
-quality-group, scoring, image attribution, or raw-to-final funnel evidence.
+diagnostics, stage timing summaries, and top-result snippets. Use `--repeat 2`
+for a quick cold/warm cache comparison; run 1 should show the uncached fetch path
+when the search cache is stale, while run 2 should normally show the cache-hit
+path. Use `audit_quality.py` when a query needs quality-group, scoring, image
+attribution, or raw-to-final funnel evidence.
 
 Write machine-readable output for handoff or later fixture work:
 

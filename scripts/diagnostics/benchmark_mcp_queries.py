@@ -35,6 +35,7 @@ class BenchmarkRow:
     query: str
     ok: bool
     elapsed_ms: int
+    run_number: int = 1
     result_count: int | None = None
     total_count: int | None = None
     has_more: bool | None = None
@@ -74,19 +75,22 @@ async def run_benchmark(
     timeout_seconds: float,
     include_similar: bool,
     allow_empty: bool,
+    repeat: int = 1,
 ) -> list[BenchmarkRow]:
     rows: list[BenchmarkRow] = []
     for query in _dedupe_queries(queries):
-        rows.append(
-            await _benchmark_query(
-                url=url,
-                query=query,
-                limit=limit,
-                timeout_seconds=timeout_seconds,
-                include_similar=include_similar,
-                allow_empty=allow_empty,
+        for run_number in range(1, repeat + 1):
+            rows.append(
+                await _benchmark_query(
+                    url=url,
+                    query=query,
+                    limit=limit,
+                    timeout_seconds=timeout_seconds,
+                    include_similar=include_similar,
+                    allow_empty=allow_empty,
+                    run_number=run_number,
+                )
             )
-        )
     return rows
 
 
@@ -98,6 +102,7 @@ async def _benchmark_query(
     timeout_seconds: float,
     include_similar: bool,
     allow_empty: bool,
+    run_number: int = 1,
 ) -> BenchmarkRow:
     started_at = time.perf_counter()
     try:
@@ -113,6 +118,7 @@ async def _benchmark_query(
             query=query,
             ok=False,
             elapsed_ms=_elapsed_ms(started_at),
+            run_number=run_number,
             error_type=exc.__class__.__name__,
             error=str(exc)[:500],
         )
@@ -123,6 +129,7 @@ async def _benchmark_query(
         payload=payload,
         elapsed_ms=_elapsed_ms(started_at),
         validation_errors=errors,
+        run_number=run_number,
     )
 
 
@@ -172,6 +179,7 @@ def _row_from_payload(
     payload: dict[str, Any],
     elapsed_ms: int,
     validation_errors: tuple[str, ...],
+    run_number: int = 1,
 ) -> BenchmarkRow:
     diagnostics = _dict_value(payload.get("search_diagnostics"))
     results = payload.get("results") if isinstance(payload.get("results"), list) else []
@@ -195,6 +203,7 @@ def _row_from_payload(
         query=query,
         ok=not validation_errors,
         elapsed_ms=elapsed_ms,
+        run_number=run_number,
         result_count=_optional_int(payload.get("result_count")),
         total_count=_optional_int(payload.get("total_count")),
         has_more=payload.get("has_more") if isinstance(payload.get("has_more"), bool) else None,
@@ -229,11 +238,13 @@ def render_markdown(rows: list[BenchmarkRow]) -> str:
             f"avg: {summary.get('avg_ms', '-')}ms | "
             f"median: {summary.get('median_ms', '-')}ms | "
             f"p95: {summary.get('p95_ms', '-')}ms | "
-            f"max: {summary.get('max_ms', '-')}ms"
+            f"max: {summary.get('max_ms', '-')}ms | "
+            f"cache hits: {summary.get('cache_hits', 0)} | "
+            f"cache misses: {summary.get('cache_misses', 0)}"
         ),
         "",
-        "| Query | OK | ms | total | intent | cache | warnings | stages | top result |",
-        "| --- | --- | ---: | ---: | --- | --- | ---: | --- | --- |",
+        "| Query | Run | OK | ms | total | intent | cache | warnings | stages | top result |",
+        "| --- | ---: | --- | ---: | ---: | --- | --- | ---: | --- | --- |",
     ]
     for row in rows:
         top = row.top_results[0] if row.top_results else row.error or ""
@@ -242,6 +253,7 @@ def render_markdown(rows: list[BenchmarkRow]) -> str:
             + " | ".join(
                 (
                     _md(row.query),
+                    str(row.run_number),
                     "yes" if row.ok else "no",
                     str(row.elapsed_ms),
                     str(row.total_count if row.total_count is not None else "-"),
@@ -262,6 +274,7 @@ def render_text(rows: list[BenchmarkRow]) -> str:
     for row in rows:
         details = [
             f"query={row.query!r}",
+            f"run={row.run_number}",
             f"ok={str(row.ok).lower()}",
             f"elapsed_ms={row.elapsed_ms}",
             f"total_count={row.total_count}",
@@ -292,6 +305,8 @@ def summarize_rows(rows: list[BenchmarkRow]) -> dict[str, int]:
     summary: dict[str, int] = {
         "passed": sum(1 for row in rows if row.ok),
         "total": len(rows),
+        "cache_hits": sum(1 for row in rows if row.cache_hit is True),
+        "cache_misses": sum(1 for row in rows if row.cache_hit is False),
     }
     if not elapsed:
         return summary
@@ -446,6 +461,12 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=3)
     parser.add_argument("--timeout-seconds", type=float, default=180.0)
     parser.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="Run each deduped query this many times. Useful for cold/warm cache comparisons.",
+    )
+    parser.add_argument(
         "--format",
         choices=("text", "markdown", "jsonl"),
         default="text",
@@ -457,6 +478,8 @@ def main() -> int:
         parser.error("--limit must be positive")
     if args.timeout_seconds <= 0:
         parser.error("--timeout-seconds must be positive")
+    if args.repeat <= 0:
+        parser.error("--repeat must be positive")
 
     queries = list(args.queries or [])
     if args.query_file:
@@ -472,6 +495,7 @@ def main() -> int:
             timeout_seconds=args.timeout_seconds,
             include_similar=args.include_similar,
             allow_empty=args.allow_empty,
+            repeat=args.repeat,
         )
     )
     if args.format == "jsonl":

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
+import scripts.diagnostics.benchmark_mcp_queries as benchmark_module
 from scripts.diagnostics.benchmark_mcp_queries import (
     BenchmarkRow,
     _dedupe_queries,
@@ -75,6 +77,7 @@ def test_row_from_payload_extracts_latency_quality_and_diagnostics() -> None:
 
     assert row.ok is True
     assert row.elapsed_ms == 123
+    assert row.run_number == 1
     assert row.total_count == 26
     assert row.query_intent == "reference_with_descriptor"
     assert row.cache_hit is False
@@ -104,6 +107,7 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
             query="5205r green",
             ok=True,
             elapsed_ms=100,
+            run_number=2,
             result_count=3,
             total_count=26,
             query_intent="reference_with_descriptor",
@@ -128,13 +132,15 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     markdown = render_markdown(rows)
     jsonl = render_jsonl(rows)
 
-    assert "MCP_BENCH query='5205r green' ok=true" in text
+    assert "MCP_BENCH query='5205r green' run=2 ok=true" in text
     assert "stages=cache_read:1,watchfacts_fetch:0,total:80" in text
     assert "SUMMARY" in text
-    assert "| 5205r green | yes | 100 | 26 |" in markdown
+    assert "| 5205r green | 2 | yes | 100 | 26 |" in markdown
+    assert "cache hits: 1" in markdown
     assert "cache_read:1,watchfacts_fetch:0,total:80" in markdown
     decoded = [json.loads(line) for line in jsonl.splitlines()]
     assert decoded[0]["query"] == "5205r green"
+    assert decoded[0]["run_number"] == 2
     assert decoded[0]["stage_timings_ms"]["total"] == 80
     assert decoded[1]["error_type"] == "RuntimeError"
 
@@ -150,10 +156,43 @@ def test_summarize_rows_uses_successful_queries_only() -> None:
 
     assert summary["passed"] == 2
     assert summary["total"] == 3
+    assert summary["cache_hits"] == 0
+    assert summary["cache_misses"] == 0
     assert summary["avg_ms"] == 200
     assert summary["median_ms"] == 200
     assert summary["min_ms"] == 100
     assert summary["max_ms"] == 300
+
+
+def test_run_benchmark_repeats_each_deduped_query(monkeypatch) -> None:
+    async def fake_benchmark_query(**kwargs) -> BenchmarkRow:
+        return BenchmarkRow(
+            query=kwargs["query"],
+            ok=True,
+            elapsed_ms=kwargs["run_number"],
+            run_number=kwargs["run_number"],
+        )
+
+    monkeypatch.setattr(benchmark_module, "_benchmark_query", fake_benchmark_query)
+
+    rows = asyncio.run(
+        benchmark_module.run_benchmark(
+            url="http://127.0.0.1:8765/mcp",
+            queries=["5205r green", "5205R GREEN", "Lange 1"],
+            limit=3,
+            timeout_seconds=1,
+            include_similar=False,
+            allow_empty=True,
+            repeat=2,
+        )
+    )
+
+    assert [(row.query, row.run_number) for row in rows] == [
+        ("5205r green", 1),
+        ("5205r green", 2),
+        ("Lange 1", 1),
+        ("Lange 1", 2),
+    ]
 
 
 def test_query_helpers_dedupe_and_ignore_comments(tmp_path) -> None:

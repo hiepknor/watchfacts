@@ -114,6 +114,7 @@ def test_makefile_has_mcp_benchmark_target() -> None:
 
     assert "scripts/diagnostics/benchmark_mcp_queries.py" in benchmark_target
     assert '--url "$(MCP_SMOKE_URL)"' in benchmark_target
+    assert "--repeat $(MCP_BENCHMARK_REPEAT)" in benchmark_target
     assert "--format $(MCP_BENCHMARK_FORMAT)" in benchmark_target
 
 
