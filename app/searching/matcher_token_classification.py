@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 
 from app.searching.matcher_normalization import TOKEN_RE
-from app.searching.matcher_aliases import canonicalize_descriptor_token
+from app.searching.matcher_aliases import (
+    canonicalize_descriptor_token,
+    canonicalize_descriptor_tokens,
+)
 
 
 CURRENCY_PREFIX_CHARS = {"$", "€", "£", "¥", "💲"}
@@ -15,7 +18,11 @@ QUERY_CONNECTOR_TOKENS = {"and", "or"}
 def parse_query_terms(query: str) -> tuple[list[list[str]], list[str]]:
     reference_terms: list[list[str]] = []
     descriptor_tokens: list[str] = []
-    tokens = [match.group(0).casefold() for match in QUERY_TERM_RE.finditer(query)]
+    tokens = list(
+        canonicalize_descriptor_tokens(
+            match.group(0).casefold() for match in QUERY_TERM_RE.finditer(query)
+        )
+    )
 
     index = 0
     while index < len(tokens):

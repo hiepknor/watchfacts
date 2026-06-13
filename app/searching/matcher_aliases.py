@@ -20,10 +20,12 @@ _DESCRIPTOR_CANONICAL_GROUPS = {
     "choco": ("choco", "chocolate", "cho"),
     "mete": ("mete", "meteorite"),
     "gray": ("gray", "grey"),
+    "mop": ("mop", "mother-of-pearl", "motherofpearl"),
     "rg": ("rg", "rosegold", "rose-gold"),
     "wg": ("wg", "whitegold", "white-gold"),
 }
 _COMPOUND_DESCRIPTOR_PHRASES = {
+    "mop": (("mother", "of", "pearl"),),
     "rg": (("rose", "gold"),),
     "wg": (("white", "gold"),),
 }
@@ -45,11 +47,23 @@ def canonicalize_descriptor_token(token: str) -> str:
 def canonicalize_descriptor_tokens(
     tokens: Iterable[str],
 ) -> tuple[str, ...]:
-    return tuple(
+    normalized_tokens = tuple(
         canonicalize_descriptor_token(token)
         for token in tokens
         if canonicalize_descriptor_token(token)
     )
+    canonical_tokens: list[str] = []
+    index = 0
+    while index < len(normalized_tokens):
+        phrase_match = _compound_descriptor_match_at(normalized_tokens, index)
+        if phrase_match is not None:
+            canonical, phrase_length = phrase_match
+            canonical_tokens.append(canonical)
+            index += phrase_length
+            continue
+        canonical_tokens.append(normalized_tokens[index])
+        index += 1
+    return tuple(canonical_tokens)
 
 
 def canonicalize_descriptor_tokens_as_set(
@@ -81,3 +95,18 @@ def descriptor_exists_in_tokens(descriptor: str, tokens: Iterable[str]) -> bool:
             if normalized_tokens[index : index + phrase_length] == normalized_phrase:
                 return True
     return False
+
+
+def _compound_descriptor_match_at(
+    tokens: tuple[str, ...],
+    index: int,
+) -> tuple[str, int] | None:
+    for canonical, phrases in _COMPOUND_DESCRIPTOR_PHRASES.items():
+        for phrase in sorted(phrases, key=len, reverse=True):
+            normalized_phrase = tuple(
+                canonicalize_descriptor_token(token) for token in phrase
+            )
+            phrase_length = len(normalized_phrase)
+            if tokens[index : index + phrase_length] == normalized_phrase:
+                return canonical, phrase_length
+    return None

@@ -1238,6 +1238,57 @@ def test_search_workflow_allows_reference_only_fallback_for_optional_year_descri
     assert workflow.last_search_diagnostics.optional_descriptor_tokens == ("2026",)
 
 
+def test_search_workflow_matches_server_filtered_compound_material_phrases(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "RM07-01 RG Medset Black Lips Used 2018 / 204k usdt",
+          "companyName": "Dealer A",
+          "repostedAt": "2026-06-13 10:00:00",
+          "number": 111,
+          "frontImage": "https://watchfacts.example/rm07-rg.jpg"
+        },
+        {
+          "title": "RM07-01 Rose Gold Medset Likenew 2021 Fullset 199000USDT",
+          "companyName": "Dealer B",
+          "repostedAt": "2026-06-12 10:00:00",
+          "number": 222,
+          "frontImage": "https://watchfacts.example/rm07-rose-gold.jpg"
+        },
+        {
+          "title": "RM07-01 WG Medset Red Lips Used 2020 - 195k usdt",
+          "companyName": "Dealer C",
+          "repostedAt": "2026-06-11 10:00:00",
+          "number": 333,
+          "frontImage": "https://watchfacts.example/rm07-wg.jpg"
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("rm07-01 rose gold"))
+
+    assert [result.listing_text for result in results] == [
+        "RM07-01 RG Medset Black Lips Used 2018 / 204k usdt",
+        "RM07-01 Rose Gold Medset Likenew 2021 Fullset 199000USDT",
+    ]
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.required_descriptor_tokens == ("rg",)
+
+
 def test_search_workflow_refilters_server_filtered_non_color_variant_descriptor_alias(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = """

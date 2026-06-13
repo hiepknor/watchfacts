@@ -80,6 +80,21 @@ def test_descriptor_aliases_are_global_tokens() -> None:
     assert canonicalize_descriptor_token("rose-gold") == "rg"
     assert canonicalize_descriptor_token("whitegold") == "wg"
     assert canonicalize_descriptor_token("white-gold") == "wg"
+    assert canonicalize_descriptor_token("mother-of-pearl") == "mop"
+
+
+def test_parse_query_terms_canonicalizes_compound_descriptor_phrases() -> None:
+    assert parse_query_terms("rm07-01 rose gold") == ([["rm07-01"]], ["rg"])
+    assert parse_query_terms("rm07-01 white gold snow") == (
+        [["rm07-01"]],
+        ["wg", "snow"],
+    )
+    assert parse_query_terms("rm07-01 mother of pearl") == (
+        [["rm07-01"]],
+        ["mop"],
+    )
+    assert tokenize_query("rm07-01 rose gold") == ["rm07-01", "rg"]
+    assert tokenize_query("rm07-01 mother of pearl") == ["rm07-01", "mop"]
 
 
 def test_listing_matches_material_alias_phrases_near_reference() -> None:
@@ -94,6 +109,29 @@ def test_listing_matches_material_alias_phrases_near_reference() -> None:
     assert not listing_matches(
         "rm07-01 rg snow",
         "RM07-01 WG Snow Onyx N4-26 360000 USDT",
+    )
+
+
+def test_listing_matches_material_phrase_queries_against_abbreviated_listings() -> None:
+    assert listing_matches(
+        "rm07-01 rose gold snow",
+        "RM07-01 RG Snow Diamonds Red Lips Good Condition 260000US",
+    )
+    assert not listing_matches(
+        "rm07-01 rose gold snow",
+        "RM07-01 WG Snow Onyx N4-26 360000 USDT",
+    )
+    assert listing_matches(
+        "rm07-01 white gold snow",
+        "RM07-01 WG Snow Diamond MOP N5/2026 usdt480",
+    )
+    assert not listing_matches(
+        "rm07-01 white gold snow",
+        "RM07-01 Rosegold Snow Diamonds Red Lips Good Condition 260000US",
+    )
+    assert listing_matches(
+        "rm07-01 mother of pearl",
+        "RM07-01 White Ceramic MOP N4/2026 usdt470k",
     )
 
 
