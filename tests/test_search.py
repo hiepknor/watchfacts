@@ -337,6 +337,57 @@ def test_search_workflow_serves_repeated_query_from_cache(tmp_path) -> None:
     assert cache_count == 1
 
 
+def test_search_workflow_serves_descriptor_alias_query_from_cache(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "RM07-01 RG Snow used fullset",
+          "companyName": "HK STOCKS",
+          "number": 701
+        }
+      ]
+    }
+    """
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    first = asyncio.run(workflow.search("rm07-01 rose gold"))
+    second = asyncio.run(workflow.search("rm07-01 rg"))
+
+    assert fetch_queries == ["rm07-01 rose gold"]
+    assert second == first
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.cache_hit is True
+    assert workflow.last_search_diagnostics.query_plan is not None
+    assert workflow.last_search_diagnostics.query_plan.original_query == "rm07-01 rg"
+    assert workflow.last_search_diagnostics.query_plan.canonical_query == "rm07-01 rg"
+    with sqlite3.connect(settings.db_path) as connection:
+        query_rows = connection.execute(
+            "SELECT query_text, normalized_query, result_count FROM queries "
+            "ORDER BY id"
+        ).fetchall()
+        cache_count = connection.execute(
+            "SELECT COUNT(*) FROM search_cache"
+        ).fetchone()[0]
+
+    assert query_rows == [
+        ("rm07-01 rose gold", "rm07-01 rose gold", 1),
+        ("rm07-01 rg", "rm07-01 rg", 1),
+    ]
+    assert cache_count == 1
+
+
 def test_search_workflow_refetches_after_cache_expiry(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = FIXTURE.read_text()
@@ -371,6 +422,20 @@ def test_search_cache_key_includes_search_cache_version(tmp_path, monkeypatch) -
     second_key = search_module._search_cache_key("5712g", settings)
 
     assert first_key != second_key
+
+
+def test_search_cache_key_uses_canonical_descriptor_aliases(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+
+    rg_key = search_module._search_cache_key("rm07-01 rg", settings)
+
+    assert search_module._search_cache_key("rm07-01 rose gold", settings) == rg_key
+    assert search_module._search_cache_key("rm07-01 rosegold", settings) == rg_key
+    assert (
+        search_module._search_cache_key("rm07-01 mother of pearl", settings)
+        == search_module._search_cache_key("rm07-01 mop", settings)
+    )
+    assert search_module._search_cache_key("rm07-01 wg", settings) != rg_key
 
 
 def test_attribute_product_image_marks_direct_listing_image() -> None:
@@ -591,6 +656,57 @@ def test_search_workflow_reports_in_flight_wait_for_coalesced_workflows(tmp_path
         "persist",
         "total",
     }
+
+
+def test_search_workflow_coalesces_in_flight_descriptor_alias_queries(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "RM07-01 RG Snow used fullset",
+          "companyName": "HK STOCKS",
+          "number": 701
+        }
+      ]
+    }
+    """
+    fetch_count = 0
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal fetch_count
+        fetch_count += 1
+        await asyncio.sleep(0.01)
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    owner_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+    coalesced_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    async def run_searches() -> tuple[list[SearchResult], list[SearchResult]]:
+        owner_task = asyncio.create_task(owner_workflow.search("rm07-01 rose gold"))
+        await asyncio.sleep(0)
+        coalesced = await coalesced_workflow.search("rm07-01 rg")
+        owner = await owner_task
+        return owner, coalesced
+
+    owner, coalesced = asyncio.run(run_searches())
+
+    assert fetch_count == 1
+    assert owner == coalesced
+    assert coalesced_workflow.last_search_diagnostics is not None
+    assert coalesced_workflow.last_search_diagnostics.cache_hit is True
+    assert coalesced_workflow.last_search_diagnostics.query_plan is not None
+    assert coalesced_workflow.last_search_diagnostics.query_plan.original_query == (
+        "rm07-01 rg"
+    )
 
 
 def test_search_workflow_limits_search_runtime_concurrent_distinct_queries(tmp_path) -> None:

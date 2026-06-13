@@ -354,11 +354,11 @@ rm07-01 mother of pearl -> retrieval key: rm07-01 mop
 
 Acceptance:
 
-- [ ] Equivalent descriptor aliases share the same retrieval cache key.
-- [ ] Original query remains available for result ids, result pages, audit, and
+- [x] Equivalent descriptor aliases share the same retrieval cache key.
+- [x] Original query remains available for result ids, result pages, audit, and
   user-visible payloads.
-- [ ] Cache invalidation is explicit through `SEARCH_CACHE_VERSION`.
-- [ ] In-flight coalescing uses the retrieval key when safe.
+- [x] Cache invalidation is explicit through `SEARCH_CACHE_VERSION`.
+- [x] In-flight coalescing uses the retrieval key when safe.
 
 Verification:
 

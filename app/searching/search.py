@@ -45,7 +45,7 @@ from app.searching.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger("app.search")
-SEARCH_CACHE_VERSION = "search-v20"
+SEARCH_CACHE_VERSION = "search-v21"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -1471,7 +1471,7 @@ def _listing_candidate_key(listing: ListingCandidate) -> tuple[str, str, str, st
 def _search_cache_key(query: str, settings: Settings) -> str:
     payload = {
         "version": SEARCH_CACHE_VERSION,
-        "query": normalize_text(query),
+        "query": _retrieval_cache_query(query),
         "watchfacts_url": settings.watchfacts_url,
         "hybrid_ai_mode": settings.hybrid_ai_mode,
         "openai_model": settings.openai_model if settings.hybrid_ai_mode != "off" else "",
@@ -1481,6 +1481,10 @@ def _search_cache_key(query: str, settings: Settings) -> str:
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _retrieval_cache_query(query: str) -> str:
+    return build_query_plan(query).canonical_query or normalize_text(query)
 
 
 def _stable_audit_id(result: SearchResult) -> str:
