@@ -10,13 +10,16 @@ Planned.
 
 ## Objective
 
-Upgrade the deterministic WatchFacts search engine across three boundaries:
+Upgrade the deterministic WatchFacts search engine across four pipeline
+boundaries:
 
 1. Query recognition: understand what the user means before searching.
 2. Retrieval: fetch enough WatchFacts candidates without over-trusting the
    WatchFacts server query semantics.
-3. Parsing and segmentation: convert noisy WatchFacts posts into item-level
-   candidates that can be matched, ranked, and displayed safely.
+3. Candidate processing: convert noisy WatchFacts posts into item-level
+   candidates, then match, dedupe, and rank them deterministically.
+4. Result delivery: format ranked results for Telegram, MCP, result pages, and
+   follow-up actions without embedding search logic in presentation code.
 
 The goal is better recall and faster repeated searches without reducing result
 quality. Core matching, parsing, and ranking must remain deterministic. Do not
@@ -87,14 +90,48 @@ reference grammar.
 - Use recall-first retrieval and precision-first local matching. Retrieval may
   broaden through documented aliases or nicknames, but matcher eligibility must
   remain strict and explainable.
+- Treat `WatchFacts Search Engine` as the system-level name. Inside the code and
+  docs, prefer precise pipeline-stage names over naming every component an
+  engine.
 - Avoid project bloat: add a module only when it replaces logic currently
   duplicated across parser, matcher, search, scoring, or diagnostics.
+
+## Pipeline Naming And Boundaries
+
+Use these stage names in docs, diagnostics, and future refactors:
+
+| Stage | Input | Output | Owns |
+| --- | --- | --- | --- |
+| Query Recognition | Raw user query | `QueryPlan` | Brand, reference, collection, nickname, descriptor, optional token, and conflict recognition |
+| Retrieval | `QueryPlan` | Raw WatchFacts candidate batch | Retrieval policy, bounded expansion, authenticated fetch, cache key, and in-flight coalescing |
+| Candidate Processing | Candidate batch plus `QueryPlan` | Ranked eligible results | Parse, segment, match eligibility, dedupe, score, rank, and quality reason codes |
+| Result Delivery | Ranked eligible results | Telegram, MCP, result page, or action payload | Pagination, `result_id`, payload formatting, result-page rendering, OpenWA handoff, and report actions |
+
+The preferred contract is:
+
+```text
+raw_query -> QueryPlan -> CandidateBatch -> RankedResults -> ResponsePayload
+```
+
+Naming guidance:
+
+- Use `WatchFacts Search Engine` for the whole deterministic search system.
+- Avoid naming every boundary `*Engine`; it makes ownership less clear and
+  encourages broad modules.
+- Prefer concrete component names when code is refactored:
+  `QueryRecognizer`, `RetrievalPlanner`, `CandidateRetriever`,
+  `ListingParser`, `CandidateMatcher`, `ResultRanker`, and `ResultPresenter`.
+- Do not do a bulk rename before Phase 1. Introduce names as each phase creates
+  or moves real behavior.
+- Telegram handlers, MCP tools, and result pages belong to Result Delivery.
+  They must call the shared runtime instead of reimplementing recognition,
+  retrieval, parsing, matching, or ranking.
 
 ## Target Flow
 
 ```text
 raw user query
-  -> query recognition
+  -> Query Recognition
        brand candidates
        references
        collections/models
@@ -103,17 +140,19 @@ raw user query
        optional descriptors
        conflict groups
        query plan
-  -> retrieval planning
+  -> Retrieval
        server query or query set
        canonical cache key
        local filter query
   -> WatchFacts authenticated fetch
+  -> Candidate Processing
   -> parser candidates
   -> stock-list item segments
   -> deterministic matcher eligibility
   -> dedupe
   -> feature-based ranking
-  -> result page / Telegram / MCP payload
+  -> Result Delivery
+       result page / Telegram / MCP payload
 ```
 
 ## Phase 1: Query Recognition V2

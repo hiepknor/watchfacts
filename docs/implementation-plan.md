@@ -1251,6 +1251,7 @@ Status: planned.
 Use [Search Engine Upgrade Plan](search-engine-upgrade-plan.md) as the detailed
 task breakdown for improving the deterministic search engine across:
 
+- pipeline stage naming and contracts
 - query recognition and canonical descriptor planning
 - brand/reference taxonomy for high-value audited brands
 - WatchFacts retrieval planning and canonical cache keys
@@ -1264,6 +1265,9 @@ Acceptance:
   `rm07-01 rose gold` have comparable recall after cache refresh.
 - [ ] Brand/model/nickname queries such as `126500ln white`, `daytona panda`,
   `5711 blue`, and `15500st blue` expose deterministic recognition metadata.
+- [ ] Future refactors use the pipeline contract `raw_query -> QueryPlan ->
+  CandidateBatch -> RankedResults -> ResponsePayload` without bulk-renaming
+  existing modules before behavior moves.
 - [ ] Retrieval stays broad enough to avoid missed aliases while local matching
   remains strict and deterministic.
 - [ ] Parser segmentation reduces stock-list leakage without showing wrong
