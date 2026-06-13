@@ -539,6 +539,7 @@ def _reference_token_matches(query_token: str, listing_token: str) -> bool:
     return (
         listing_token.startswith(f"{query_token}-")
         or listing_token.startswith(f"{query_token}.")
+        or listing_token.startswith(f"{query_token}/")
     )
 
 

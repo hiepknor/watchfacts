@@ -56,11 +56,14 @@ class ReferenceGrammarRule:
 @dataclass(frozen=True)
 class RetrievalExpansionRule:
     collection: str
-    nickname: str
     retrieval_queries: tuple[str, ...]
     local_filter_queries: tuple[str, ...]
     reason_code: str
-    requires_reference_absent: bool = True
+    nickname: str | None = None
+    reference_terms: tuple[str, ...] = ()
+    required_descriptors: tuple[str, ...] = ()
+    allowed_extra_descriptors: tuple[str, ...] = ()
+    requires_reference_absent: bool = False
     requires_optional_descriptor_absent: bool = True
 
 
@@ -180,7 +183,6 @@ NICKNAME_RULES: tuple[NicknameRule, ...] = (
 RETRIEVAL_EXPANSION_RULES: tuple[RetrievalExpansionRule, ...] = (
     RetrievalExpansionRule(
         collection="daytona",
-        nickname="panda",
         retrieval_queries=(
             "daytona white",
             "126500ln white",
@@ -192,6 +194,20 @@ RETRIEVAL_EXPANSION_RULES: tuple[RetrievalExpansionRule, ...] = (
             "116500ln white",
         ),
         reason_code="retrieval.nickname_expansion:panda",
+        nickname="panda",
+        requires_reference_absent=True,
+    ),
+    RetrievalExpansionRule(
+        collection="nautilus",
+        retrieval_queries=(
+            "5711",
+            "nautilus 5711 blue",
+        ),
+        local_filter_queries=("5711 blue",),
+        reason_code="retrieval.collection_expansion:nautilus",
+        reference_terms=("5711",),
+        required_descriptors=("blue",),
+        allowed_extra_descriptors=("nautilus", "patek", "philippe", "pp"),
     ),
 )
 

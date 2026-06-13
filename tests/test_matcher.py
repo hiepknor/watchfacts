@@ -160,6 +160,17 @@ def test_listing_matches_reference_tokens_across_punctuation() -> None:
     assert listing_matches("228253a choco", "Rolex 228-253A dial CHOCO full set")
 
 
+def test_listing_matches_reference_prefix_at_slash_boundary() -> None:
+    assert listing_matches(
+        "5711 blue",
+        "Patek Philippe 5711/1A Blue Dial 2020 HKD 920000",
+    )
+    assert not listing_matches(
+        "5711 blue",
+        "Patek Philippe 5712 Blue Dial 2020 HKD 780000",
+    )
+
+
 def test_listing_matches_reference_needs_local_proximity_before_descriptor_match() -> None:
     assert not listing_matches(
         "228349rbr mete",

@@ -5,6 +5,8 @@ import logging
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 import app.search as search_module
 from app.config import Settings
 from app.db import Database
@@ -1559,6 +1561,169 @@ def test_search_workflow_does_not_expand_reference_with_nickname_query(tmp_path)
     assert workflow.last_search_diagnostics.retrieval_reason_codes == (
         "retrieval.reference_with_descriptors",
     )
+
+
+def test_search_workflow_expands_5711_blue_retrieval_with_reference_scoped_filters(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        if query == "5711 blue":
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "5711 Blue Dial 2022 Full Set HKD 980000",
+                  "companyName": "Dealer Blue",
+                  "repostedAt": "2026-06-13 10:00:00",
+                  "number": 111,
+                  "frontImage": "https://watchfacts.example/5711-blue.jpg"
+                },
+                {
+                  "title": "5711 Black Dial 2021 Full Set HKD 930000",
+                  "companyName": "Dealer Black",
+                  "repostedAt": "2026-06-13 10:00:00",
+                  "number": 112,
+                  "frontImage": "https://watchfacts.example/5711-black.jpg"
+                }
+              ]
+            }
+            """
+        elif query == "5711":
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "Patek Philippe 5711/1A Blue Dial 2020 HKD 920000",
+                  "companyName": "Dealer Ref",
+                  "repostedAt": "2026-06-12 10:00:00",
+                  "number": 222,
+                  "frontImage": "https://watchfacts.example/5711-ref-blue.jpg"
+                },
+                {
+                  "title": "Patek Philippe 5712 Blue Dial 2020 HKD 780000",
+                  "companyName": "Dealer Other Ref",
+                  "repostedAt": "2026-06-12 10:00:00",
+                  "number": 223,
+                  "frontImage": "https://watchfacts.example/5712-blue.jpg"
+                }
+              ]
+            }
+            """
+        else:
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "Nautilus 5711 Blue Dial 2019 Full Set HKD 910000",
+                  "companyName": "Dealer Nautilus",
+                  "repostedAt": "2026-06-11 10:00:00",
+                  "number": 333,
+                  "frontImage": "https://watchfacts.example/nautilus-5711-blue.jpg"
+                }
+              ]
+            }
+            """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("5711 blue"))
+    result_texts = {result.listing_text for result in results}
+
+    assert fetch_queries == [
+        "5711 blue",
+        "5711",
+        "nautilus 5711 blue",
+    ]
+    assert result_texts == {
+        "5711 Blue Dial 2022 Full Set HKD 980000",
+        "Patek Philippe 5711/1A Blue Dial 2020 HKD 920000",
+        "Nautilus 5711 Blue Dial 2019 Full Set HKD 910000",
+    }
+    assert all("Black Dial" not in result.listing_text for result in results)
+    assert all("5712" not in result.listing_text for result in results)
+    assert workflow.last_search_diagnostics is not None
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["retrieval_query_count"] == 3
+    assert diagnostics_payload["retrieval_queries"] == [
+        "5711 blue",
+        "5711",
+        "nautilus 5711 blue",
+    ]
+    assert "retrieval.collection_expansion:nautilus" in diagnostics_payload[
+        "retrieval_reason_codes"
+    ]
+
+
+@pytest.mark.parametrize("query", ["rolex 5711 blue", "5711 blue leather"])
+def test_search_workflow_does_not_expand_5711_blue_when_extra_descriptors_change_intent(
+    tmp_path,
+    query: str,
+) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        html = """
+        {
+          "listings": [
+            {
+              "title": "Patek Philippe 5711/1A Blue Dial 2020 HKD 920000",
+              "companyName": "Dealer Ref",
+              "repostedAt": "2026-06-12 10:00:00",
+              "number": 222,
+              "frontImage": "https://watchfacts.example/5711-ref-blue.jpg"
+            }
+          ]
+        }
+        """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search(query))
+
+    assert fetch_queries == ["5711"]
+    assert results == []
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.retrieval_reason_codes == (
+        "retrieval.reference_with_descriptors",
+    )
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_fetch_queries"),
+    [
+        (
+            "patek 5711 blue",
+            ("patek 5711 blue", "5711", "nautilus 5711 blue"),
+        ),
+        ("nautilus 5711 blue", ("nautilus 5711 blue", "5711")),
+    ],
+)
+def test_retrieval_plan_allows_safe_5711_blue_context_descriptors(
+    query: str,
+    expected_fetch_queries: tuple[str, ...],
+) -> None:
+    query_plan = search_module.build_query_plan(query)
+    retrieval_plan = search_module._build_retrieval_plan(query, query_plan)
+
+    assert retrieval_plan.fetch_queries == expected_fetch_queries
+    assert retrieval_plan.local_filter_queries == (query, "5711 blue")
+    assert retrieval_plan.strict_local_filter is True
 
 
 def test_search_workflow_does_not_use_reference_only_fallback_for_multi_descriptor_query(

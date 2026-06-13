@@ -464,7 +464,12 @@ Initial implementation slice:
   brand/model/nickname expansion behavior.
 - [x] Reference-bearing nickname queries, such as `126500ln panda`, remain
   reference-scoped and do not expand to sibling references.
-- [ ] Add Patek Philippe `5711 blue` collection expansion.
+- [x] Patek Philippe `5711 blue` expands through raw query, `5711`, and
+  `nautilus 5711 blue`, then uses strict local filtering so sibling references
+  such as `5712 blue` do not pass.
+- [x] Patek Philippe `5711 blue` expansion is skipped when extra query
+  descriptors change intent, such as another brand or an unmodeled strap/detail
+  term.
 - [ ] Add Audemars Piguet `15500st blue` Royal Oak expansion.
 
 Acceptance:

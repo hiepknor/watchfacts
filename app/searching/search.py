@@ -49,7 +49,7 @@ from app.searching.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger("app.search")
-SEARCH_CACHE_VERSION = "search-v23"
+SEARCH_CACHE_VERSION = "search-v24"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -153,6 +153,7 @@ class RetrievalPlan:
     fetch_queries: tuple[str, ...]
     local_filter_queries: tuple[str, ...]
     reason_codes: tuple[str, ...]
+    strict_local_filter: bool = False
 
 
 def _stage_elapsed_ms(started_at: float) -> int:
@@ -408,6 +409,7 @@ class WatchFactsSearchWorkflow:
                 local_filter_queries,
                 parsed,
                 server_filtered=scrape_result.server_filtered,
+                strict_local_filter=retrieval_plan.strict_local_filter,
             )
             self._audit_listing_candidates(
                 audit_events,
@@ -1309,6 +1311,7 @@ def _build_retrieval_plan(query: str, query_plan: QueryPlan) -> RetrievalPlan:
                 "retrieval.raw_query",
                 expansion_rule.reason_code,
             ),
+            strict_local_filter=True,
         )
 
     reference_query = _reference_retrieval_query(query_plan)
@@ -1337,10 +1340,42 @@ def _retrieval_expansion_rule(query_plan: QueryPlan) -> RetrievalExpansionRule |
             continue
         if rule.collection not in query_plan.collections:
             continue
-        if rule.nickname not in query_plan.nicknames:
+        if rule.nickname is not None and rule.nickname not in query_plan.nicknames:
+            continue
+        if rule.reference_terms and not _query_plan_has_reference_terms(
+            query_plan,
+            rule.reference_terms,
+        ):
+            continue
+        if rule.required_descriptors and not set(rule.required_descriptors).issubset(
+            set(query_plan.required_descriptors)
+        ):
+            continue
+        if rule.required_descriptors and not _retrieval_rule_allows_extra_descriptors(
+            query_plan,
+            rule,
+        ):
             continue
         return rule
     return None
+
+
+def _retrieval_rule_allows_extra_descriptors(
+    query_plan: QueryPlan,
+    rule: RetrievalExpansionRule,
+) -> bool:
+    allowed_extra_descriptors = set(rule.allowed_extra_descriptors)
+    base_descriptors = set(rule.required_descriptors) | set(rule.reference_terms)
+    extra_descriptors = set(query_plan.required_descriptors) - base_descriptors
+    return extra_descriptors.issubset(allowed_extra_descriptors)
+
+
+def _query_plan_has_reference_terms(
+    query_plan: QueryPlan,
+    reference_terms: tuple[str, ...],
+) -> bool:
+    query_references = {"".join(reference) for reference in query_plan.references}
+    return set(reference_terms).issubset(query_references)
 
 
 def _filter_retrieved_listings(
@@ -1348,9 +1383,12 @@ def _filter_retrieved_listings(
     listings: list[ListingCandidate],
     *,
     server_filtered: bool,
+    strict_local_filter: bool = False,
 ) -> list[ListingCandidate]:
     matched: list[ListingCandidate] = []
-    use_server_filtered_policy = server_filtered and len(local_filter_queries) == 1
+    use_server_filtered_policy = (
+        server_filtered and len(local_filter_queries) == 1 and not strict_local_filter
+    )
     for local_query in local_filter_queries:
         local_matches = (
             _filter_server_filtered_listings(local_query, listings)
