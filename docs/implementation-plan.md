@@ -1241,3 +1241,41 @@ Commit gate:
 
 - Self-review docs against implemented route names and response shapes.
 - Commit before deploy.
+
+## Future Work
+
+### Search Engine Upgrade
+
+Status: planned.
+
+Use [Search Engine Upgrade Plan](search-engine-upgrade-plan.md) as the detailed
+task breakdown for improving the deterministic search engine across:
+
+- query recognition and canonical descriptor planning
+- WatchFacts retrieval planning and canonical cache keys
+- parser/stock-list item segmentation
+- feature-based ranking and conflict guardrails
+- alias-pair benchmarks and deploy gates
+
+Acceptance:
+
+- [ ] Equivalent alias queries such as `rm07-01 rg`, `rm07-01 rosegold`, and
+  `rm07-01 rose gold` have comparable recall after cache refresh.
+- [ ] Retrieval stays broad enough to avoid missed aliases while local matching
+  remains strict and deterministic.
+- [ ] Parser segmentation reduces stock-list leakage without showing wrong
+  product images.
+- [ ] Search-engine changes include focused audit and benchmark evidence.
+
+Verify:
+
+```bash
+python -m pytest -q
+python -m compileall app scripts
+python scripts/diagnostics/audit_quality.py \
+  "rm07-01 rg snow" \
+  "rm07-01 rose gold" \
+  "rm07-01 white gold" \
+  "rm07-01 mother of pearl" \
+  --limit 5
+```
