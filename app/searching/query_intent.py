@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import re
 
 from app.searching.matcher_aliases import conflict_descriptor_tokens
 from app.searching.matcher_normalization import tokenize_query
+from app.searching.matcher_rulebook import (
+    BRAND_ALIAS_RULES,
+    COLLECTION_RULES,
+    NICKNAME_RULES,
+    REFERENCE_GRAMMAR_RULES,
+)
 from app.searching.matcher_token_classification import looks_like_year_token, parse_query_terms
 
 
@@ -117,44 +122,6 @@ MODEL_FAMILY_PHRASES = {
     ("pilot", "watch"),
     ("royal", "oak"),
 }
-BRAND_ALIAS_PHRASES = (
-    (("rolex",), "rolex"),
-    (("patek", "philippe"), "patek_philippe"),
-    (("patek",), "patek_philippe"),
-    (("ap",), "audemars_piguet"),
-    (("audemars", "piguet"), "audemars_piguet"),
-    (("rm",), "richard_mille"),
-    (("richard", "mille"), "richard_mille"),
-)
-COLLECTION_PHRASES = (
-    (("daytona",), "daytona", "rolex"),
-    (("submariner",), "submariner", "rolex"),
-    (("gmt",), "gmt", "rolex"),
-    (("gmt", "master"), "gmt_master", "rolex"),
-    (("nautilus",), "nautilus", "patek_philippe"),
-    (("aquanaut",), "aquanaut", "patek_philippe"),
-    (("royal", "oak"), "royal_oak", "audemars_piguet"),
-    (("offshore",), "offshore", "audemars_piguet"),
-)
-NICKNAME_PHRASES = (
-    (("panda",), "panda", "rolex"),
-    (("pepsi",), "pepsi", "rolex"),
-    (("batman",), "batman", "rolex"),
-    (("batgirl",), "batgirl", "rolex"),
-    (("sprite",), "sprite", "rolex"),
-    (("hulk",), "hulk", "rolex"),
-    (("starbucks",), "starbucks", "rolex"),
-    (("root", "beer"), "root_beer", "rolex"),
-)
-REFERENCE_GRAMMAR = (
-    (re.compile(r"^12[68]500ln$|^116500ln$"), "rolex", "daytona"),
-    (re.compile(r"^571[12]"), "patek_philippe", "nautilus"),
-    (re.compile(r"^5167a?$"), "patek_philippe", "aquanaut"),
-    (re.compile(r"^155(?:00|10)st$"), "audemars_piguet", "royal_oak"),
-    (re.compile(r"^rm\d"), "richard_mille", None),
-)
-
-
 BrandCandidate = dict[str, object]
 
 
@@ -215,14 +182,16 @@ def build_query_plan(query: str) -> QueryPlan:
     nicknames: list[str] = []
     reasons: list[str] = list(intent.reason_codes)
 
-    for phrase, brand in _phrase_matches(canonical_tokens, BRAND_ALIAS_PHRASES):
+    for rule in BRAND_ALIAS_RULES:
+        if not _contains_phrase(list(canonical_tokens), rule.phrase):
+            continue
         if _add_brand_candidate(
             brand_candidates,
-            brand=brand,
+            brand=rule.brand,
             confidence="explicit",
-            source_terms=phrase,
+            source_terms=rule.phrase,
         ):
-            reasons.append(f"brand.explicit:{brand}")
+            reasons.append(f"brand.explicit:{rule.brand}")
 
     for reference in references:
         reference_text = "".join(reference)
@@ -239,29 +208,33 @@ def build_query_plan(query: str) -> QueryPlan:
         if reference_collection and _append_unique(collections, reference_collection):
             reasons.append(f"collection.reference:{reference_collection}")
 
-    for phrase, collection, brand in _phrase_matches(canonical_tokens, COLLECTION_PHRASES):
-        if _append_unique(collections, collection):
-            reasons.append(f"collection.present:{collection}")
-        elif f"collection.present:{collection}" not in reasons:
-            reasons.append(f"collection.present:{collection}")
+    for rule in COLLECTION_RULES:
+        if not _contains_phrase(list(canonical_tokens), rule.phrase):
+            continue
+        if _append_unique(collections, rule.collection):
+            reasons.append(f"collection.present:{rule.collection}")
+        elif f"collection.present:{rule.collection}" not in reasons:
+            reasons.append(f"collection.present:{rule.collection}")
         if _add_brand_candidate(
             brand_candidates,
-            brand=brand,
+            brand=rule.brand,
             confidence="collection",
-            source_terms=phrase,
+            source_terms=rule.phrase,
         ):
-            reasons.append(f"brand.collection:{brand}")
+            reasons.append(f"brand.collection:{rule.brand}")
 
-    for phrase, nickname, brand in _phrase_matches(canonical_tokens, NICKNAME_PHRASES):
-        if _append_unique(nicknames, nickname):
-            reasons.append(f"nickname.present:{nickname}")
+    for rule in NICKNAME_RULES:
+        if not _contains_phrase(list(canonical_tokens), rule.phrase):
+            continue
+        if _append_unique(nicknames, rule.nickname):
+            reasons.append(f"nickname.present:{rule.nickname}")
         if _add_brand_candidate(
             brand_candidates,
-            brand=brand,
+            brand=rule.brand,
             confidence="nickname",
-            source_terms=phrase,
+            source_terms=rule.phrase,
         ):
-            reasons.append(f"brand.nickname:{brand}")
+            reasons.append(f"brand.nickname:{rule.brand}")
 
     conflicts = conflict_descriptor_tokens(intent.required_descriptor_tokens)
     for token in intent.required_descriptor_tokens:
@@ -421,21 +394,10 @@ def _flatten_reference_terms(reference_terms: list[list[str]]) -> tuple[str, ...
 def _brand_collection_for_reference(
     reference: str,
 ) -> tuple[str | None, str | None]:
-    for pattern, brand, collection in REFERENCE_GRAMMAR:
-        if pattern.search(reference):
-            return brand, collection
+    for rule in REFERENCE_GRAMMAR_RULES:
+        if rule.pattern.search(reference):
+            return rule.brand, rule.collection
     return None, None
-
-
-def _phrase_matches(
-    tokens: tuple[str, ...],
-    phrases: tuple[tuple[tuple[str, ...], str], ...]
-    | tuple[tuple[tuple[str, ...], str, str], ...],
-):
-    for phrase_data in phrases:
-        phrase = phrase_data[0]
-        if _contains_phrase(list(tokens), phrase):
-            yield phrase_data
 
 
 def _add_brand_candidate(

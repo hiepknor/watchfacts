@@ -3,6 +3,10 @@ from dataclasses import dataclass
 import pytest
 
 from app.matcher import (
+    BRAND_ALIAS_RULES,
+    COLLECTION_RULES,
+    NICKNAME_RULES,
+    REFERENCE_GRAMMAR_RULES,
     RULEBOOK,
     extract_relevant_listing_text,
     explain_extraction,
@@ -597,6 +601,42 @@ def test_rulebook_is_priority_ordered() -> None:
     priorities = [rule.priority for rule in RULEBOOK]
 
     assert priorities == sorted(priorities)
+
+
+def test_brand_taxonomy_rules_are_data_driven() -> None:
+    assert any(
+        rule.brand == "rolex" and rule.phrase == ("rolex",)
+        for rule in BRAND_ALIAS_RULES
+    )
+    assert any(
+        rule.brand == "patek_philippe" and rule.phrase == ("patek", "philippe")
+        for rule in BRAND_ALIAS_RULES
+    )
+    assert any(
+        rule.brand == "audemars_piguet" and rule.phrase == ("ap",)
+        for rule in BRAND_ALIAS_RULES
+    )
+    assert any(
+        rule.brand == "rolex"
+        and rule.collection == "daytona"
+        and rule.phrase == ("daytona",)
+        for rule in COLLECTION_RULES
+    )
+    assert any(
+        rule.brand == "audemars_piguet"
+        and rule.collection == "royal_oak"
+        and rule.phrase == ("royal", "oak")
+        for rule in COLLECTION_RULES
+    )
+    assert any(
+        rule.brand == "rolex" and rule.nickname == "panda" for rule in NICKNAME_RULES
+    )
+    assert any(
+        rule.brand == "patek_philippe"
+        and rule.collection == "nautilus"
+        and rule.pattern.search("5711")
+        for rule in REFERENCE_GRAMMAR_RULES
+    )
 
 
 @pytest.mark.parametrize(

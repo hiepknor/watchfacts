@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import re
+from typing import Pattern
 
 
 class RuleGroup(str, Enum):
@@ -22,6 +24,33 @@ class RuleSpec:
     priority: int
     rule_id: str
     description: str
+
+
+@dataclass(frozen=True)
+class BrandAliasRule:
+    phrase: tuple[str, ...]
+    brand: str
+
+
+@dataclass(frozen=True)
+class CollectionRule:
+    phrase: tuple[str, ...]
+    collection: str
+    brand: str
+
+
+@dataclass(frozen=True)
+class NicknameRule:
+    phrase: tuple[str, ...]
+    nickname: str
+    brand: str
+
+
+@dataclass(frozen=True)
+class ReferenceGrammarRule:
+    pattern: Pattern[str]
+    brand: str
+    collection: str | None
 
 
 @dataclass(frozen=True)
@@ -100,3 +129,55 @@ RULEBOOK: tuple[RuleSpec, ...] = (
 
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULEBOOK}
+
+
+BRAND_ALIAS_RULES: tuple[BrandAliasRule, ...] = (
+    BrandAliasRule(("rolex",), "rolex"),
+    BrandAliasRule(("patek", "philippe"), "patek_philippe"),
+    BrandAliasRule(("patek",), "patek_philippe"),
+    BrandAliasRule(("ap",), "audemars_piguet"),
+    BrandAliasRule(("audemars", "piguet"), "audemars_piguet"),
+    BrandAliasRule(("rm",), "richard_mille"),
+    BrandAliasRule(("richard", "mille"), "richard_mille"),
+)
+
+
+COLLECTION_RULES: tuple[CollectionRule, ...] = (
+    CollectionRule(("daytona",), "daytona", "rolex"),
+    CollectionRule(("submariner",), "submariner", "rolex"),
+    CollectionRule(("gmt",), "gmt", "rolex"),
+    CollectionRule(("gmt", "master"), "gmt_master", "rolex"),
+    CollectionRule(("nautilus",), "nautilus", "patek_philippe"),
+    CollectionRule(("aquanaut",), "aquanaut", "patek_philippe"),
+    CollectionRule(("royal", "oak"), "royal_oak", "audemars_piguet"),
+    CollectionRule(("offshore",), "offshore", "audemars_piguet"),
+)
+
+
+NICKNAME_RULES: tuple[NicknameRule, ...] = (
+    NicknameRule(("panda",), "panda", "rolex"),
+    NicknameRule(("pepsi",), "pepsi", "rolex"),
+    NicknameRule(("batman",), "batman", "rolex"),
+    NicknameRule(("batgirl",), "batgirl", "rolex"),
+    NicknameRule(("sprite",), "sprite", "rolex"),
+    NicknameRule(("hulk",), "hulk", "rolex"),
+    NicknameRule(("starbucks",), "starbucks", "rolex"),
+    NicknameRule(("root", "beer"), "root_beer", "rolex"),
+)
+
+
+REFERENCE_GRAMMAR_RULES: tuple[ReferenceGrammarRule, ...] = (
+    ReferenceGrammarRule(
+        re.compile(r"^12[68]500ln$|^116500ln$"),
+        "rolex",
+        "daytona",
+    ),
+    ReferenceGrammarRule(re.compile(r"^571[12]"), "patek_philippe", "nautilus"),
+    ReferenceGrammarRule(re.compile(r"^5167a?$"), "patek_philippe", "aquanaut"),
+    ReferenceGrammarRule(
+        re.compile(r"^155(?:00|10)st$"),
+        "audemars_piguet",
+        "royal_oak",
+    ),
+    ReferenceGrammarRule(re.compile(r"^rm\d"), "richard_mille", None),
+)

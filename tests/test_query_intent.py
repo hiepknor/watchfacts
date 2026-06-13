@@ -172,6 +172,21 @@ def test_build_query_plan_infers_brand_collection_and_nickname() -> None:
     assert plan.required_descriptors == ("daytona", "panda")
 
 
+def test_build_query_plan_preserves_unknown_brand_reference_descriptor_query() -> None:
+    plan = build_query_plan("indiebrand abc123 green")
+
+    assert plan.intent_kind == "reference_with_descriptor"
+    assert plan.brand_candidates == ()
+    assert plan.references == (("abc123",),)
+    assert plan.collections == ()
+    assert plan.nicknames == ()
+    assert plan.required_descriptors == ("indiebrand", "green")
+    assert plan.reason_codes == (
+        "reference.present",
+        "descriptor.present",
+    )
+
+
 @pytest.mark.parametrize(
     ("query", "brand", "collection", "reference"),
     [

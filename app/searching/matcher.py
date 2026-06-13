@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from app.searching.matcher_rulebook import (
+    BRAND_ALIAS_RULES,
+    COLLECTION_RULES,
     ExtractionTrace,
+    NICKNAME_RULES,
     QueryIntent,
+    REFERENCE_GRAMMAR_RULES,
     RULEBOOK,
     RULES_BY_ID,
+    BrandAliasRule,
+    CollectionRule,
+    NicknameRule,
+    ReferenceGrammarRule,
     RuleGroup,
     RuleSpec,
 )
@@ -19,10 +27,18 @@ from app.searching.matcher_rules import (
 )
 
 __all__ = [
+    "BRAND_ALIAS_RULES",
+    "COLLECTION_RULES",
     "ExtractionTrace",
+    "NICKNAME_RULES",
     "QueryIntent",
+    "REFERENCE_GRAMMAR_RULES",
     "RULEBOOK",
     "RULES_BY_ID",
+    "BrandAliasRule",
+    "CollectionRule",
+    "NicknameRule",
+    "ReferenceGrammarRule",
     "RuleGroup",
     "RuleSpec",
     "extract_relevant_listing_text",

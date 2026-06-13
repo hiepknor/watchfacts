@@ -305,14 +305,14 @@ daytona panda
 
 Acceptance:
 
-- [ ] Brand aliases, collections, nicknames, and reference grammar are defined in
+- [x] Brand aliases, collections, nicknames, and reference grammar are defined in
   data structures, not scattered conditional branches.
-- [ ] Unknown brands still flow through the global descriptor/reference matcher.
-- [ ] QueryPlan diagnostics show which terms came from global rules versus
+- [x] Unknown brands still flow through the global descriptor/reference matcher.
+- [x] QueryPlan diagnostics show which terms came from global rules versus
   brand taxonomy rules.
-- [ ] Nickname expansions are explainable and can be locally filtered to avoid
+- [x] Nickname expansions are explainable and can be locally filtered to avoid
   broad false positives.
-- [ ] The taxonomy starts with only high-value brands observed in audits, then
+- [x] The taxonomy starts with only high-value brands observed in audits, then
   expands through benchmark evidence.
 
 Verification:
