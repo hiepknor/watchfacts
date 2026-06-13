@@ -29,6 +29,10 @@ _COMPOUND_DESCRIPTOR_PHRASES = {
     "rg": (("rose", "gold"),),
     "wg": (("white", "gold"),),
 }
+_DESCRIPTOR_CONFLICT_GROUPS = {
+    "rg": ("wg",),
+    "wg": ("rg",),
+}
 
 _DESCRIPTOR_CANONICAL_MAP = {
     alias: canonical
@@ -70,6 +74,17 @@ def canonicalize_descriptor_tokens_as_set(
     tokens: Iterable[str],
 ) -> set[str]:
     return set(canonicalize_descriptor_tokens(tokens))
+
+
+def conflict_descriptor_tokens(tokens: Iterable[str]) -> tuple[str, ...]:
+    conflicts: list[str] = []
+    seen: set[str] = set()
+    for token in canonicalize_descriptor_tokens(tokens):
+        for conflict in _DESCRIPTOR_CONFLICT_GROUPS.get(token, ()):
+            if conflict not in seen:
+                conflicts.append(conflict)
+                seen.add(conflict)
+    return tuple(conflicts)
 
 
 def descriptor_exists_in_tokens(descriptor: str, tokens: Iterable[str]) -> bool:

@@ -90,6 +90,22 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
         "weak_match_count": 0,
         "ambiguous_candidate_count": 0,
         "query_intent": "reference_with_descriptor",
+        "query_plan": {
+            "original_query": "228253a choco",
+            "canonical_query": "228253a choco",
+            "brand_candidates": [],
+            "references": [["228253a"]],
+            "collections": [],
+            "nicknames": [],
+            "required_descriptors": ["choco"],
+            "optional_descriptors": [],
+            "conflict_descriptors": [],
+            "intent_kind": "reference_with_descriptor",
+            "reason_codes": [
+                "reference.present",
+                "descriptor.present",
+            ],
+        },
         "required_descriptor_tokens": ["choco"],
         "optional_descriptor_tokens": [],
         "intent_reason_codes": [

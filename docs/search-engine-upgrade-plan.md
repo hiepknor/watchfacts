@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+In progress.
 
 ## Date
 
@@ -225,11 +225,11 @@ Suggested fields:
 
 Acceptance:
 
-- [ ] Search diagnostics expose safe query-plan fields.
-- [ ] Audit JSONL emits query-plan fields for query summaries.
-- [ ] No diagnostics expose secrets, cookies, CSRF tokens, full HTML, or raw
+- [x] Search diagnostics expose safe query-plan fields.
+- [x] Audit JSONL emits query-plan fields for query summaries.
+- [x] No diagnostics expose secrets, cookies, CSRF tokens, full HTML, or raw
   WatchFacts response bodies.
-- [ ] Existing MCP payload contract remains backward compatible.
+- [x] Existing MCP payload contract remains backward compatible.
 
 Verification:
 

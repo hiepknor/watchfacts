@@ -19,7 +19,7 @@ from app.config import load_search_settings
 from app.db import Database
 from app.fuzzy_diagnostics import score_fuzzy_match
 from app.issues import detect_suspicious_result
-from app.query_intent import classify_query_intent
+from app.query_intent import build_query_plan, classify_query_intent
 from app.result_scoring import score_result
 from app.search import SearchAuditEvent, WatchFactsSearchWorkflow, _search_cache_key
 from app.search_contracts import validate_search_diagnostics, validate_search_payload
@@ -102,6 +102,7 @@ class AuditQueryReport:
     top_quality_groups: tuple[int, ...]
     summary: AuditQuerySummary
     rows: tuple[AuditResultRow, ...]
+    query_plan: dict[str, object]
     audit_events: tuple[SearchAuditEvent, ...] = ()
     validation_errors: tuple[str, ...] = ()
 
@@ -115,6 +116,7 @@ def build_query_report(
     server_filtered: bool = False,
     audit_events: tuple[SearchAuditEvent, ...] = (),
     validation_errors: tuple[str, ...] = (),
+    query_plan: dict[str, object] | None = None,
 ) -> AuditQueryReport:
     rows: list[AuditResultRow] = []
     for index, result in enumerate(results[:limit], start=1):
@@ -162,6 +164,7 @@ def build_query_report(
         top_quality_groups=tuple(row.quality_group for row in rows),
         summary=summary,
         rows=tuple(rows),
+        query_plan=query_plan or build_query_plan(query).to_payload(),
         audit_events=audit_events,
         validation_errors=validation_errors,
     )
@@ -545,6 +548,7 @@ def _query_summary_event(report: AuditQueryReport) -> dict[str, object]:
         "query": report.query,
         "result_count": report.result_count,
         "summary": asdict(report.summary),
+        "query_plan": report.query_plan,
     }
 
 

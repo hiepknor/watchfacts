@@ -134,7 +134,90 @@ def validate_search_diagnostics(payload: dict[str, Any]) -> list[str]:
             and final_count > matched_count
         ):
             errors.append("search_diagnostics.final_count must not exceed matched_count")
+    _validate_query_plan(payload.get("query_plan"), errors)
     return errors
+
+
+def _validate_query_plan(value: Any, errors: list[str]) -> None:
+    if value is None:
+        return
+    prefix = "search_diagnostics.query_plan."
+    if not isinstance(value, dict):
+        errors.append("search_diagnostics.query_plan must be an object or null")
+        return
+
+    for field in ("original_query", "canonical_query", "intent_kind"):
+        if field not in value:
+            errors.append(f"{prefix}{field} is required")
+        else:
+            _validate_required_text(value, field, errors, prefix=prefix)
+
+    for field in (
+        "brand_candidates",
+        "references",
+        "collections",
+        "nicknames",
+        "required_descriptors",
+        "optional_descriptors",
+        "conflict_descriptors",
+        "reason_codes",
+    ):
+        if field not in value:
+            errors.append(f"{prefix}{field} is required")
+        elif not isinstance(value[field], list):
+            errors.append(f"{prefix}{field} must be a list")
+
+    brand_candidates = value.get("brand_candidates")
+    if isinstance(brand_candidates, list):
+        for index, candidate in enumerate(brand_candidates):
+            candidate_prefix = f"{prefix}brand_candidates[{index}]."
+            if not isinstance(candidate, dict):
+                errors.append(f"{prefix}brand_candidates[{index}] must be an object")
+                continue
+            for field in ("brand", "confidence", "source_terms"):
+                if field not in candidate:
+                    errors.append(f"{candidate_prefix}{field} is required")
+            _validate_required_text(candidate, "brand", errors, prefix=candidate_prefix)
+            _validate_required_text(
+                candidate,
+                "confidence",
+                errors,
+                prefix=candidate_prefix,
+            )
+            _validate_string_list(
+                candidate.get("source_terms"),
+                errors,
+                prefix=f"{candidate_prefix}source_terms",
+            )
+
+    references = value.get("references")
+    if isinstance(references, list):
+        for index, reference in enumerate(references):
+            _validate_string_list(
+                reference,
+                errors,
+                prefix=f"{prefix}references[{index}]",
+            )
+
+    for field in (
+        "collections",
+        "nicknames",
+        "required_descriptors",
+        "optional_descriptors",
+        "conflict_descriptors",
+        "reason_codes",
+    ):
+        if isinstance(value.get(field), list):
+            _validate_string_list(value[field], errors, prefix=f"{prefix}{field}")
+
+
+def _validate_string_list(value: Any, errors: list[str], *, prefix: str) -> None:
+    if not isinstance(value, list):
+        errors.append(f"{prefix} must be a list")
+        return
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            errors.append(f"{prefix}[{index}] must be a non-empty string")
 
 
 def _validate_required_text(

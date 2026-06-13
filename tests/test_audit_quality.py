@@ -176,6 +176,30 @@ def test_format_jsonl_report_includes_stage_events_and_redacts_text() -> None:
     lines = [json.loads(line) for line in format_jsonl_report([report]).splitlines()]
 
     assert lines[0]["type"] == "query_summary"
+    assert lines[0]["query_plan"] == {
+        "original_query": "5712g",
+        "canonical_query": "5712g",
+        "brand_candidates": [
+            {
+                "brand": "patek_philippe",
+                "confidence": "reference",
+                "source_terms": ["5712g"],
+            },
+        ],
+        "references": [["5712g"]],
+        "collections": ["nautilus"],
+        "nicknames": [],
+        "required_descriptors": [],
+        "optional_descriptors": [],
+        "conflict_descriptors": [],
+        "intent_kind": "reference_only",
+        "reason_codes": [
+            "reference.present",
+            "descriptor.absent",
+            "brand.reference:patek_philippe",
+            "collection.reference:nautilus",
+        ],
+    }
     assert lines[1]["type"] == "audit_event"
     assert lines[1]["stage"] == "raw"
     assert lines[1]["decision"] == "include"

@@ -30,7 +30,12 @@ from app.searching.matcher import (
     normalize_text,
 )
 from app.searching.parser import ListingCandidate, parse_listings
-from app.searching.query_intent import QueryIntentMetadata, classify_query_intent
+from app.searching.query_intent import (
+    QueryIntentMetadata,
+    QueryPlan,
+    build_query_plan,
+    classify_query_intent,
+)
 from app.searching.result_scoring import rank_results_by_quality, score_result
 from app.integrations.scraper import ScrapeResult, fetch_watchfacts_html
 from app.searching.search_result import SearchResult, search_results_to_dicts
@@ -76,6 +81,7 @@ class SearchDiagnostics:
     fuzzy_score_min: int | None = None
     fuzzy_score_avg: float | None = None
     query_intent: str | None = None
+    query_plan: QueryPlan | None = None
     required_descriptor_tokens: tuple[str, ...] = ()
     optional_descriptor_tokens: tuple[str, ...] = ()
     intent_reason_codes: tuple[str, ...] = ()
@@ -97,6 +103,7 @@ class SearchDiagnostics:
             "fuzzy_score_min": self.fuzzy_score_min,
             "fuzzy_score_avg": self.fuzzy_score_avg,
             "query_intent": self.query_intent,
+            "query_plan": self.query_plan.to_payload() if self.query_plan else None,
             "required_descriptor_tokens": list(self.required_descriptor_tokens),
             "optional_descriptor_tokens": list(self.optional_descriptor_tokens),
             "intent_reason_codes": list(self.intent_reason_codes),
@@ -176,6 +183,7 @@ class WatchFactsSearchWorkflow:
         search_started_at = time.perf_counter()
         stage_timings_ms: dict[str, int] = {}
         query_intent = classify_query_intent(query)
+        query_plan = build_query_plan(query)
         cache_key = _search_cache_key(query, self.settings)
         in_flight_key = f"{self.settings.db_path.resolve()}:{cache_key}"
         try:
@@ -207,6 +215,7 @@ class WatchFactsSearchWorkflow:
                     cache_hit=True,
                     source_truncation_suspected=None,
                     query_intent=query_intent.kind,
+                    query_plan=query_plan,
                     required_descriptor_tokens=query_intent.required_descriptor_tokens,
                     optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
                     intent_reason_codes=query_intent.reason_codes,
@@ -271,6 +280,7 @@ class WatchFactsSearchWorkflow:
                         cache_hit=True,
                         source_truncation_suspected=None,
                         query_intent=query_intent.kind,
+                        query_plan=query_plan,
                         required_descriptor_tokens=query_intent.required_descriptor_tokens,
                         optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
                         intent_reason_codes=query_intent.reason_codes,
@@ -325,6 +335,7 @@ class WatchFactsSearchWorkflow:
         scrape_result = await self.fetch_html(self.settings, query=query)
         _add_stage_timing(stage_timings_ms, "watchfacts_fetch", fetch_started_at)
         query_intent = classify_query_intent(query)
+        query_plan = build_query_plan(query)
         audit_events: list[SearchAuditEvent] = []
         self._audit_raw_scrape(
             audit_events,
@@ -542,6 +553,7 @@ class WatchFactsSearchWorkflow:
                 else None
             ),
             query_intent=query_intent.kind,
+            query_plan=query_plan,
             required_descriptor_tokens=query_intent.required_descriptor_tokens,
             optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
             intent_reason_codes=query_intent.reason_codes,

@@ -178,6 +178,40 @@ def test_validate_search_diagnostics_reports_bad_counts() -> None:
     assert "search_diagnostics.final_count must not exceed matched_count" in errors
 
 
+def test_validate_search_diagnostics_reports_bad_query_plan_shape() -> None:
+    errors = validate_search_diagnostics(
+        {
+            "cache_hit": False,
+            "final_count": 0,
+            "query_plan": {
+                "original_query": "daytona panda",
+                "canonical_query": "",
+                "brand_candidates": [{"brand": "rolex", "source_terms": "rolex"}],
+                "references": ["126500ln"],
+                "collections": "daytona",
+                "nicknames": [],
+                "required_descriptors": [],
+                "optional_descriptors": [],
+                "conflict_descriptors": [],
+                "intent_kind": "brand_model_descriptor",
+                "reason_codes": [],
+            },
+        }
+    )
+
+    assert "search_diagnostics.query_plan.canonical_query must be a non-empty string" in errors
+    assert "search_diagnostics.query_plan.collections must be a list" in errors
+    assert (
+        "search_diagnostics.query_plan.brand_candidates[0].confidence is required"
+        in errors
+    )
+    assert (
+        "search_diagnostics.query_plan.brand_candidates[0].source_terms must be a list"
+        in errors
+    )
+    assert "search_diagnostics.query_plan.references[0] must be a list" in errors
+
+
 def test_validate_search_payload_requires_next_offset_when_has_more() -> None:
     payload = {
         "query": "5712g",
