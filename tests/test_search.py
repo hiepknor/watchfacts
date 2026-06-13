@@ -1352,6 +1352,215 @@ def test_search_workflow_uses_same_uncached_retrieval_for_compound_material_alia
     ]
 
 
+def test_search_workflow_expands_daytona_panda_retrieval_with_local_filters(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        if query == "daytona panda":
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "Rolex Daytona Panda 2024 full set HKD 268000",
+                  "companyName": "Dealer Panda",
+                  "repostedAt": "2026-06-13 10:00:00",
+                  "number": 111,
+                  "frontImage": "https://watchfacts.example/daytona-panda.jpg"
+                }
+              ]
+            }
+            """
+        elif query == "daytona white":
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "Rolex Daytona White Dial 2023 Full Set HKD 255000",
+                  "companyName": "Dealer White",
+                  "repostedAt": "2026-06-12 10:00:00",
+                  "number": 222,
+                  "frontImage": "https://watchfacts.example/daytona-white.jpg"
+                },
+                {
+                  "title": "Rolex Daytona Black Dial 2024 Full Set HKD 238000",
+                  "companyName": "Dealer Black",
+                  "repostedAt": "2026-06-12 10:00:00",
+                  "number": 223,
+                  "frontImage": "https://watchfacts.example/daytona-black.jpg"
+                }
+              ]
+            }
+            """
+        elif query == "126500ln white":
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "126500LN White Dial N5/2026 HKD 279000",
+                  "companyName": "Dealer 126",
+                  "repostedAt": "2026-06-11 10:00:00",
+                  "number": 333,
+                  "frontImage": "https://watchfacts.example/126500ln-white.jpg"
+                },
+                {
+                  "title": "126500LN Black Dial N5/2026 HKD 239000",
+                  "companyName": "Dealer 126 Black",
+                  "repostedAt": "2026-06-11 10:00:00",
+                  "number": 334,
+                  "frontImage": "https://watchfacts.example/126500ln-black.jpg"
+                }
+              ]
+            }
+            """
+        else:
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "116500LN White Dial 2021 Full Set HKD 225000",
+                  "companyName": "Dealer 116",
+                  "repostedAt": "2026-06-10 10:00:00",
+                  "number": 444,
+                  "frontImage": "https://watchfacts.example/116500ln-white.jpg"
+                }
+              ]
+            }
+            """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("daytona panda"))
+    result_texts = {result.listing_text for result in results}
+
+    assert fetch_queries == [
+        "daytona panda",
+        "daytona white",
+        "126500ln white",
+        "116500ln white",
+    ]
+    assert result_texts == {
+        "Daytona Panda 2024 full set HKD 268000",
+        "Rolex Daytona White Dial 2023 Full Set HKD 255000",
+        "126500LN White Dial N5/2026 HKD 279000",
+        "116500LN White Dial 2021 Full Set HKD 225000",
+    }
+    assert all("Black Dial" not in result.listing_text for result in results)
+    assert workflow.last_search_diagnostics is not None
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["retrieval_query_count"] == 4
+    assert diagnostics_payload["retrieval_queries"] == [
+        "daytona panda",
+        "daytona white",
+        "126500ln white",
+        "116500ln white",
+    ]
+    assert "retrieval.nickname_expansion:panda" in diagnostics_payload[
+        "retrieval_reason_codes"
+    ]
+
+
+def test_search_workflow_does_not_expand_reference_only_query(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+    html = """
+    {
+      "listings": [
+        {
+          "title": "126500LN White Dial N5/2026 HKD 279000",
+          "companyName": "Dealer 126",
+          "repostedAt": "2026-06-11 10:00:00",
+          "number": 333,
+          "frontImage": "https://watchfacts.example/126500ln-white.jpg"
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("126500ln"))
+
+    assert fetch_queries == ["126500ln"]
+    assert [result.listing_text for result in results] == [
+        "126500LN White Dial N5/2026 HKD 279000"
+    ]
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.retrieval_reason_codes == (
+        "retrieval.raw_query",
+    )
+
+
+def test_search_workflow_does_not_expand_reference_with_nickname_query(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        if query == "126500ln":
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "126500LN Panda Dial N5/2026 HKD 279000",
+                  "companyName": "Dealer 126",
+                  "repostedAt": "2026-06-11 10:00:00",
+                  "number": 333,
+                  "frontImage": "https://watchfacts.example/126500ln-panda.jpg"
+                }
+              ]
+            }
+            """
+        else:
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "116500LN White Dial 2021 Full Set HKD 225000",
+                  "companyName": "Dealer 116",
+                  "repostedAt": "2026-06-10 10:00:00",
+                  "number": 444,
+                  "frontImage": "https://watchfacts.example/116500ln-white.jpg"
+                }
+              ]
+            }
+            """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("126500ln panda"))
+
+    assert fetch_queries == ["126500ln"]
+    assert [result.listing_text for result in results] == [
+        "126500LN Panda Dial N5/2026 HKD 279000"
+    ]
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.retrieval_reason_codes == (
+        "retrieval.reference_with_descriptors",
+    )
+
+
 def test_search_workflow_does_not_use_reference_only_fallback_for_multi_descriptor_query(
     tmp_path,
 ) -> None:

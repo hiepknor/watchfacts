@@ -54,6 +54,17 @@ class ReferenceGrammarRule:
 
 
 @dataclass(frozen=True)
+class RetrievalExpansionRule:
+    collection: str
+    nickname: str
+    retrieval_queries: tuple[str, ...]
+    local_filter_queries: tuple[str, ...]
+    reason_code: str
+    requires_reference_absent: bool = True
+    requires_optional_descriptor_absent: bool = True
+
+
+@dataclass(frozen=True)
 class QueryIntent:
     reference_terms: tuple[tuple[str, ...], ...]
     descriptor_tokens: tuple[str, ...]
@@ -163,6 +174,25 @@ NICKNAME_RULES: tuple[NicknameRule, ...] = (
     NicknameRule(("hulk",), "hulk", "rolex"),
     NicknameRule(("starbucks",), "starbucks", "rolex"),
     NicknameRule(("root", "beer"), "root_beer", "rolex"),
+)
+
+
+RETRIEVAL_EXPANSION_RULES: tuple[RetrievalExpansionRule, ...] = (
+    RetrievalExpansionRule(
+        collection="daytona",
+        nickname="panda",
+        retrieval_queries=(
+            "daytona white",
+            "126500ln white",
+            "116500ln white",
+        ),
+        local_filter_queries=(
+            "daytona white",
+            "126500ln white",
+            "116500ln white",
+        ),
+        reason_code="retrieval.nickname_expansion:panda",
+    ),
 )
 
 

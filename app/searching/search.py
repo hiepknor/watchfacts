@@ -36,6 +36,10 @@ from app.searching.query_intent import (
     build_query_plan,
     classify_query_intent,
 )
+from app.searching.matcher_rulebook import (
+    RETRIEVAL_EXPANSION_RULES,
+    RetrievalExpansionRule,
+)
 from app.searching.result_scoring import rank_results_by_quality, score_result
 from app.integrations.scraper import ScrapeResult, fetch_watchfacts_html
 from app.searching.search_result import SearchResult, search_results_to_dicts
@@ -45,7 +49,7 @@ from app.searching.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger("app.search")
-SEARCH_CACHE_VERSION = "search-v22"
+SEARCH_CACHE_VERSION = "search-v23"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -147,7 +151,7 @@ class SearchAuditEvent:
 @dataclass(frozen=True)
 class RetrievalPlan:
     fetch_queries: tuple[str, ...]
-    local_filter_query: str
+    local_filter_queries: tuple[str, ...]
     reason_codes: tuple[str, ...]
 
 
@@ -354,60 +358,90 @@ class WatchFactsSearchWorkflow:
         query_intent = classify_query_intent(query)
         query_plan = build_query_plan(query)
         retrieval_plan = _build_retrieval_plan(query, query_plan)
-        local_filter_query = retrieval_plan.local_filter_query
+        local_filter_queries = retrieval_plan.local_filter_queries
         retrieval_queries = list(retrieval_plan.fetch_queries)
         retrieval_reason_codes = list(retrieval_plan.reason_codes)
-        fetch_started_at = time.perf_counter()
-        scrape_result = await self.fetch_html(
-            self.settings,
-            query=retrieval_plan.fetch_queries[0],
-        )
-        _add_stage_timing(stage_timings_ms, "watchfacts_fetch", fetch_started_at)
         audit_events: list[SearchAuditEvent] = []
-        self._audit_raw_scrape(
-            audit_events,
-            query=query,
-            query_intent=query_intent,
-            scrape_result=scrape_result,
-            candidate_id="raw:1",
-            reason_codes=retrieval_plan.reason_codes,
-        )
-        server_filtered_hit_count = int(scrape_result.server_filtered)
-        playwright_fallback_count = int(scrape_result.used_playwright_fallback)
-        parse_started_at = time.perf_counter()
-        parsed = parse_listings(scrape_result.html)
-        self._audit_listing_candidates(
-            audit_events,
-            query=query,
-            query_intent=query_intent,
-            stage="parsed",
-            listings=parsed,
-        )
-        _add_stage_timing(stage_timings_ms, "parse", parse_started_at)
-        match_started_at = time.perf_counter()
-        matched = (
-            _filter_server_filtered_listings(local_filter_query, parsed)
-            if scrape_result.server_filtered
-            else filter_matching_listings(local_filter_query, parsed)
-        )
-        self._audit_listing_candidates(
-            audit_events,
-            query=query,
-            query_intent=query_intent,
-            stage="matched",
-            listings=matched,
-        )
-        weak_match_count, ambiguous_candidate_count = self._audit_match_confidence(
-            audit_events,
-            query=query,
-            query_intent=query_intent,
-            parsed=parsed,
-            matched=matched,
-        )
-        _add_stage_timing(stage_timings_ms, "match", match_started_at)
-        parsed_count = len(parsed)
-        if _should_expand_year_query(local_filter_query, len(matched)):
-            expanded_query = _query_without_year_descriptors(local_filter_query)
+        server_filtered_hit_count = 0
+        playwright_fallback_count = 0
+        parsed_count = 0
+        matched: list[ListingCandidate] = []
+        weak_match_count = 0
+        ambiguous_candidate_count = 0
+        for retrieval_index, retrieval_query in enumerate(
+            retrieval_plan.fetch_queries,
+            start=1,
+        ):
+            fetch_started_at = time.perf_counter()
+            scrape_result = await self.fetch_html(
+                self.settings,
+                query=retrieval_query,
+            )
+            _add_stage_timing(stage_timings_ms, "watchfacts_fetch", fetch_started_at)
+            self._audit_raw_scrape(
+                audit_events,
+                query=query,
+                query_intent=query_intent,
+                scrape_result=scrape_result,
+                candidate_id=(
+                    "raw:1" if retrieval_index == 1 else f"raw:{retrieval_index}"
+                ),
+                reason_codes=retrieval_plan.reason_codes,
+            )
+            server_filtered_hit_count += int(scrape_result.server_filtered)
+            playwright_fallback_count += int(scrape_result.used_playwright_fallback)
+            parse_started_at = time.perf_counter()
+            parsed = parse_listings(scrape_result.html)
+            self._audit_listing_candidates(
+                audit_events,
+                query=query,
+                query_intent=query_intent,
+                stage="parsed",
+                listings=parsed,
+                candidate_prefix=(
+                    None if retrieval_index == 1 else f"retrieval-{retrieval_index}-parsed"
+                ),
+            )
+            _add_stage_timing(stage_timings_ms, "parse", parse_started_at)
+            match_started_at = time.perf_counter()
+            retrieval_matched = _filter_retrieved_listings(
+                local_filter_queries,
+                parsed,
+                server_filtered=scrape_result.server_filtered,
+            )
+            self._audit_listing_candidates(
+                audit_events,
+                query=query,
+                query_intent=query_intent,
+                stage="matched",
+                listings=retrieval_matched,
+                candidate_prefix=(
+                    None
+                    if retrieval_index == 1
+                    else f"retrieval-{retrieval_index}-matched"
+                ),
+            )
+            weak_count, ambiguous_count = self._audit_match_confidence(
+                audit_events,
+                query=query,
+                query_intent=query_intent,
+                parsed=parsed,
+                matched=retrieval_matched,
+                candidate_prefix=(
+                    "candidate" if retrieval_index == 1 else f"retrieval-{retrieval_index}"
+                ),
+            )
+            weak_match_count += weak_count
+            ambiguous_candidate_count += ambiguous_count
+            _add_stage_timing(stage_timings_ms, "match", match_started_at)
+            parsed_count += len(parsed)
+            matched = _merge_listing_candidates(matched, retrieval_matched)
+
+        if (
+            len(local_filter_queries) == 1
+            and _should_expand_year_query(local_filter_queries[0], len(matched))
+        ):
+            expanded_query = _query_without_year_descriptors(local_filter_queries[0])
             if expanded_query is not None:
                 fetch_started_at = time.perf_counter()
                 expanded_scrape_result = await self.fetch_html(
@@ -448,7 +482,7 @@ class WatchFactsSearchWorkflow:
                 _add_stage_timing(stage_timings_ms, "parse", parse_started_at)
                 match_started_at = time.perf_counter()
                 expanded_matched = filter_matching_listings(
-                    local_filter_query,
+                    local_filter_queries[0],
                     expanded_parsed,
                 )
                 self._audit_listing_candidates(
@@ -1254,6 +1288,29 @@ def _should_expand_year_query(query: str, matched_count: int) -> bool:
 
 
 def _build_retrieval_plan(query: str, query_plan: QueryPlan) -> RetrievalPlan:
+    expansion_rule = _retrieval_expansion_rule(query_plan)
+    if expansion_rule is not None:
+        retrieval_queries = _dedupe_strings(
+            [
+                query,
+                *expansion_rule.retrieval_queries,
+            ]
+        )
+        local_filter_queries = _dedupe_strings(
+            [
+                query,
+                *expansion_rule.local_filter_queries,
+            ]
+        )
+        return RetrievalPlan(
+            fetch_queries=retrieval_queries,
+            local_filter_queries=local_filter_queries,
+            reason_codes=(
+                "retrieval.raw_query",
+                expansion_rule.reason_code,
+            ),
+        )
+
     reference_query = _reference_retrieval_query(query_plan)
     if (
         reference_query
@@ -1262,14 +1319,46 @@ def _build_retrieval_plan(query: str, query_plan: QueryPlan) -> RetrievalPlan:
     ):
         return RetrievalPlan(
             fetch_queries=(reference_query,),
-            local_filter_query=query,
+            local_filter_queries=(query,),
             reason_codes=("retrieval.reference_with_descriptors",),
         )
     return RetrievalPlan(
         fetch_queries=(query,),
-        local_filter_query=query,
+        local_filter_queries=(query,),
         reason_codes=("retrieval.raw_query",),
     )
+
+
+def _retrieval_expansion_rule(query_plan: QueryPlan) -> RetrievalExpansionRule | None:
+    for rule in RETRIEVAL_EXPANSION_RULES:
+        if rule.requires_reference_absent and query_plan.references:
+            continue
+        if rule.requires_optional_descriptor_absent and query_plan.optional_descriptors:
+            continue
+        if rule.collection not in query_plan.collections:
+            continue
+        if rule.nickname not in query_plan.nicknames:
+            continue
+        return rule
+    return None
+
+
+def _filter_retrieved_listings(
+    local_filter_queries: tuple[str, ...],
+    listings: list[ListingCandidate],
+    *,
+    server_filtered: bool,
+) -> list[ListingCandidate]:
+    matched: list[ListingCandidate] = []
+    use_server_filtered_policy = server_filtered and len(local_filter_queries) == 1
+    for local_query in local_filter_queries:
+        local_matches = (
+            _filter_server_filtered_listings(local_query, listings)
+            if use_server_filtered_policy
+            else filter_matching_listings(local_query, listings)
+        )
+        matched = _merge_listing_candidates(matched, local_matches)
+    return matched
 
 
 def _reference_retrieval_query(query_plan: QueryPlan) -> str:

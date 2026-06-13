@@ -454,6 +454,19 @@ daytona panda
   local filter: 15500st reference plus blue descriptor
 ```
 
+Initial implementation slice:
+
+- [x] `daytona panda` expands to at most four documented retrieval queries:
+  raw query, `daytona white`, `126500ln white`, and `116500ln white`.
+- [x] Multi-query nickname expansion uses strict local matcher eligibility, so
+  black-dial Daytona listings fetched through broad server results do not pass.
+- [x] Reference-only queries remain raw-query retrieval and do not inherit
+  brand/model/nickname expansion behavior.
+- [x] Reference-bearing nickname queries, such as `126500ln panda`, remain
+  reference-scoped and do not expand to sibling references.
+- [ ] Add Patek Philippe `5711 blue` collection expansion.
+- [ ] Add Audemars Piguet `15500st blue` Royal Oak expansion.
+
 Acceptance:
 
 - [ ] Retrieval expansions are bounded per query and visible in diagnostics.
