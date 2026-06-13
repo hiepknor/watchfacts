@@ -3239,6 +3239,89 @@
       }
     }
 
+    /* In-app browser compact pass: keep the first result visible on short mobile viewports. */
+    @media (max-width: 520px) {
+      .header-inner {
+        padding: 0.55rem 0 0.6rem;
+        gap: 0.42rem;
+      }
+
+      .header-main {
+        gap: 0.28rem;
+        padding-left: 0.5rem;
+      }
+
+      h1 {
+        font-size: 1.26rem;
+        line-height: 1.08;
+      }
+
+      .header-meta {
+        display: block;
+        font-size: 0.72rem;
+        line-height: 1.2;
+      }
+
+      .header-meta .meta-chip:nth-child(1),
+      .header-meta .meta-chip:nth-child(2) {
+        display: none;
+      }
+
+      .header-meta .meta-chip {
+        display: inline-flex;
+      }
+
+      .summary-panel {
+        gap: 0.32rem;
+      }
+
+      .summary-item {
+        min-height: 1.95rem;
+        border-radius: 10px;
+        padding: 0.34rem 0.45rem;
+      }
+
+      .summary-label {
+        font-size: 0.62rem;
+      }
+
+      .summary-value,
+      .summary-value.status-value {
+        font-size: 0.86rem;
+      }
+
+      .toolbar-inner {
+        gap: 0.32rem;
+        padding: 0.42rem 0;
+      }
+
+      input[type="search"], select {
+        min-height: 2rem;
+        padding: 0.32rem 0.5rem;
+        font-size: 0.92rem;
+      }
+
+      .toolbar-actions {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.28rem;
+      }
+
+      .toolbar-actions .density-toggle {
+        min-height: 1.95rem;
+      }
+
+      .density-toggle button,
+      .tool-button {
+        min-height: 1.85rem;
+        padding: 0.22rem 0.24rem;
+        font-size: 0.76rem;
+      }
+
+      main.wrap {
+        padding-top: 0.55rem;
+      }
+    }
+
     @media print {
       .commandbar, .result-actions, .result-modal, .toast {
         display: none;

@@ -535,6 +535,98 @@ def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
     }
 
 
+def test_result_page_template_keeps_in_app_browser_header_compact(tmp_path) -> None:
+    chrome = chrome_executable()
+    if chrome is None:
+        pytest.skip("Chrome or Chromium is not installed")
+
+    payload = {
+        "query": "5205r green",
+        "created_at": "2026-06-13T04:44:00Z",
+        "expires_at": "2026-06-14T04:44:00Z",
+        "total_count": 26,
+        "offset": 0,
+        "limit": 60,
+        "next_offset": 26,
+        "result_count": 1,
+        "results": [
+            {
+                "rank": 1,
+                "result_id": "watchfacts-result-001",
+                "source_result_id": "watchfacts-result-001",
+                "listing_text": "5205R GREEN NEW 2/2026 $416,000 HKD",
+                "seller": "Mr Dain",
+                "posted_date": "June 12, 2026",
+                "image_url": None,
+                "source_url": None,
+                "seller_phone": None,
+                "similar_results": [],
+            },
+        ],
+    }
+    audit_script = """
+    <script>
+      setTimeout(() => {
+        const rect = selector => {
+          const node = document.querySelector(selector);
+          const box = node.getBoundingClientRect();
+          return { y: box.y, height: box.height, bottom: box.bottom };
+        };
+        const chips = document.querySelectorAll(".meta-chip");
+        const output = {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          overflowX: document.documentElement.scrollWidth > window.innerWidth,
+          header: rect(".page-header"),
+          commandbar: rect(".commandbar"),
+          firstResult: rect(".result-card"),
+          generatedDisplay: getComputedStyle(chips[0]).display,
+          expiresDisplay: getComputedStyle(chips[1]).display,
+          pageDisplay: getComputedStyle(chips[2]).display
+        };
+        const node = document.createElement("pre");
+        node.id = "layoutAudit";
+        node.textContent = JSON.stringify(output);
+        document.body.appendChild(node);
+      }, 0);
+    </script>
+    """
+    page_path = tmp_path / "result-page-mobile.html"
+    page_path.write_text(
+        render_result_page_template(payload).replace("</body>", f"{audit_script}</body>"),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            chrome,
+            "--headless=new",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--force-device-scale-factor=1",
+            "--window-size=390,640",
+            f"--virtual-time-budget={os.getenv('RESULT_TEMPLATE_VIRTUAL_TIME_BUDGET', '8000')}",
+            "--dump-dom",
+            page_path.as_uri(),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=int(os.getenv("RESULT_TEMPLATE_BROWSER_TIMEOUT", "60")),
+    )
+    match = re.search(r'<pre id="layoutAudit">([^<]+)</pre>', result.stdout)
+    assert match is not None, result.stdout
+    layout = json.loads(html.unescape(match.group(1)))
+
+    assert layout["overflowX"] is False
+    assert layout["generatedDisplay"] == "none"
+    assert layout["expiresDisplay"] == "none"
+    assert layout["pageDisplay"] == "inline-flex"
+    assert layout["header"]["height"] <= 125
+    assert layout["commandbar"]["height"] <= 130
+    assert layout["firstResult"]["y"] <= 330
+
+
 def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
     config = make_config(tmp_path)
     now = datetime(2026, 6, 7, 12, 0, tzinfo=timezone.utc)
