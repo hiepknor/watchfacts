@@ -209,6 +209,8 @@ def test_validate_search_diagnostics_reports_bad_retrieval_timing_shape() -> Non
                     "server_filtered": False,
                     "playwright_fallback": False,
                     "dominant": False,
+                    "failed": "no",
+                    "error_type": 404,
                     "reason_codes": [""],
                 }
             ],
@@ -233,6 +235,8 @@ def test_validate_search_diagnostics_reports_bad_retrieval_timing_shape() -> Non
         in errors
     )
     assert "search_diagnostics.retrieval_timings[0].empty must be a boolean" in errors
+    assert "search_diagnostics.retrieval_timings[0].failed must be a boolean" in errors
+    assert "search_diagnostics.retrieval_timings[0].error_type must be a string or null" in errors
     assert (
         "search_diagnostics.retrieval_timings[0].reason_codes[0] must be a non-empty string"
         in errors

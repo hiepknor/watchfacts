@@ -107,12 +107,16 @@ Access control:
   from SQLite before calling WatchFacts again.
 - `SEARCH_MAX_CONCURRENT_SEARCHES=1` serializes non-Telegram WatchFacts searches,
   including MCP requests, while identical queries still coalesce.
+- `SEARCH_RETRIEVAL_CONCURRENCY=1` keeps retrieval branches inside one search
+  sequential by default. Set `2` to evaluate bounded parallel branch fetching
+  after comparing cold benchmark output; the runtime rejects values above `4`.
 - Use `make mcp-prewarm` after deploy or from a light cron to warm common
   production query cache entries. Add `MCP_PREWARM_FORMAT=jsonl` when the output
   should be archived as an ops artifact.
 - Existing production `.env` files are not overwritten by `.env.example`.
   After changing cache policy, run `make mcp-runtime-config` on the server and
-  verify `search_cache_ttl_seconds=1800`.
+  verify `search_cache_ttl_seconds=1800` and
+  `search_retrieval_concurrency=<expected>`.
 
 Primary Telegram behavior:
 
@@ -431,8 +435,10 @@ make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
 ```
 
 This clears local `search_cache` and `result_reference_cache` rows before each
-query run. Use `audit_quality.py` when a query needs quality-group, scoring,
-image attribution, or raw-to-final funnel evidence.
+query run. For retrieval parallelism changes, compare cold benchmark output
+with `SEARCH_RETRIEVAL_CONCURRENCY=1` and `2` on the running MCP service before
+raising the setting further. Use `audit_quality.py` when a query needs
+quality-group, scoring, image attribution, or raw-to-final funnel evidence.
 
 ## Search Engine Deploy Gate
 

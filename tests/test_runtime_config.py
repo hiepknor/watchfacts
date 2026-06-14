@@ -20,6 +20,7 @@ def test_safe_runtime_config_payload_omits_secrets(monkeypatch, tmp_path) -> Non
             "OPENAI_API_KEY": "secret-openai",
             "OPENWA_API_KEY": "secret-openwa",
             "SEARCH_CACHE_TTL_SECONDS": "1800",
+            "SEARCH_RETRIEVAL_CONCURRENCY": "2",
         },
         project_root=tmp_path,
     )
@@ -28,5 +29,6 @@ def test_safe_runtime_config_payload_omits_secrets(monkeypatch, tmp_path) -> Non
     payload = runtime_config.safe_runtime_config_payload()
 
     assert payload["search_cache_ttl_seconds"] == 1800
+    assert payload["search_retrieval_concurrency"] == 2
     assert "openai_api_key" not in payload
     assert "openwa_api_key" not in payload

@@ -16,6 +16,8 @@ DEFAULT_OPENAI_TIMEOUT_SECONDS = 12
 DEFAULT_OPENAI_MAX_REFINES = 3
 DEFAULT_SEARCH_CACHE_TTL_SECONDS = 30 * 60
 DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES = 1
+DEFAULT_SEARCH_RETRIEVAL_CONCURRENCY = 1
+MAX_SEARCH_RETRIEVAL_CONCURRENCY = 4
 DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED = True
 DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS = 15 * 60
 DEFAULT_WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS = 10
@@ -64,6 +66,7 @@ class Settings:
     openai_max_refines: int = DEFAULT_OPENAI_MAX_REFINES
     search_cache_ttl_seconds: int = DEFAULT_SEARCH_CACHE_TTL_SECONDS
     search_max_concurrent_searches: int = DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES
+    search_retrieval_concurrency: int = DEFAULT_SEARCH_RETRIEVAL_CONCURRENCY
     openwa_base_url: str = ""
     openwa_api_key: str = ""
     openwa_dashboard_url: str = ""
@@ -147,6 +150,13 @@ def parse_positive_int(value: str, *, name: str) -> int:
     return parsed
 
 
+def parse_bounded_positive_int(value: str, *, name: str, max_value: int) -> int:
+    parsed = parse_positive_int(value, name=name)
+    if parsed > max_value:
+        raise ConfigError(f"{name} must be at most {max_value}")
+    return parsed
+
+
 def parse_hybrid_ai_mode(value: str, *, name: str) -> HybridAIMode:
     normalized = value.strip().lower()
     if normalized in {"off", "shadow", "review", "guarded"}:
@@ -227,6 +237,14 @@ def load_settings(
             str(DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES),
         ),
         name="SEARCH_MAX_CONCURRENT_SEARCHES",
+    )
+    search_retrieval_concurrency = parse_bounded_positive_int(
+        source.get(
+            "SEARCH_RETRIEVAL_CONCURRENCY",
+            str(DEFAULT_SEARCH_RETRIEVAL_CONCURRENCY),
+        ),
+        name="SEARCH_RETRIEVAL_CONCURRENCY",
+        max_value=MAX_SEARCH_RETRIEVAL_CONCURRENCY,
     )
     watchfacts_http_client_enabled = parse_bool(
         source.get(
@@ -381,6 +399,7 @@ def load_settings(
         openai_max_refines=openai_max_refines,
         search_cache_ttl_seconds=search_cache_ttl_seconds,
         search_max_concurrent_searches=search_max_concurrent_searches,
+        search_retrieval_concurrency=search_retrieval_concurrency,
         watchfacts_http_client_enabled=watchfacts_http_client_enabled,
         watchfacts_form_cache_ttl_seconds=watchfacts_form_cache_ttl_seconds,
         watchfacts_http_connect_timeout_seconds=watchfacts_http_connect_timeout_seconds,

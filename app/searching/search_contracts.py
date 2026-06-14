@@ -194,9 +194,12 @@ def _validate_retrieval_timings(value: Any, errors: list[str]) -> None:
             "server_filtered",
             "playwright_fallback",
             "dominant",
+            "failed",
         ):
             if field in item and not isinstance(item[field], bool):
                 errors.append(f"{item_prefix}{field} must be a boolean")
+        if "error_type" in item:
+            _validate_optional_text(item, "error_type", errors, prefix=item_prefix)
         if "reason_codes" in item:
             _validate_string_list(
                 item.get("reason_codes"),

@@ -15,6 +15,7 @@ from app.config import load_search_settings
 SAFE_RUNTIME_KEYS = (
     "search_cache_ttl_seconds",
     "search_max_concurrent_searches",
+    "search_retrieval_concurrency",
     "watchfacts_form_cache_ttl_seconds",
     "watchfacts_http_client_enabled",
     "watchfacts_http_connect_timeout_seconds",

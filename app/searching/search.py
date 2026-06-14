@@ -84,6 +84,8 @@ class RetrievalTiming:
     server_filtered: bool
     playwright_fallback: bool
     dominant: bool = False
+    failed: bool = False
+    error_type: str | None = None
     reason_codes: tuple[str, ...] = ()
 
     def to_payload(self) -> dict[str, object]:
@@ -100,8 +102,24 @@ class RetrievalTiming:
             "server_filtered": self.server_filtered,
             "playwright_fallback": self.playwright_fallback,
             "dominant": self.dominant,
+            "failed": self.failed,
+            "error_type": self.error_type,
             "reason_codes": list(self.reason_codes),
         }
+
+
+@dataclass(frozen=True)
+class RetrievalFetchResult:
+    index: int
+    query: str
+    fetch_ms: int
+    scrape_result: ScrapeResult | None = None
+    error_type: str | None = None
+    exception: Exception | None = None
+
+    @property
+    def failed(self) -> bool:
+        return self.exception is not None
 
 
 @dataclass(frozen=True)
@@ -433,19 +451,61 @@ class WatchFactsSearchWorkflow:
         matched: list[ListingCandidate] = []
         weak_match_count = 0
         ambiguous_candidate_count = 0
+        retrieval_fetch_error_count = 0
+        retrieval_fetch_success_count = 0
+        first_fetch_exception: Exception | None = None
         retrieval_timings: list[RetrievalTiming] = []
-        for retrieval_index, retrieval_query in enumerate(
-            retrieval_plan.fetch_queries,
-            start=1,
-        ):
-            retrieval_started_at = time.perf_counter()
-            fetch_started_at = time.perf_counter()
-            scrape_result = await self.fetch_html(
-                self.settings,
-                query=retrieval_query,
+        fetch_results = await self._fetch_retrieval_branches(
+            retrieval_plan.fetch_queries
+        )
+        for fetch_result in fetch_results:
+            retrieval_index = fetch_result.index
+            retrieval_query = fetch_result.query
+            _add_stage_timing_value(
+                stage_timings_ms,
+                "watchfacts_fetch",
+                fetch_result.fetch_ms,
             )
-            fetch_ms = _stage_elapsed_ms(fetch_started_at)
-            _add_stage_timing_value(stage_timings_ms, "watchfacts_fetch", fetch_ms)
+            if fetch_result.failed:
+                retrieval_fetch_error_count += 1
+                first_fetch_exception = first_fetch_exception or fetch_result.exception
+                error_type = fetch_result.error_type or "Exception"
+                self._audit_retrieval_fetch_error(
+                    audit_events,
+                    query=query,
+                    query_intent=query_intent,
+                    candidate_id=(
+                        "raw:1" if retrieval_index == 1 else f"raw:{retrieval_index}"
+                    ),
+                    reason_codes=retrieval_plan.reason_codes,
+                    error_type=error_type,
+                )
+                retrieval_timings.append(
+                    RetrievalTiming(
+                        query=retrieval_query,
+                        cache_status="miss",
+                        fetch_ms=fetch_result.fetch_ms,
+                        parse_ms=0,
+                        match_ms=0,
+                        total_ms=fetch_result.fetch_ms,
+                        parsed_count=0,
+                        matched_count=0,
+                        empty=True,
+                        server_filtered=False,
+                        playwright_fallback=False,
+                        failed=True,
+                        error_type=error_type,
+                        reason_codes=(
+                            *retrieval_plan.reason_codes,
+                            f"retrieval.fetch_error:{error_type}",
+                        ),
+                    )
+                )
+                continue
+            scrape_result = fetch_result.scrape_result
+            if scrape_result is None:
+                continue
+            retrieval_fetch_success_count += 1
             self._audit_raw_scrape(
                 audit_events,
                 query=query,
@@ -511,10 +571,10 @@ class WatchFactsSearchWorkflow:
                 RetrievalTiming(
                     query=retrieval_query,
                     cache_status="miss",
-                    fetch_ms=fetch_ms,
+                    fetch_ms=fetch_result.fetch_ms,
                     parse_ms=parse_ms,
                     match_ms=match_ms,
-                    total_ms=_stage_elapsed_ms(retrieval_started_at),
+                    total_ms=fetch_result.fetch_ms + parse_ms + match_ms,
                     parsed_count=len(parsed),
                     matched_count=len(retrieval_matched),
                     empty=not retrieval_matched,
@@ -523,6 +583,9 @@ class WatchFactsSearchWorkflow:
                     reason_codes=retrieval_plan.reason_codes,
                 )
             )
+
+        if retrieval_fetch_success_count == 0 and first_fetch_exception is not None:
+            raise first_fetch_exception
 
         if (
             len(local_filter_queries) == 1
@@ -674,6 +737,13 @@ class WatchFactsSearchWorkflow:
             results=unique,
         )
         deduped_drop_count = latest_drop_count + text_drop_count
+        rejection_reasons = {
+            "dedupe.latest_listing": latest_drop_count,
+            "dedupe.text": text_drop_count,
+            "guardrail.blocked_final": blocked_final_count,
+        }
+        if retrieval_fetch_error_count > 0:
+            rejection_reasons["retrieval.fetch_error"] = retrieval_fetch_error_count
         _add_stage_timing(
             stage_timings_ms,
             "result_pipeline",
@@ -690,14 +760,15 @@ class WatchFactsSearchWorkflow:
             playwright_fallback_count=playwright_fallback_count,
         )
         self._record_suspicious_results(query, unique)
-        self._record_cached_results(
-            cache_key=cache_key,
-            query=query,
-            results=unique,
-            image_missing_count=self._count_missing_images(unique),
-            server_filtered_hit_count=server_filtered_hit_count,
-            playwright_fallback_count=playwright_fallback_count,
-        )
+        if retrieval_fetch_error_count == 0:
+            self._record_cached_results(
+                cache_key=cache_key,
+                query=query,
+                results=unique,
+                image_missing_count=self._count_missing_images(unique),
+                server_filtered_hit_count=server_filtered_hit_count,
+                playwright_fallback_count=playwright_fallback_count,
+            )
         _add_stage_timing(stage_timings_ms, "persist", persist_started_at)
         stage_timings_ms["total"] = _stage_elapsed_ms(search_started_at)
         self.last_search_diagnostics = SearchDiagnostics(
@@ -734,11 +805,7 @@ class WatchFactsSearchWorkflow:
             optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
             intent_reason_codes=query_intent.reason_codes,
             guardrail_action_counts=_guardrail_action_counts(audit_events),
-            rejection_reasons={
-                "dedupe.latest_listing": latest_drop_count,
-                "dedupe.text": text_drop_count,
-                "guardrail.blocked_final": blocked_final_count,
-            },
+            rejection_reasons=rejection_reasons,
             stage_timings_ms=dict(stage_timings_ms),
             retrieval_timings=_mark_dominant_retrieval_timing(retrieval_timings),
         )
@@ -750,9 +817,106 @@ class WatchFactsSearchWorkflow:
         )
         return unique
 
+    async def _fetch_retrieval_branches(
+        self,
+        retrieval_queries: tuple[str, ...],
+    ) -> list[RetrievalFetchResult]:
+        limit = max(1, self.settings.search_retrieval_concurrency)
+        if limit == 1 or len(retrieval_queries) <= 1:
+            return [
+                await self._fetch_retrieval_branch(
+                    index=index,
+                    retrieval_query=retrieval_query,
+                    capture_errors=False,
+                )
+                for index, retrieval_query in enumerate(retrieval_queries, start=1)
+            ]
+
+        semaphore = asyncio.Semaphore(limit)
+
+        async def fetch_with_limit(
+            index: int,
+            retrieval_query: str,
+        ) -> RetrievalFetchResult:
+            async with semaphore:
+                return await self._fetch_retrieval_branch(
+                    index=index,
+                    retrieval_query=retrieval_query,
+                    capture_errors=True,
+                )
+
+        return list(
+            await asyncio.gather(
+                *(
+                    fetch_with_limit(index, retrieval_query)
+                    for index, retrieval_query in enumerate(
+                        retrieval_queries,
+                        start=1,
+                    )
+                )
+            )
+        )
+
+    async def _fetch_retrieval_branch(
+        self,
+        *,
+        index: int,
+        retrieval_query: str,
+        capture_errors: bool,
+    ) -> RetrievalFetchResult:
+        fetch_started_at = time.perf_counter()
+        try:
+            scrape_result = await self.fetch_html(
+                self.settings,
+                query=retrieval_query,
+            )
+        except Exception as exc:
+            if not capture_errors:
+                raise
+            return RetrievalFetchResult(
+                index=index,
+                query=retrieval_query,
+                fetch_ms=_stage_elapsed_ms(fetch_started_at),
+                error_type=exc.__class__.__name__,
+                exception=exc,
+            )
+        return RetrievalFetchResult(
+            index=index,
+            query=retrieval_query,
+            fetch_ms=_stage_elapsed_ms(fetch_started_at),
+            scrape_result=scrape_result,
+        )
+
     @staticmethod
     def _count_missing_images(results: list[SearchResult]) -> int:
         return sum(1 for result in results if not result.image_url)
+
+    @staticmethod
+    def _audit_retrieval_fetch_error(
+        audit_events: list[SearchAuditEvent],
+        *,
+        query: str,
+        query_intent: QueryIntentMetadata,
+        candidate_id: str,
+        reason_codes: tuple[str, ...],
+        error_type: str,
+    ) -> None:
+        audit_events.append(
+            SearchAuditEvent(
+                query=query,
+                stage="raw",
+                candidate_id=candidate_id,
+                text=f"error_type={error_type}",
+                reason_codes=(
+                    *reason_codes,
+                    f"retrieval.fetch_error:{error_type}",
+                ),
+                decision="error",
+                query_intent=query_intent.kind,
+                guardrail_action="none",
+                stable_audit_id=_short_hash(f"{query}:{candidate_id}:{error_type}"),
+            )
+        )
 
     @staticmethod
     def _audit_raw_scrape(

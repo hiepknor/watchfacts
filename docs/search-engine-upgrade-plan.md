@@ -970,10 +970,25 @@ Acceptance:
   queries.
 - [ ] Result counts, top results, and alias recall remain equivalent to the
   Phase 5 deployed baseline.
-- [ ] Concurrency cap is documented and configurable only through a safe
+- [x] Concurrency cap is documented and configurable only through a safe
   runtime setting.
-- [ ] Fetch failures are isolated to the affected retrieval branch and reported
+- [x] Fetch failures are isolated to the affected retrieval branch and reported
   through existing diagnostics/error handling.
+
+Initial implementation slice:
+
+- [x] `SEARCH_RETRIEVAL_CONCURRENCY` defaults to `1` and is bounded to `1..4`
+  by config validation.
+- [x] Initial retrieval branches are fetched with a bounded semaphore when the
+  setting is above `1`, while parse, match, audit, merge, and ranking still run
+  in deterministic retrieval-plan order.
+- [x] Partial branch fetch failures emit `retrieval_timings[].failed`,
+  `error_type`, and `retrieval.fetch_error` diagnostics; all-branch fetch
+  failures still raise through the existing query error path.
+- [x] Partial branch fetch failures do not populate the final-result cache, so a
+  later healthy run can refetch all retrieval branches.
+- [ ] Production cold benchmark has compared `SEARCH_RETRIEVAL_CONCURRENCY=1`
+  versus `2` and confirmed no recall/top-result drift.
 
 Suggested verification:
 

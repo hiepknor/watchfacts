@@ -113,6 +113,7 @@ Expected environment:
 | `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
 | `SEARCH_CACHE_TTL_SECONDS` | No | `1800` | Fresh-result cache lifetime for identical normalized searches before calling WatchFacts again |
 | `SEARCH_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum non-Telegram WatchFacts searches running at the same time; identical queries still coalesce |
+| `SEARCH_RETRIEVAL_CONCURRENCY` | No | `1` | Maximum WatchFacts retrieval branches fetched in parallel inside one search; valid range is `1` through `4` |
 | `WATCHFACTS_HTTP_CLIENT_ENABLED` | No | `true` | Enable the lightweight HTTPX search client used by the normal Telegram/MCP runtime |
 | `WATCHFACTS_FORM_CACHE_TTL_SECONDS` | No | `900` | Lifetime for cached WatchFacts search form action and CSRF token used by HTTPX |
 | `WATCHFACTS_HTTP_CONNECT_TIMEOUT_SECONDS` | No | `10` | HTTPX connect timeout for WatchFacts requests |
@@ -148,6 +149,9 @@ Configuration rules:
 - Validate Telegram result limit as a positive integer.
 - Use `SEARCH_CACHE_TTL_SECONDS` to reduce repeated WatchFacts backend calls for identical normalized searches.
 - Use `SEARCH_MAX_CONCURRENT_SEARCHES` to serialize or bound MCP WatchFacts browser searches.
+- Use `SEARCH_RETRIEVAL_CONCURRENCY` cautiously for cold-path multi-branch
+  queries; branch fetches run in parallel but parser, matcher, merge, and
+  ranking remain deterministic.
 - Keep `WATCHFACTS_HTTP_CLIENT_ENABLED=true` for normal Telegram/MCP search; disabling it disables query search instead of falling back to Playwright.
 - Use `WATCHFACTS_FORM_CACHE_TTL_SECONDS` to reduce repeated WatchFacts form GETs while still refreshing on CSRF/auth failures.
 - Set `RESULT_PAGE_PUBLIC_BASE_URL` only when the MCP service is reachable through a public reverse proxy path for `/results/`; leave it empty to preserve legacy responses without page links.

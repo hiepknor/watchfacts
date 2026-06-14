@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -1531,6 +1532,172 @@ def test_search_workflow_expands_daytona_panda_retrieval_with_local_filters(
     assert "retrieval.nickname_expansion:panda" in diagnostics_payload[
         "retrieval_reason_codes"
     ]
+
+
+def test_search_workflow_fetches_retrieval_branches_with_bounded_parallelism(
+    tmp_path,
+) -> None:
+    settings = replace(make_settings(tmp_path), search_retrieval_concurrency=2)
+    started: list[str | None] = []
+    completed: list[str | None] = []
+    active_fetches = 0
+    max_active_fetches = 0
+    delays = {
+        "daytona panda": 0.03,
+        "daytona white": 0.01,
+        "126500ln white": 0.01,
+        "116500ln white": 0.01,
+    }
+
+    def listing_payload(title: str, number: int) -> str:
+        return f"""
+        {{
+          "listings": [
+            {{
+              "title": "{title}",
+              "companyName": "Dealer {number}",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": {number},
+              "frontImage": "https://watchfacts.example/{number}.jpg"
+            }}
+          ]
+        }}
+        """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal active_fetches, max_active_fetches
+        started.append(query)
+        active_fetches += 1
+        max_active_fetches = max(max_active_fetches, active_fetches)
+        try:
+            await asyncio.sleep(delays[str(query)])
+            if query == "daytona panda":
+                title = "Rolex Daytona Panda 2024 full set HKD 268000"
+                number = 111
+            elif query == "daytona white":
+                title = "Rolex Daytona White Dial 2023 Full Set HKD 255000"
+                number = 222
+            elif query == "126500ln white":
+                title = "126500LN White Dial N5/2026 HKD 279000"
+                number = 333
+            else:
+                title = "116500LN White Dial 2021 Full Set HKD 225000"
+                number = 444
+            return ScrapeResult(
+                html=listing_payload(title, number),
+                final_url="https://watchfacts.example/simon-search-matches",
+                server_filtered=True,
+            )
+        finally:
+            completed.append(query)
+            active_fetches -= 1
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("daytona panda"))
+
+    expected_queries = [
+        "daytona panda",
+        "daytona white",
+        "126500ln white",
+        "116500ln white",
+    ]
+    assert started == expected_queries
+    assert completed != expected_queries
+    assert max_active_fetches == 2
+    assert {result.listing_text for result in results} == {
+        "Daytona Panda 2024 full set HKD 268000",
+        "Rolex Daytona White Dial 2023 Full Set HKD 255000",
+        "126500LN White Dial N5/2026 HKD 279000",
+        "116500LN White Dial 2021 Full Set HKD 225000",
+    }
+    assert workflow.last_search_diagnostics is not None
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["retrieval_queries"] == expected_queries
+    assert [row["query"] for row in diagnostics_payload["retrieval_timings"]] == (
+        expected_queries
+    )
+
+
+def test_search_workflow_isolates_partial_retrieval_fetch_failures(tmp_path) -> None:
+    settings = replace(make_settings(tmp_path), search_retrieval_concurrency=2)
+    fail_reference_branch = True
+    fetch_queries: list[str | None] = []
+
+    def listing_payload(title: str, number: int) -> str:
+        return f"""
+        {{
+          "listings": [
+            {{
+              "title": "{title}",
+              "companyName": "Dealer {number}",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": {number},
+              "frontImage": "https://watchfacts.example/{number}.jpg"
+            }}
+          ]
+        }}
+        """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        await asyncio.sleep(0)
+        if query == "5711" and fail_reference_branch:
+            raise RuntimeError("simulated branch outage")
+        if query == "5711 blue":
+            title = "5711 Blue Dial 2022 Full Set HKD 980000"
+            number = 111
+        elif query == "5711":
+            title = "Patek Philippe 5711/1A Blue Dial 2020 HKD 920000"
+            number = 222
+        else:
+            title = "Nautilus 5711 Blue Dial 2019 Full Set HKD 910000"
+            number = 333
+        return ScrapeResult(
+            html=listing_payload(title, number),
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("5711 blue"))
+
+    assert fetch_queries == ["5711 blue", "5711", "nautilus 5711 blue"]
+    assert {result.listing_text for result in results} == {
+        "5711 Blue Dial 2022 Full Set HKD 980000",
+        "Nautilus 5711 Blue Dial 2019 Full Set HKD 910000",
+    }
+    assert workflow.last_search_diagnostics is not None
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["retrieval_queries"] == [
+        "5711 blue",
+        "5711",
+        "nautilus 5711 blue",
+    ]
+    failed_timing = diagnostics_payload["retrieval_timings"][1]
+    assert failed_timing["query"] == "5711"
+    assert failed_timing["failed"] is True
+    assert failed_timing["error_type"] == "RuntimeError"
+    assert "retrieval.fetch_error:RuntimeError" in failed_timing["reason_codes"]
+    assert diagnostics_payload["rejection_reasons"]["retrieval.fetch_error"] == 1
+    with sqlite3.connect(settings.db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM search_cache").fetchone()[0] == 0
+
+    fail_reference_branch = False
+    fetch_queries.clear()
+    recovered = asyncio.run(workflow.search("5711 blue"))
+
+    assert fetch_queries == ["5711 blue", "5711", "nautilus 5711 blue"]
+    assert {result.listing_text for result in recovered} == {
+        "5711 Blue Dial 2022 Full Set HKD 980000",
+        "Patek Philippe 5711/1A Blue Dial 2020 HKD 920000",
+        "Nautilus 5711 Blue Dial 2019 Full Set HKD 910000",
+    }
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.cache_hit is False
+    with sqlite3.connect(settings.db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM search_cache").fetchone()[0] == 1
 
 
 def test_search_workflow_does_not_expand_reference_only_query(tmp_path) -> None:

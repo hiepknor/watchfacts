@@ -14,6 +14,7 @@ from app.config import (
     DEFAULT_RUNTIME_MODE,
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
     DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES,
+    DEFAULT_SEARCH_RETRIEVAL_CONCURRENCY,
     DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
     DEFAULT_WATCHFACTS_URL,
@@ -26,6 +27,7 @@ from app.config import (
     DEFAULT_WATCHFACTS_HTTP_READ_TIMEOUT_SECONDS,
     DEFAULT_WATCHFACTS_HTTP_SEARCH_READ_TIMEOUT_SECONDS,
     DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH,
+    MAX_SEARCH_RETRIEVAL_CONCURRENCY,
     load_settings,
     load_search_settings,
     parse_bool,
@@ -122,6 +124,7 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.openai_max_refines == DEFAULT_OPENAI_MAX_REFINES
     assert settings.search_cache_ttl_seconds == DEFAULT_SEARCH_CACHE_TTL_SECONDS
     assert settings.search_max_concurrent_searches == DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES
+    assert settings.search_retrieval_concurrency == DEFAULT_SEARCH_RETRIEVAL_CONCURRENCY
     assert settings.watchfacts_http_client_enabled == DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED
     assert settings.watchfacts_form_cache_ttl_seconds == DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS
     assert (
@@ -255,6 +258,34 @@ def test_load_settings_reads_search_max_concurrent_searches(tmp_path: Path) -> N
     )
 
     assert settings.search_max_concurrent_searches == 2
+
+
+def test_load_settings_reads_search_retrieval_concurrency(tmp_path: Path) -> None:
+    settings = load_search_settings(
+        env={
+            "SEARCH_RETRIEVAL_CONCURRENCY": "2",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.search_retrieval_concurrency == 2
+
+
+def test_load_settings_rejects_unbounded_search_retrieval_concurrency(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        ConfigError,
+        match=f"SEARCH_RETRIEVAL_CONCURRENCY must be at most {MAX_SEARCH_RETRIEVAL_CONCURRENCY}",
+    ):
+        load_search_settings(
+            env={
+                "SEARCH_RETRIEVAL_CONCURRENCY": str(
+                    MAX_SEARCH_RETRIEVAL_CONCURRENCY + 1
+                ),
+            },
+            project_root=tmp_path,
+        )
 
 
 def test_load_settings_reads_watchfacts_http_client_options(tmp_path: Path) -> None:

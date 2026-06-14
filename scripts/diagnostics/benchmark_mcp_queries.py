@@ -52,6 +52,8 @@ class RetrievalTimingRow:
     server_filtered: bool | None = None
     playwright_fallback: bool | None = None
     dominant: bool | None = None
+    failed: bool | None = None
+    error_type: str | None = None
     reason_codes: tuple[str, ...] = ()
 
 
@@ -597,6 +599,10 @@ def _retrieval_timings_value(value: object) -> tuple[RetrievalTimingRow, ...]:
                     if isinstance(item.get("dominant"), bool)
                     else None
                 ),
+                failed=(
+                    item.get("failed") if isinstance(item.get("failed"), bool) else None
+                ),
+                error_type=_optional_str(item.get("error_type")),
                 reason_codes=_string_tuple(item.get("reason_codes")),
             )
         )
@@ -616,16 +622,19 @@ def _retrieval_timing_parts(
 
 
 def _retrieval_timing_part(timing: RetrievalTimingRow) -> str:
-    return (
-        f"{timing.query}:"
-        f"total={_int_label(timing.total_ms)},"
-        f"fetch={_int_label(timing.fetch_ms)},"
-        f"parse={_int_label(timing.parse_ms)},"
-        f"match={_int_label(timing.match_ms)},"
-        f"matched={_int_label(timing.matched_count)},"
-        f"cache={timing.cache_status or '-'},"
-        f"dominant={_bool_label(timing.dominant)}"
-    )
+    parts = [
+        f"total={_int_label(timing.total_ms)}",
+        f"fetch={_int_label(timing.fetch_ms)}",
+        f"parse={_int_label(timing.parse_ms)}",
+        f"match={_int_label(timing.match_ms)}",
+        f"matched={_int_label(timing.matched_count)}",
+        f"cache={timing.cache_status or '-'}",
+        f"dominant={_bool_label(timing.dominant)}",
+    ]
+    if timing.failed is True:
+        parts.append("failed=yes")
+        parts.append(f"error={timing.error_type or '-'}")
+    return f"{timing.query}:" + ",".join(parts)
 
 
 def _int_label(value: int | None) -> str:
