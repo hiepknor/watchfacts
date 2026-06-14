@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from argparse import Namespace
 import asyncio
 import json
 import sqlite3
@@ -8,11 +9,13 @@ import scripts.diagnostics.benchmark_mcp_queries as benchmark_module
 from scripts.diagnostics.benchmark_mcp_queries import (
     DEFAULT_ALIAS_TOTAL_DELTA_RATIO,
     BenchmarkRow,
+    COLD_PATH_BUDGET_QUERIES,
     DEFAULT_BENCHMARK_QUERIES,
     RetrievalTimingRow,
     _clear_search_cache,
     _dedupe_queries,
     _load_query_file,
+    _selected_queries,
     alias_recall_passed,
     evaluate_alias_recall,
     _row_from_payload,
@@ -556,3 +559,41 @@ def test_default_benchmark_queries_cover_alias_pairs_and_multi_brand_set() -> No
         "5711 blue",
         "15500st blue",
     )
+
+
+def test_cold_path_budget_queries_cover_slow_representatives_only() -> None:
+    assert COLD_PATH_BUDGET_QUERIES == (
+        "daytona panda",
+        "5711 blue",
+        "15500st blue",
+        "rm07-01 rg snow",
+    )
+    assert set(COLD_PATH_BUDGET_QUERIES) <= set(DEFAULT_BENCHMARK_QUERIES)
+
+
+def test_selected_queries_can_use_focused_cold_path_budget_set() -> None:
+    queries, using_default = _selected_queries(
+        Namespace(
+            queries=[],
+            query_file=None,
+            use_cold_path_budget_defaults=True,
+        )
+    )
+
+    assert queries == list(COLD_PATH_BUDGET_QUERIES)
+    assert using_default is False
+
+
+def test_selected_queries_rejects_mixed_cold_budget_and_custom_queries() -> None:
+    args = Namespace(
+        queries=["daytona panda"],
+        query_file=None,
+        use_cold_path_budget_defaults=True,
+    )
+
+    try:
+        _selected_queries(args)
+    except ValueError as exc:
+        assert "--use-cold-path-budget-defaults" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")

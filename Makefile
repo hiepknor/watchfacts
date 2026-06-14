@@ -20,6 +20,7 @@ MCP_BENCHMARK_FORMAT ?= markdown
 MCP_BENCHMARK_LIMIT ?= 3
 MCP_BENCHMARK_REPEAT ?= 1
 MCP_BENCHMARK_EXTRA_ARGS ?=
+MCP_COLD_BUDGET_FORMAT ?= markdown
 MCP_PREWARM_FORMAT ?= text
 MCP_PREWARM_LIMIT ?= 5
 MCP_PREWARM_VERIFY_HOT ?= 1
@@ -39,7 +40,7 @@ export IMAGE
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy search-engine-predeploy-check search-engine-postdeploy-check search-engine-deploy-check search-engine-baseline-snapshot quality-audit ai-audit-triage predeploy-quality-check
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-cold-budget mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy search-engine-predeploy-check search-engine-postdeploy-check search-engine-deploy-check search-engine-baseline-snapshot quality-audit ai-audit-triage predeploy-quality-check
 
 help:
 	@printf "%s\n" "watchfacts commands"
@@ -73,6 +74,7 @@ help:
 	@printf "%s\n" "  make mcp-smoke      Run one authorized HTTPX search smoke check"
 	@printf "%s\n" "  make mcp-smoke-set  Validate MCP search response shape for representative queries"
 	@printf "%s\n" "  make mcp-benchmark  Benchmark representative MCP search queries"
+	@printf "%s\n" "  make mcp-cold-budget Benchmark focused cold-path retrieval budget queries"
 	@printf "%s\n" "  make mcp-prewarm    Prewarm representative MCP search cache entries and verify hot cache"
 	@printf "%s\n" "  make mcp-prewarm-benchmark-defaults Prewarm benchmark/common brand queries"
 	@printf "%s\n" "  make mcp-postdeploy-prewarm Best-effort cache prewarm after MCP deploy"
@@ -189,6 +191,9 @@ mcp-smoke-set:
 mcp-benchmark:
 	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/benchmark_mcp_queries.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_BENCHMARK_LIMIT) --repeat $(MCP_BENCHMARK_REPEAT) --format $(MCP_BENCHMARK_FORMAT) --allow-empty $(MCP_BENCHMARK_EXTRA_ARGS)
 
+mcp-cold-budget:
+	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/benchmark_mcp_queries.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_BENCHMARK_LIMIT) --repeat $(MCP_BENCHMARK_REPEAT) --format $(MCP_COLD_BUDGET_FORMAT) --allow-empty --clear-search-cache --use-cold-path-budget-defaults
+
 mcp-prewarm:
 	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/prewarm_mcp_cache.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_PREWARM_LIMIT) --format $(MCP_PREWARM_FORMAT) $(MCP_PREWARM_VERIFY_HOT_ARGS)
 
@@ -247,6 +252,7 @@ search-engine-baseline-snapshot:
 	$(MAKE) mcp-runtime-config > "$$out/runtime-config.txt"; \
 	$(MAKE) MCP_BENCHMARK_FORMAT=markdown MCP_BENCHMARK_EXTRA_ARGS= mcp-benchmark > "$$out/hot-benchmark.md"; \
 	$(MAKE) MCP_BENCHMARK_FORMAT=markdown MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache mcp-benchmark > "$$out/cold-benchmark.md"; \
+	$(MAKE) MCP_COLD_BUDGET_FORMAT=markdown mcp-cold-budget > "$$out/cold-budget.md"; \
 	printf "%s\n" "SEARCH_ENGINE_BASELINE_DIR=$$out"; \
 	ls -1 "$$out"
 

@@ -408,6 +408,7 @@ MCP service:
 make mcp-benchmark
 MCP_BENCHMARK_FORMAT=jsonl make mcp-benchmark > mcp-benchmark.jsonl
 make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+make mcp-cold-budget
 make mcp-runtime-config
 make mcp-prewarm
 make mcp-prewarm-benchmark-defaults
@@ -439,16 +440,19 @@ against a co-located MCP runtime DB, run:
 
 ```bash
 make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+make mcp-cold-budget
 ```
 
 This clears local `search_cache` and `result_reference_cache` rows before each
-query run. For retrieval parallelism changes, compare cold benchmark output
-with `SEARCH_RETRIEVAL_CONCURRENCY=1` and `2` on the running MCP service before
-raising the setting further. If hot-cache latency is good but cold-path latency
-is poor, run the cold benchmark and optimize retrieval, parsing, or matching;
-do not widen prewarm lists to hide slow uncached behavior. Use `audit_quality.py`
-when a query needs quality-group, scoring, image attribution, or raw-to-final
-funnel evidence.
+query run. `make mcp-cold-budget` uses the focused slow-query set `daytona
+panda`, `5711 blue`, `15500st blue`, and `rm07-01 rg snow`, and keeps per-branch
+retrieval timing in the benchmark output. For retrieval parallelism changes,
+compare cold benchmark output with `SEARCH_RETRIEVAL_CONCURRENCY=1` and `2` on
+the running MCP service before raising the setting further. If hot-cache latency
+is good but cold-path latency is poor, run the cold benchmark and optimize
+retrieval, parsing, or matching; do not widen prewarm lists to hide slow
+uncached behavior. Use `audit_quality.py` when a query needs quality-group,
+scoring, image attribution, or raw-to-final funnel evidence.
 
 ## Search Engine Deploy Gate
 

@@ -1353,14 +1353,45 @@ change is based on branch-level cost and recall contribution, not guesswork.
 
 Acceptance:
 
-- [ ] Cold benchmark artifacts include per-query and per-branch timing for the
+- [x] Cold benchmark artifacts include per-query and per-branch timing for the
   slow representatives: `daytona panda`, `5711 blue`, `15500st blue`, and
   `rm07-01 rg snow`.
-- [ ] Each candidate optimization states expected recall risk before code
+- [x] Each candidate optimization states expected recall risk before code
   changes.
-- [ ] No prewarm list is expanded as a substitute for reducing cold-path cost.
-- [ ] Any retrieval-plan change is checked against alias recall delta and
+- [x] No prewarm list is expanded as a substitute for reducing cold-path cost.
+- [x] Any retrieval-plan change is checked against alias recall delta and
   result-count drift.
+
+Implementation notes:
+
+- Added `COLD_PATH_BUDGET_QUERIES` and
+  `benchmark_mcp_queries.py --use-cold-path-budget-defaults` for the focused
+  budget set: `daytona panda`, `5711 blue`, `15500st blue`, and
+  `rm07-01 rg snow`.
+- Added `make mcp-cold-budget`, which runs the focused set with
+  `--clear-search-cache` so the artifact shows per-query and per-retrieval-branch
+  timing for cold-path analysis.
+- Added `cold-budget.md` to `make search-engine-baseline-snapshot`. This is a
+  measurement artifact only; no postdeploy prewarm list was expanded.
+- Retrieval-plan changes remain gated by the default benchmark because it keeps
+  alias recall and `total_count` drift checks across canonical query groups.
+
+Candidate optimization risk ledger:
+
+| Candidate | Expected recall risk | Gate before code |
+| --- | --- | --- |
+| Reduce redundant descriptor-expanded fetch branches | Medium: can miss rows where WatchFacts server filtering under-matches descriptors | Compare focused cold budget plus default benchmark alias/`total_count` drift |
+| Add branch-level early-stop after a strong first branch | High: can miss late rows and similar references hidden in fallback branches | Require no result-count drift on default benchmark and focused hard cases |
+| Reorder retrieval branches by observed dominant cost | Low to medium: result set should stay stable, but cache timing can hide weak branches | Cold budget with `--clear-search-cache` and top-result snippet comparison |
+| Parser/matcher micro-optimizations without retrieval-plan changes | Low: mostly CPU-path risk | Unit tests plus focused audit for the changed parser/matcher family |
+
+Verification:
+
+- `python -m pytest tests/test_benchmark_mcp_queries.py tests/test_makefile.py -q`
+  passed with `29 passed`.
+- `python scripts/diagnostics/benchmark_mcp_queries.py --help` exposes
+  `--use-cold-path-budget-defaults`.
+- `git diff --check` passed.
 
 ### Task 8.4: Image Attribution Decision Gate
 

@@ -89,6 +89,8 @@ def test_makefile_has_search_engine_baseline_snapshot_target() -> None:
         "MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache mcp-benchmark"
     ) in target
     assert "cold-benchmark.md" in target
+    assert "$(MAKE) MCP_COLD_BUDGET_FORMAT=markdown mcp-cold-budget" in target
+    assert "cold-budget.md" in target
     assert "SEARCH_ENGINE_BASELINE_DIR=$$out" in target
 
 
@@ -159,7 +161,11 @@ def test_makefile_has_no_removed_external_agent_targets() -> None:
 def test_makefile_has_mcp_benchmark_target() -> None:
     makefile = Path("Makefile").read_text()
     benchmark_target = makefile.split("\nmcp-benchmark:", 1)[1].split(
-        "\n\nmcp-wait-healthy:",
+        "\n\nmcp-cold-budget:",
+        1,
+    )[0]
+    cold_budget_target = makefile.split("\nmcp-cold-budget:", 1)[1].split(
+        "\n\nmcp-prewarm:",
         1,
     )[0]
 
@@ -168,6 +174,9 @@ def test_makefile_has_mcp_benchmark_target() -> None:
     assert "--repeat $(MCP_BENCHMARK_REPEAT)" in benchmark_target
     assert "--format $(MCP_BENCHMARK_FORMAT)" in benchmark_target
     assert "$(MCP_BENCHMARK_EXTRA_ARGS)" in benchmark_target
+    assert "--clear-search-cache" in cold_budget_target
+    assert "--use-cold-path-budget-defaults" in cold_budget_target
+    assert "--format $(MCP_COLD_BUDGET_FORMAT)" in cold_budget_target
 
 
 def test_makefile_has_mcp_prewarm_target() -> None:

@@ -36,6 +36,12 @@ DEFAULT_BENCHMARK_QUERIES = (
     "5711 blue",
     "15500st blue",
 )
+COLD_PATH_BUDGET_QUERIES = (
+    "daytona panda",
+    "5711 blue",
+    "15500st blue",
+    "rm07-01 rg snow",
+)
 
 
 @dataclass(frozen=True)
@@ -828,6 +834,23 @@ def _cache_db_path(db_path: Path | None = None) -> Path:
     return load_search_settings().db_path
 
 
+def _selected_queries(args: argparse.Namespace) -> tuple[list[str], bool]:
+    queries = list(args.queries or [])
+    if args.query_file:
+        queries.extend(_load_query_file(args.query_file))
+    if args.use_cold_path_budget_defaults:
+        if queries:
+            raise ValueError(
+                "--use-cold-path-budget-defaults cannot be combined with "
+                "--query or --query-file"
+            )
+        return list(COLD_PATH_BUDGET_QUERIES), False
+    using_default_queries = not queries
+    if using_default_queries:
+        queries = list(DEFAULT_BENCHMARK_QUERIES)
+    return queries, using_default_queries
+
+
 def _clear_search_cache(db_path: Path) -> int:
     if not db_path.exists():
         return 0
@@ -888,6 +911,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--use-cold-path-budget-defaults",
+        action="store_true",
+        help=(
+            "Benchmark the focused cold-path budget set: daytona panda, "
+            "5711 blue, 15500st blue, and rm07-01 rg snow."
+        ),
+    )
+    parser.add_argument(
         "--cache-db-path",
         help="SQLite DB path to clear when --clear-search-cache is enabled.",
     )
@@ -917,12 +948,10 @@ def main() -> int:
     if args.alias_total_delta_ratio < 0:
         parser.error("--alias-total-delta-ratio must be non-negative")
 
-    queries = list(args.queries or [])
-    if args.query_file:
-        queries.extend(_load_query_file(args.query_file))
-    using_default_queries = not queries
-    if using_default_queries:
-        queries = list(DEFAULT_BENCHMARK_QUERIES)
+    try:
+        queries, using_default_queries = _selected_queries(args)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     rows = asyncio.run(
         run_benchmark(
