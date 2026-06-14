@@ -2213,6 +2213,52 @@ def test_search_workflow_allows_reference_only_fallback_for_optional_year_descri
     assert workflow.last_search_diagnostics.optional_descriptor_tokens == ("2026",)
 
 
+def test_search_workflow_exposes_raw_context_used_segment_reason(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "MODEL: PANDA DAYTONA REF: 126500LN YEAR: 2026 CONDITION: UNWORN COMES AS: W&C + WHITE TAG PRICE: 27350 USD",
+          "companyName": "Dealer A",
+          "repostedAt": "2026-03-26 10:00:00",
+          "number": 126500
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("126500ln white 2026"))
+
+    assert len(results) == 1
+    assert results[0].scope_reason == "scope.scoped"
+    assert "raw_context.used:panda" in results[0].segment_reason_codes
+
+
+def test_to_search_result_exposes_raw_context_ignored_segment_reason() -> None:
+    result = search_module._to_search_result(
+        "126500ln white 2026",
+        ListingCandidate(
+            listing_text=(
+                "MODEL: PANDA DAYTONA REF: 126500LN YEAR: 2026 "
+                "CONDITION: UNWORN PRICE: 27350 USD"
+            ),
+        ),
+    )
+
+    assert result.scope_reason == "scope.scoped"
+    assert "raw_context.ignored:panda" in result.segment_reason_codes
+
+
 def test_search_workflow_matches_server_filtered_compound_material_phrases(
     tmp_path,
 ) -> None:
@@ -2747,6 +2793,44 @@ def test_server_filtered_json_stock_list_scopes_reference_and_omits_bundle_image
     assert results[0].segment_reason_codes == (
         "segment.stock_list_marker",
         "segment.reference_boundary",
+    )
+
+
+def test_server_filtered_json_stock_list_exposes_excluded_raw_context_reason(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "HK STOCK LIST 116500LN black 2025 31k 126500LN panda 2026 W&C + WHITE TAG 35k",
+          "companyName": "Mr Et",
+          "repostedAt": "2026-06-10 10:00:00",
+          "frontImage": "https://watchfacts.example/stock-list-cover.jpg",
+          "number": 9714092
+        }
+      ]
+    }
+    """
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("126500ln white 2026"))
+
+    assert len(results) == 1
+    assert results[0].scope_reason == "scope.stock_list"
+    assert results[0].segment_reason_codes == (
+        "segment.stock_list_marker",
+        "segment.reference_boundary",
+        "raw_context.excluded_stock_list:panda",
     )
 
 

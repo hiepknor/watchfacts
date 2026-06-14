@@ -41,6 +41,7 @@ from app.searching.matcher_rulebook import (
     RetrievalExpansionRule,
 )
 from app.searching.result_scoring import (
+    descriptor_context_segment_reason_codes,
     price_evidence_reason,
     rank_results_by_quality,
     score_result,
@@ -53,7 +54,7 @@ from app.searching.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger("app.search")
-SEARCH_CACHE_VERSION = "search-v30"
+SEARCH_CACHE_VERSION = "search-v31"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -1383,6 +1384,13 @@ def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:
         image_reason=image_attribution.reason,
         segment_reason_codes=listing.segment_reason_codes,
     )
+    segment_reason_codes = _dedupe_strings(
+        [
+            *result.segment_reason_codes,
+            *descriptor_context_segment_reason_codes(query, result),
+        ]
+    )
+    result = replace(result, segment_reason_codes=segment_reason_codes)
     return replace(result, price_reason=price_evidence_reason(result))
 
 

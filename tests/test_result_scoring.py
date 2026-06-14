@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.result_scoring import (
+    descriptor_context_segment_reason_codes,
     parse_posted_date,
     rank_results_by_quality,
     score_result,
@@ -121,6 +122,10 @@ def test_score_result_keeps_raw_panda_context_ahead_of_white_tag_guardrail() -> 
     assert "context.accessory_color_only:white" not in score.reasons
     assert "evidence.accessory_color:white" in score.reasons
     assert "evidence.raw_scoped_product:panda" in score.reasons
+    assert descriptor_context_segment_reason_codes(
+        "126500ln white 2026",
+        result,
+    ) == ("raw_context.used:panda",)
 
 
 def test_score_result_excludes_stock_list_raw_context_from_color_evidence() -> None:
@@ -142,6 +147,10 @@ def test_score_result_excludes_stock_list_raw_context_from_color_evidence() -> N
     assert "context.accessory_color_only:white" in score.reasons
     assert "evidence.accessory_color:white" in score.reasons
     assert "evidence.stock_list_excluded:panda" in score.reasons
+    assert descriptor_context_segment_reason_codes(
+        "126500ln white 2026",
+        result,
+    ) == ("raw_context.excluded_stock_list:panda",)
 
 
 def test_score_result_does_not_use_raw_context_without_local_descriptor_evidence() -> None:
@@ -159,6 +168,10 @@ def test_score_result_does_not_use_raw_context_without_local_descriptor_evidence
     assert score.quality_group == 0
     assert "evidence.raw_scoped_product:panda" not in score.reasons
     assert "guardrail.descriptor_context" not in score.reasons
+    assert descriptor_context_segment_reason_codes(
+        "126500ln white 2026",
+        result,
+    ) == ("raw_context.ignored:panda",)
 
 
 def test_score_result_does_not_demote_unaudited_accessory_color_context() -> None:

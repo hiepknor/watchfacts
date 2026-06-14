@@ -359,3 +359,27 @@ def test_build_query_report_emits_descriptor_conflict_reason_codes() -> None:
     assert final_event["guardrail_action"] == "demote"
     assert "guardrail.descriptor_conflict" in final_event["reason_codes"]
     assert "conflict.local_descriptor:wg" in final_event["reason_codes"]
+
+
+def test_build_query_report_emits_segment_reason_codes_without_raw_payload() -> None:
+    result = SearchResult(
+        "REF: 126500LN YEAR: 2026 CONDITION: UNWORN W&C + WHITE TAG PRICE: 27350 USD",
+        raw_listing_text=(
+            "MODEL: PANDA DAYTONA REF: 126500LN YEAR: 2026 CONDITION: UNWORN "
+            "COMES AS: W&C + WHITE TAG PRICE: 27350 USD cookie=session"
+        ),
+        segment_reason_codes=("raw_context.used:panda",),
+    )
+
+    report = build_query_report("126500ln white 2026", [result], limit=1)
+    output = format_text_report([report])
+    events = [
+        json.loads(line)
+        for line in format_jsonl_report([report]).splitlines()
+    ]
+    final_event = next(event for event in events if event["type"] == "final_result")
+
+    assert report.rows[0].segment_reason_codes == ("raw_context.used:panda",)
+    assert "segment_reasons=raw_context.used:panda" in output
+    assert "raw_context.used:panda" in final_event["reason_codes"]
+    assert "cookie=session" not in json.dumps(final_event)

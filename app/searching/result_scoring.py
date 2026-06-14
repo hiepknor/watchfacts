@@ -444,6 +444,29 @@ def _descriptor_evidence_reason_codes(
     )
 
 
+def descriptor_context_segment_reason_codes(
+    query: str,
+    result: SearchResult,
+) -> tuple[str, ...]:
+    plan = _cached_query_plan(query)
+    reason_codes: list[str] = []
+    for evidence in _descriptor_context_evidence(plan, result):
+        raw_terms = _raw_parent_product_context_terms(evidence.descriptor, result)
+        if not raw_terms:
+            continue
+        if scope_confidence_reason(result) == "scope.stock_list":
+            reason_codes.extend(
+                f"raw_context.excluded_stock_list:{term}" for term in raw_terms
+            )
+            continue
+        used_terms = _raw_scoped_product_terms(evidence.reason_codes)
+        if used_terms:
+            reason_codes.extend(f"raw_context.used:{term}" for term in used_terms)
+            continue
+        reason_codes.extend(f"raw_context.ignored:{term}" for term in raw_terms)
+    return _dedupe_preserving_order(reason_codes)
+
+
 def _color_descriptor_context_evidence(
     descriptor: str,
     local_tokens: list[str],
@@ -503,12 +526,7 @@ def _raw_product_context_terms(
     descriptor: str,
     result: SearchResult,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    if canonicalize_descriptor_token(descriptor) != "white":
-        return (), ()
-    if not result.raw_listing_text:
-        return (), ()
-    raw_tokens = normalize_text(result.raw_listing_text).split()
-    product_terms = _raw_product_evidence_terms(raw_tokens)
+    product_terms = _raw_parent_product_context_terms(descriptor, result)
     if not product_terms:
         return (), ()
     if scope_confidence_reason(result) == "scope.stock_list":
@@ -516,10 +534,30 @@ def _raw_product_context_terms(
     return product_terms, ()
 
 
+def _raw_parent_product_context_terms(
+    descriptor: str,
+    result: SearchResult,
+) -> tuple[str, ...]:
+    if canonicalize_descriptor_token(descriptor) != "white":
+        return ()
+    if not result.raw_listing_text:
+        return ()
+    return _raw_product_evidence_terms(normalize_text(result.raw_listing_text).split())
+
+
 def _raw_product_evidence_terms(raw_tokens: list[str]) -> tuple[str, ...]:
     if _nickname_has_local_evidence("panda", raw_tokens):
         return ("panda",)
     return ()
+
+
+def _raw_scoped_product_terms(reason_codes: tuple[str, ...]) -> tuple[str, ...]:
+    prefix = "evidence.raw_scoped_product:"
+    return tuple(
+        reason.removeprefix(prefix)
+        for reason in reason_codes
+        if reason.startswith(prefix)
+    )
 
 
 def _token_index_has_accessory_context(tokens: tuple[str, ...], index: int) -> bool:

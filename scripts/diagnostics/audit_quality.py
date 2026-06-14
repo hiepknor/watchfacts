@@ -87,6 +87,7 @@ class AuditResultRow:
     has_image: bool
     image_reason: str
     scope_reason: str
+    segment_reason_codes: tuple[str, ...]
     server_filtered: bool
     raw_listing_preview: str | None
     stable_listing_id: str
@@ -149,6 +150,7 @@ def build_query_report(
                 has_image=bool(result.image_url),
                 image_reason=image_reason,
                 scope_reason=scope_reason,
+                segment_reason_codes=result.segment_reason_codes,
                 server_filtered=server_filtered,
                 raw_listing_preview=_raw_listing_preview(result, snippet_chars),
                 stable_listing_id=stable_listing_id(result),
@@ -223,6 +225,10 @@ def format_text_report(reports: list[AuditQueryReport]) -> str:
             lines.append(f" reasons={reasons}")
             if row.fuzzy_reason_codes:
                 lines.append(" fuzzy_reasons=" + ",".join(row.fuzzy_reason_codes))
+            if row.segment_reason_codes:
+                lines.append(
+                    " segment_reasons=" + ",".join(row.segment_reason_codes)
+                )
             lines.append(
                 f" diagnostics=image_reason:{row.image_reason} "
                 f"scope_reason:{row.scope_reason} server_filtered:{row.server_filtered} "
@@ -637,6 +643,7 @@ def _final_row_event(query: str, row: AuditResultRow) -> dict[str, object]:
             *row.score_reasons,
             *row.suspicious_reasons,
             *row.fuzzy_reason_codes,
+            *row.segment_reason_codes,
             row.image_reason,
             row.scope_reason,
         ],

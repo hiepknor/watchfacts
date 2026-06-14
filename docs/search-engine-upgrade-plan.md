@@ -1315,12 +1315,36 @@ or unsafe, instead of leaving scoring to infer it from `scope_reason` alone.
 
 Acceptance:
 
-- [ ] Scoped result payloads can explain whether raw parent evidence was used,
+- [x] Scoped result payloads can explain whether raw parent evidence was used,
   ignored, or excluded.
-- [ ] Stock-list raw evidence stays excluded unless item-to-image/text ownership
+- [x] Stock-list raw evidence stays excluded unless item-to-image/text ownership
   is deterministic.
-- [ ] Audit output includes the new reason codes without exposing full raw HTML
+- [x] Audit output includes the new reason codes without exposing full raw HTML
   or sensitive session data.
+
+Implementation notes:
+
+- Added `descriptor_context_segment_reason_codes()` so result payload metadata can
+  explain raw parent context as `raw_context.used:*`, `raw_context.ignored:*`,
+  or `raw_context.excluded_stock_list:*`.
+- Search result creation now appends those context reasons to existing
+  `segment_reason_codes`; scoring and sort keys are unchanged.
+- Audit text and JSONL final-result events include `segment_reason_codes` in the
+  reason list, while raw previews still use the existing redaction path.
+- Bumped `SEARCH_CACHE_VERSION` from `search-v30` to `search-v31` because cached
+  result payload metadata changed. The deployed server status remains
+  `search-v30` until the next server deployment.
+
+Verification:
+
+- `python -m pytest tests/test_result_scoring.py tests/test_search.py tests/test_audit_quality.py -q`
+  passed with `134 passed`.
+- `python -m compileall app scripts` passed.
+- `python scripts/diagnostics/audit_quality.py "126500ln white" "daytona panda" --limit 5`
+  kept the same top quality groups: `126500ln white` count `16`, top quality
+  groups `[0, 0, 0, 0, 0]`; `daytona panda` count `210`, top quality groups
+  `[0, 0, 0, 0, 0]`. The `126500ln white` scoped panda row now shows
+  `segment_reasons=raw_context.used:panda`.
 
 ### Task 8.3: Cold-Path Retrieval Budget Audit
 
