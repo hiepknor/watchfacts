@@ -143,6 +143,7 @@ def test_makefile_has_mcp_benchmark_target() -> None:
     assert '--url "$(MCP_SMOKE_URL)"' in benchmark_target
     assert "--repeat $(MCP_BENCHMARK_REPEAT)" in benchmark_target
     assert "--format $(MCP_BENCHMARK_FORMAT)" in benchmark_target
+    assert "$(MCP_BENCHMARK_EXTRA_ARGS)" in benchmark_target
 
 
 def test_makefile_has_mcp_prewarm_target() -> None:

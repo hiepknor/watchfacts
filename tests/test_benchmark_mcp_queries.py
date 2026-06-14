@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 
 import scripts.diagnostics.benchmark_mcp_queries as benchmark_module
 from scripts.diagnostics.benchmark_mcp_queries import (
     DEFAULT_ALIAS_TOTAL_DELTA_RATIO,
     BenchmarkRow,
     DEFAULT_BENCHMARK_QUERIES,
+    RetrievalTimingRow,
+    _clear_search_cache,
     _dedupe_queries,
     _load_query_file,
     alias_recall_passed,
@@ -72,6 +75,23 @@ def test_row_from_payload_extracts_latency_quality_and_diagnostics() -> None:
                 "persist": 20,
                 "total": 5206,
             },
+            "retrieval_timings": [
+                {
+                    "query": "5205r green",
+                    "cache_status": "miss",
+                    "fetch_ms": 5100,
+                    "parse_ms": 40,
+                    "match_ms": 15,
+                    "total_ms": 5155,
+                    "parsed_count": 12,
+                    "matched_count": 10,
+                    "empty": False,
+                    "server_filtered": True,
+                    "playwright_fallback": False,
+                    "dominant": True,
+                    "reason_codes": ["retrieval.reference_with_descriptors"],
+                }
+            ],
         },
         "results": [
             {
@@ -137,6 +157,23 @@ def test_row_from_payload_extracts_latency_quality_and_diagnostics() -> None:
         "persist": 20,
         "total": 5206,
     }
+    assert row.retrieval_timings == (
+        RetrievalTimingRow(
+            query="5205r green",
+            cache_status="miss",
+            fetch_ms=5100,
+            parse_ms=40,
+            match_ms=15,
+            total_ms=5155,
+            parsed_count=12,
+            matched_count=10,
+            empty=False,
+            server_filtered=True,
+            playwright_fallback=False,
+            dominant=True,
+            reason_codes=("retrieval.reference_with_descriptors",),
+        ),
+    )
     assert row.image_missing_count == 1
     assert row.source_missing_count == 1
     assert row.warning_count == 5
@@ -171,6 +208,23 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
                 "watchfacts_fetch": 0,
                 "total": 80,
             },
+            retrieval_timings=(
+                RetrievalTimingRow(
+                    query="5205r green",
+                    cache_status="hit",
+                    fetch_ms=0,
+                    parse_ms=0,
+                    match_ms=0,
+                    total_ms=0,
+                    parsed_count=0,
+                    matched_count=0,
+                    empty=True,
+                    server_filtered=False,
+                    playwright_fallback=False,
+                    dominant=True,
+                    reason_codes=("retrieval.reference_with_descriptors",),
+                ),
+            ),
             top_results=("5205R Green",),
         ),
         BenchmarkRow(
@@ -192,11 +246,13 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     assert "descriptors=required:green;optional:2026;conflict:blue" in text
     assert "retrieval_queries='5205r green','5205r'" in text
     assert "retrieval_reasons=retrieval.reference_with_descriptors,retrieval.expand_reference" in text
+    assert "retrieval_timings='5205r green:total=0,fetch=0,parse=0,match=0,matched=0,cache=hit,dominant=yes'" in text
     assert "stages=cache_read:1,watchfacts_fetch:0,total:80" in text
     assert "SUMMARY" in text
     assert "| 5205r green | 2 | yes | 100 | 26 |" in markdown
     assert "patek_philippe:reference" in markdown
     assert "retrieval.reference_with_descriptors,retrieval.expand_reference" in markdown
+    assert "5205r green:total=0,fetch=0,parse=0,match=0,matched=0,cache=hit,dominant=yes" in markdown
     assert "cache hits: 1" in markdown
     assert "cache_read:1,watchfacts_fetch:0,total:80" in markdown
     decoded = [json.loads(line) for line in jsonl.splitlines()]
@@ -208,6 +264,8 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     assert decoded[0]["conflict_descriptors"] == ["blue"]
     assert decoded[0]["retrieval_queries"] == ["5205r green", "5205r"]
     assert decoded[0]["stage_timings_ms"]["total"] == 80
+    assert decoded[0]["retrieval_timings"][0]["query"] == "5205r green"
+    assert decoded[0]["retrieval_timings"][0]["cache_status"] == "hit"
     assert decoded[1]["error_type"] == "RuntimeError"
 
 
@@ -360,6 +418,81 @@ def test_run_benchmark_repeats_each_deduped_query(monkeypatch) -> None:
         ("Lange 1", 1),
         ("Lange 1", 2),
     ]
+
+
+def test_run_benchmark_can_clear_search_cache_before_each_query(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    clear_calls: list[object] = []
+
+    async def fake_benchmark_query(**kwargs) -> BenchmarkRow:
+        return BenchmarkRow(
+            query=kwargs["query"],
+            ok=True,
+            elapsed_ms=kwargs["run_number"],
+            run_number=kwargs["run_number"],
+        )
+
+    def fake_clear_search_cache(db_path) -> int:
+        clear_calls.append(db_path)
+        return len(clear_calls)
+
+    monkeypatch.setattr(benchmark_module, "_benchmark_query", fake_benchmark_query)
+    monkeypatch.setattr(benchmark_module, "_clear_search_cache", fake_clear_search_cache)
+
+    db_path = tmp_path / "bot.db"
+    rows = asyncio.run(
+        benchmark_module.run_benchmark(
+            url="http://127.0.0.1:8765/mcp",
+            queries=["5205r green", "Lange 1"],
+            limit=3,
+            timeout_seconds=1,
+            include_similar=False,
+            allow_empty=True,
+            repeat=2,
+            clear_search_cache=True,
+            db_path=db_path,
+        )
+    )
+
+    assert [(row.query, row.run_number) for row in rows] == [
+        ("5205r green", 1),
+        ("5205r green", 2),
+        ("Lange 1", 1),
+        ("Lange 1", 2),
+    ]
+    assert clear_calls == [db_path, db_path, db_path, db_path]
+
+
+def test_clear_search_cache_removes_search_and_reference_cache_rows(tmp_path) -> None:
+    db_path = tmp_path / "bot.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("CREATE TABLE search_cache (cache_key TEXT PRIMARY KEY)")
+        connection.execute(
+            "CREATE TABLE result_reference_cache (search_cache_key TEXT, result_id TEXT)"
+        )
+        connection.execute("INSERT INTO search_cache (cache_key) VALUES ('a')")
+        connection.execute(
+            "INSERT INTO result_reference_cache (search_cache_key, result_id) VALUES ('a', 'r')"
+        )
+
+    assert _clear_search_cache(db_path) == 2
+
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM search_cache").fetchone()[0] == 0
+        assert (
+            connection.execute("SELECT COUNT(*) FROM result_reference_cache").fetchone()[0]
+            == 0
+        )
+
+
+def test_clear_search_cache_ignores_missing_database(tmp_path) -> None:
+    db_path = tmp_path / "missing.db"
+
+    assert _clear_search_cache(db_path) == 0
+    assert not db_path.exists()
 
 
 def test_query_helpers_dedupe_and_ignore_comments(tmp_path) -> None:

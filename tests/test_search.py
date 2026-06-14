@@ -79,7 +79,13 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
     diagnostics_payload = {
         key: value
         for key, value in diagnostics_payload.items()
-        if key not in {"fuzzy_score_min", "fuzzy_score_avg", "stage_timings_ms"}
+        if key
+        not in {
+            "fuzzy_score_min",
+            "fuzzy_score_avg",
+            "stage_timings_ms",
+            "retrieval_timings",
+        }
     }
     assert diagnostics_payload == {
         "raw_candidate_count": 1,
@@ -1488,6 +1494,40 @@ def test_search_workflow_expands_daytona_panda_retrieval_with_local_filters(
         "126500ln white",
         "116500ln white",
     ]
+    retrieval_timings = diagnostics_payload["retrieval_timings"]
+    assert [row["query"] for row in retrieval_timings] == [
+        "daytona panda",
+        "daytona white",
+        "126500ln white",
+        "116500ln white",
+    ]
+    assert [row["cache_status"] for row in retrieval_timings] == [
+        "miss",
+        "miss",
+        "miss",
+        "miss",
+    ]
+    assert [row["parsed_count"] for row in retrieval_timings] == [1, 2, 2, 1]
+    assert [row["matched_count"] for row in retrieval_timings] == [1, 1, 1, 1]
+    assert [row["empty"] for row in retrieval_timings] == [
+        False,
+        False,
+        False,
+        False,
+    ]
+    assert sum(1 for row in retrieval_timings if row["dominant"]) == 1
+    assert all(
+        isinstance(row[key], int) and row[key] >= 0
+        for row in retrieval_timings
+        for key in ("fetch_ms", "parse_ms", "match_ms", "total_ms")
+    )
+    assert all(
+        row["reason_codes"] == [
+            "retrieval.raw_query",
+            "retrieval.nickname_expansion:panda",
+        ]
+        for row in retrieval_timings
+    )
     assert "retrieval.nickname_expansion:panda" in diagnostics_payload[
         "retrieval_reason_codes"
     ]

@@ -397,6 +397,7 @@ MCP service:
 ```bash
 make mcp-benchmark
 MCP_BENCHMARK_FORMAT=jsonl make mcp-benchmark > mcp-benchmark.jsonl
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
 make mcp-runtime-config
 make mcp-prewarm
 MCP_PREWARM_FORMAT=jsonl make mcp-prewarm > mcp-prewarm.jsonl
@@ -412,18 +413,26 @@ docker compose -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml exec -
 ```
 
 Use the benchmark for pass/fail, latency, result counts, intent/cache
-diagnostics, stage timing summaries, top-result snippets, canonical query,
-brand/reference/collection/nickname recognition, descriptor metadata, and
-retrieval expansion reason codes. The default benchmark set covers `rm07-01`
-alias pairs plus representative Rolex, Patek Philippe, and Audemars Piguet
-multi-brand queries. For default benchmark runs, the command also requires at
-least one canonical alias group and fails when alias-equivalent `total_count`
-values differ by more than 10%; tune this with `--alias-total-delta-ratio` or
-use `--skip-alias-recall-check` for exploratory custom runs. Use `--repeat 2`
-for a quick cold/warm cache comparison; run 1 should show the uncached fetch
-path when the search cache is stale, while run 2 should normally show the
-cache-hit path. Use `audit_quality.py` when a query needs quality-group,
-scoring, image attribution, or raw-to-final funnel evidence.
+diagnostics, stage timing summaries, per-retrieval-query timing, top-result
+snippets, canonical query, brand/reference/collection/nickname recognition,
+descriptor metadata, and retrieval expansion reason codes. The default
+benchmark set covers `rm07-01` alias pairs plus representative Rolex, Patek
+Philippe, and Audemars Piguet multi-brand queries. For default benchmark runs,
+the command also requires at least one canonical alias group and fails when
+alias-equivalent `total_count` values differ by more than 10%; tune this with
+`--alias-total-delta-ratio` or use `--skip-alias-recall-check` for exploratory
+custom runs. Use `--repeat 2` for a quick cold/warm cache comparison; run 1
+should show the uncached fetch path when the search cache is stale, while run 2
+should normally show the cache-hit path. For deliberate cold-path measurement
+against a co-located MCP runtime DB, run:
+
+```bash
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+```
+
+This clears local `search_cache` and `result_reference_cache` rows before each
+query run. Use `audit_quality.py` when a query needs quality-group, scoring,
+image attribution, or raw-to-final funnel evidence.
 
 ## Search Engine Deploy Gate
 

@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import os
+import sqlite3
 import statistics
 import sys
 import time
@@ -38,6 +39,23 @@ DEFAULT_BENCHMARK_QUERIES = (
 
 
 @dataclass(frozen=True)
+class RetrievalTimingRow:
+    query: str
+    cache_status: str | None = None
+    fetch_ms: int | None = None
+    parse_ms: int | None = None
+    match_ms: int | None = None
+    total_ms: int | None = None
+    parsed_count: int | None = None
+    matched_count: int | None = None
+    empty: bool | None = None
+    server_filtered: bool | None = None
+    playwright_fallback: bool | None = None
+    dominant: bool | None = None
+    reason_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class BenchmarkRow:
     query: str
     ok: bool
@@ -67,6 +85,7 @@ class BenchmarkRow:
     image_missing_count: int | None = None
     source_missing_count: int | None = None
     stage_timings_ms: dict[str, int] = field(default_factory=dict)
+    retrieval_timings: tuple[RetrievalTimingRow, ...] = ()
     validation_errors: tuple[str, ...] = ()
     top_results: tuple[str, ...] = ()
     error_type: str | None = None
@@ -107,10 +126,14 @@ async def run_benchmark(
     include_similar: bool,
     allow_empty: bool,
     repeat: int = 1,
+    clear_search_cache: bool = False,
+    db_path: Path | None = None,
 ) -> list[BenchmarkRow]:
     rows: list[BenchmarkRow] = []
     for query in _dedupe_queries(queries):
         for run_number in range(1, repeat + 1):
+            if clear_search_cache:
+                _clear_search_cache(_cache_db_path(db_path))
             rows.append(
                 await _benchmark_query(
                     url=url,
@@ -266,6 +289,9 @@ def _row_from_payload(
         image_missing_count=image_missing_count,
         source_missing_count=source_missing_count,
         stage_timings_ms=_stage_timings_value(diagnostics.get("stage_timings_ms")),
+        retrieval_timings=_retrieval_timings_value(
+            diagnostics.get("retrieval_timings")
+        ),
         validation_errors=validation_errors,
         top_results=top_results,
     )
@@ -299,11 +325,11 @@ def render_markdown(
         (
             "| Query | Run | OK | ms | total | canonical | intent | brand | ref | "
             "collection | nickname | desc | retrieval | reasons | cache | "
-            "warnings | stages | top result |"
+            "warnings | retrieval timing | stages | top result |"
         ),
         (
             "| --- | ---: | --- | ---: | ---: | --- | --- | --- | --- | --- | "
-            "--- | --- | --- | --- | --- | ---: | --- | --- |"
+            "--- | --- | --- | --- | --- | ---: | --- | --- | --- |"
         ),
     ]
     for row in rows:
@@ -328,6 +354,7 @@ def render_markdown(
                     _md(_csv(row.retrieval_reason_codes)),
                     _md(_bool_label(row.cache_hit)),
                     str(row.warning_count),
+                    _md(_retrieval_timing_summary(row.retrieval_timings)),
                     _md(_stage_timing_summary(row.stage_timings_ms)),
                     _md(top),
                 )
@@ -373,6 +400,7 @@ def render_text(
             f"retrieval_count={row.retrieval_query_count}",
             f"retrieval_queries={_quoted_csv(row.retrieval_queries)}",
             f"retrieval_reasons={_csv(row.retrieval_reason_codes)}",
+            f"retrieval_timings={_quoted_csv(_retrieval_timing_parts(row.retrieval_timings))}",
             f"cache_hit={row.cache_hit}",
             f"warnings={row.warning_count}",
         ]
@@ -531,6 +559,77 @@ def _stage_timings_value(value: object) -> dict[str, int]:
         and not isinstance(timing, bool)
         and timing >= 0
     }
+
+
+def _retrieval_timings_value(value: object) -> tuple[RetrievalTimingRow, ...]:
+    if not isinstance(value, list):
+        return ()
+    rows: list[RetrievalTimingRow] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        query = _optional_str(item.get("query"))
+        if query is None:
+            continue
+        rows.append(
+            RetrievalTimingRow(
+                query=query,
+                cache_status=_optional_str(item.get("cache_status")),
+                fetch_ms=_optional_int(item.get("fetch_ms")),
+                parse_ms=_optional_int(item.get("parse_ms")),
+                match_ms=_optional_int(item.get("match_ms")),
+                total_ms=_optional_int(item.get("total_ms")),
+                parsed_count=_optional_int(item.get("parsed_count")),
+                matched_count=_optional_int(item.get("matched_count")),
+                empty=item.get("empty") if isinstance(item.get("empty"), bool) else None,
+                server_filtered=(
+                    item.get("server_filtered")
+                    if isinstance(item.get("server_filtered"), bool)
+                    else None
+                ),
+                playwright_fallback=(
+                    item.get("playwright_fallback")
+                    if isinstance(item.get("playwright_fallback"), bool)
+                    else None
+                ),
+                dominant=(
+                    item.get("dominant")
+                    if isinstance(item.get("dominant"), bool)
+                    else None
+                ),
+                reason_codes=_string_tuple(item.get("reason_codes")),
+            )
+        )
+    return tuple(rows)
+
+
+def _retrieval_timing_summary(timings: tuple[RetrievalTimingRow, ...]) -> str:
+    if not timings:
+        return "-"
+    return ",".join(_retrieval_timing_parts(timings))
+
+
+def _retrieval_timing_parts(
+    timings: tuple[RetrievalTimingRow, ...],
+) -> tuple[str, ...]:
+    return tuple(_retrieval_timing_part(timing) for timing in timings)
+
+
+def _retrieval_timing_part(timing: RetrievalTimingRow) -> str:
+    return (
+        f"{timing.query}:"
+        f"total={_int_label(timing.total_ms)},"
+        f"fetch={_int_label(timing.fetch_ms)},"
+        f"parse={_int_label(timing.parse_ms)},"
+        f"match={_int_label(timing.match_ms)},"
+        f"matched={_int_label(timing.matched_count)},"
+        f"cache={timing.cache_status or '-'},"
+        f"dominant={_bool_label(timing.dominant)}"
+    )
+
+
+def _int_label(value: int | None) -> str:
+    return str(value) if value is not None else "-"
 
 
 def _stage_timing_summary(stage_timings_ms: dict[str, int]) -> str:
@@ -712,6 +811,31 @@ def _elapsed_ms(started_at: float) -> int:
     return max(0, int((time.perf_counter() - started_at) * 1000))
 
 
+def _cache_db_path(db_path: Path | None = None) -> Path:
+    if db_path is not None:
+        return db_path
+    from app.config import load_search_settings
+
+    return load_search_settings().db_path
+
+
+def _clear_search_cache(db_path: Path) -> int:
+    if not db_path.exists():
+        return 0
+    with sqlite3.connect(db_path) as connection:
+        deleted = 0
+        for table in ("result_reference_cache", "search_cache"):
+            exists = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (table,),
+            ).fetchone()
+            if exists is None:
+                continue
+            cursor = connection.execute(f"DELETE FROM {table}")
+            deleted += cursor.rowcount if cursor.rowcount is not None else 0
+        return deleted
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Benchmark WatchFacts MCP search queries and emit pasteable reports."
@@ -746,6 +870,18 @@ def main() -> int:
     )
     parser.add_argument("--include-similar", action="store_true")
     parser.add_argument("--allow-empty", action="store_true")
+    parser.add_argument(
+        "--clear-search-cache",
+        action="store_true",
+        help=(
+            "Delete local search_cache and result_reference_cache rows before each "
+            "query run. Intended for benchmarks running beside the MCP runtime DB."
+        ),
+    )
+    parser.add_argument(
+        "--cache-db-path",
+        help="SQLite DB path to clear when --clear-search-cache is enabled.",
+    )
     parser.add_argument(
         "--alias-total-delta-ratio",
         type=float,
@@ -788,6 +924,8 @@ def main() -> int:
             include_similar=args.include_similar,
             allow_empty=args.allow_empty,
             repeat=args.repeat,
+            clear_search_cache=args.clear_search_cache,
+            db_path=Path(args.cache_db_path) if args.cache_db_path else None,
         )
     )
     alias_checks = evaluate_alias_recall(

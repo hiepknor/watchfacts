@@ -142,8 +142,67 @@ def validate_search_diagnostics(payload: dict[str, Any]) -> list[str]:
                 errors,
                 prefix=f"search_diagnostics.{field}",
             )
+    _validate_retrieval_timings(payload.get("retrieval_timings"), errors)
     _validate_query_plan(payload.get("query_plan"), errors)
     return errors
+
+
+def _validate_retrieval_timings(value: Any, errors: list[str]) -> None:
+    if value is None:
+        return
+    prefix = "search_diagnostics.retrieval_timings"
+    if not isinstance(value, list):
+        errors.append(f"{prefix} must be a list")
+        return
+    for index, item in enumerate(value):
+        item_prefix = f"{prefix}[{index}]."
+        if not isinstance(item, dict):
+            errors.append(f"{prefix}[{index}] must be an object")
+            continue
+        for field in (
+            "query",
+            "cache_status",
+            "fetch_ms",
+            "parse_ms",
+            "match_ms",
+            "total_ms",
+            "parsed_count",
+            "matched_count",
+            "empty",
+            "server_filtered",
+            "playwright_fallback",
+            "dominant",
+            "reason_codes",
+        ):
+            if field not in item:
+                errors.append(f"{item_prefix}{field} is required")
+        _validate_required_text(item, "query", errors, prefix=item_prefix)
+        cache_status = item.get("cache_status")
+        if cache_status not in {"hit", "miss"}:
+            errors.append(f"{item_prefix}cache_status must be one of: hit, miss")
+        for field in (
+            "fetch_ms",
+            "parse_ms",
+            "match_ms",
+            "total_ms",
+            "parsed_count",
+            "matched_count",
+        ):
+            _validate_non_negative_int(item, field, errors, prefix=item_prefix)
+        for field in (
+            "empty",
+            "server_filtered",
+            "playwright_fallback",
+            "dominant",
+        ):
+            if field in item and not isinstance(item[field], bool):
+                errors.append(f"{item_prefix}{field} must be a boolean")
+        if "reason_codes" in item:
+            _validate_string_list(
+                item.get("reason_codes"),
+                errors,
+                prefix=f"{item_prefix}reason_codes",
+            )
 
 
 def _validate_query_plan(value: Any, errors: list[str]) -> None:

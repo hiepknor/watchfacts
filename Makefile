@@ -17,6 +17,7 @@ MCP_SMOKE_TIMEOUT_SECONDS ?= 120
 MCP_BENCHMARK_FORMAT ?= markdown
 MCP_BENCHMARK_LIMIT ?= 3
 MCP_BENCHMARK_REPEAT ?= 1
+MCP_BENCHMARK_EXTRA_ARGS ?=
 MCP_PREWARM_FORMAT ?= text
 MCP_PREWARM_LIMIT ?= 5
 MCP_PREWARM_VERIFY_HOT ?= 1
@@ -183,7 +184,7 @@ mcp-smoke-set:
 	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/mcp_smoke.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS)
 
 mcp-benchmark:
-	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/benchmark_mcp_queries.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_BENCHMARK_LIMIT) --repeat $(MCP_BENCHMARK_REPEAT) --format $(MCP_BENCHMARK_FORMAT) --allow-empty
+	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/benchmark_mcp_queries.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_BENCHMARK_LIMIT) --repeat $(MCP_BENCHMARK_REPEAT) --format $(MCP_BENCHMARK_FORMAT) --allow-empty $(MCP_BENCHMARK_EXTRA_ARGS)
 
 mcp-prewarm:
 	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/prewarm_mcp_cache.py --url "$(MCP_SMOKE_URL)" --timeout-seconds $(MCP_SMOKE_TIMEOUT_SECONDS) --limit $(MCP_PREWARM_LIMIT) --format $(MCP_PREWARM_FORMAT) $(MCP_PREWARM_VERIFY_HOT_ARGS)

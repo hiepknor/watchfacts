@@ -71,6 +71,40 @@ class ImageAttribution:
 
 
 @dataclass(frozen=True)
+class RetrievalTiming:
+    query: str
+    cache_status: str
+    fetch_ms: int
+    parse_ms: int
+    match_ms: int
+    total_ms: int
+    parsed_count: int
+    matched_count: int
+    empty: bool
+    server_filtered: bool
+    playwright_fallback: bool
+    dominant: bool = False
+    reason_codes: tuple[str, ...] = ()
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "query": self.query,
+            "cache_status": self.cache_status,
+            "fetch_ms": self.fetch_ms,
+            "parse_ms": self.parse_ms,
+            "match_ms": self.match_ms,
+            "total_ms": self.total_ms,
+            "parsed_count": self.parsed_count,
+            "matched_count": self.matched_count,
+            "empty": self.empty,
+            "server_filtered": self.server_filtered,
+            "playwright_fallback": self.playwright_fallback,
+            "dominant": self.dominant,
+            "reason_codes": list(self.reason_codes),
+        }
+
+
+@dataclass(frozen=True)
 class SearchDiagnostics:
     parsed_count: int | None
     matched_count: int | None
@@ -99,6 +133,7 @@ class SearchDiagnostics:
     guardrail_action_counts: dict[str, int] | None = None
     rejection_reasons: dict[str, int] | None = None
     stage_timings_ms: dict[str, int] | None = None
+    retrieval_timings: tuple[RetrievalTiming, ...] = ()
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -129,6 +164,9 @@ class SearchDiagnostics:
             "source_truncation_suspected": self.source_truncation_suspected,
             "rejection_reasons": self.rejection_reasons or {},
             "stage_timings_ms": self.stage_timings_ms or {},
+            "retrieval_timings": [
+                timing.to_payload() for timing in self.retrieval_timings
+            ],
         }
 
 
@@ -169,9 +207,31 @@ def _add_stage_timing(
     stage: str,
     started_at: float,
 ) -> None:
-    stage_timings_ms[stage] = stage_timings_ms.get(stage, 0) + _stage_elapsed_ms(
-        started_at
-    )
+    _add_stage_timing_value(stage_timings_ms, stage, _stage_elapsed_ms(started_at))
+
+
+def _add_stage_timing_value(
+    stage_timings_ms: dict[str, int],
+    stage: str,
+    elapsed_ms: int,
+) -> None:
+    stage_timings_ms[stage] = stage_timings_ms.get(stage, 0) + elapsed_ms
+
+
+def _mark_dominant_retrieval_timing(
+    timings: list[RetrievalTiming],
+) -> tuple[RetrievalTiming, ...]:
+    if not timings:
+        return ()
+    max_total_ms = max(timing.total_ms for timing in timings)
+    dominant_marked = False
+    marked: list[RetrievalTiming] = []
+    for timing in timings:
+        dominant = not dominant_marked and timing.total_ms == max_total_ms
+        if dominant:
+            dominant_marked = True
+        marked.append(replace(timing, dominant=dominant))
+    return tuple(marked)
 
 
 class WatchFactsSearchWorkflow:
@@ -373,16 +433,19 @@ class WatchFactsSearchWorkflow:
         matched: list[ListingCandidate] = []
         weak_match_count = 0
         ambiguous_candidate_count = 0
+        retrieval_timings: list[RetrievalTiming] = []
         for retrieval_index, retrieval_query in enumerate(
             retrieval_plan.fetch_queries,
             start=1,
         ):
+            retrieval_started_at = time.perf_counter()
             fetch_started_at = time.perf_counter()
             scrape_result = await self.fetch_html(
                 self.settings,
                 query=retrieval_query,
             )
-            _add_stage_timing(stage_timings_ms, "watchfacts_fetch", fetch_started_at)
+            fetch_ms = _stage_elapsed_ms(fetch_started_at)
+            _add_stage_timing_value(stage_timings_ms, "watchfacts_fetch", fetch_ms)
             self._audit_raw_scrape(
                 audit_events,
                 query=query,
@@ -407,7 +470,8 @@ class WatchFactsSearchWorkflow:
                     None if retrieval_index == 1 else f"retrieval-{retrieval_index}-parsed"
                 ),
             )
-            _add_stage_timing(stage_timings_ms, "parse", parse_started_at)
+            parse_ms = _stage_elapsed_ms(parse_started_at)
+            _add_stage_timing_value(stage_timings_ms, "parse", parse_ms)
             match_started_at = time.perf_counter()
             retrieval_matched = _filter_retrieved_listings(
                 local_filter_queries,
@@ -439,9 +503,26 @@ class WatchFactsSearchWorkflow:
             )
             weak_match_count += weak_count
             ambiguous_candidate_count += ambiguous_count
-            _add_stage_timing(stage_timings_ms, "match", match_started_at)
+            match_ms = _stage_elapsed_ms(match_started_at)
+            _add_stage_timing_value(stage_timings_ms, "match", match_ms)
             parsed_count += len(parsed)
             matched = _merge_listing_candidates(matched, retrieval_matched)
+            retrieval_timings.append(
+                RetrievalTiming(
+                    query=retrieval_query,
+                    cache_status="miss",
+                    fetch_ms=fetch_ms,
+                    parse_ms=parse_ms,
+                    match_ms=match_ms,
+                    total_ms=_stage_elapsed_ms(retrieval_started_at),
+                    parsed_count=len(parsed),
+                    matched_count=len(retrieval_matched),
+                    empty=not retrieval_matched,
+                    server_filtered=scrape_result.server_filtered,
+                    playwright_fallback=scrape_result.used_playwright_fallback,
+                    reason_codes=retrieval_plan.reason_codes,
+                )
+            )
 
         if (
             len(local_filter_queries) == 1
@@ -449,6 +530,7 @@ class WatchFactsSearchWorkflow:
         ):
             expanded_query = _query_without_year_descriptors(local_filter_queries[0])
             if expanded_query is not None:
+                retrieval_started_at = time.perf_counter()
                 fetch_started_at = time.perf_counter()
                 expanded_scrape_result = await self.fetch_html(
                     self.settings,
@@ -457,11 +539,8 @@ class WatchFactsSearchWorkflow:
                 if expanded_query not in retrieval_queries:
                     retrieval_queries.append(expanded_query)
                 retrieval_reason_codes.append("retrieval.expand_without_year_descriptor")
-                _add_stage_timing(
-                    stage_timings_ms,
-                    "watchfacts_fetch",
-                    fetch_started_at,
-                )
+                fetch_ms = _stage_elapsed_ms(fetch_started_at)
+                _add_stage_timing_value(stage_timings_ms, "watchfacts_fetch", fetch_ms)
                 self._audit_raw_scrape(
                     audit_events,
                     query=query,
@@ -485,7 +564,8 @@ class WatchFactsSearchWorkflow:
                     candidate_prefix="expanded-parsed",
                 )
                 parsed_count += len(expanded_parsed)
-                _add_stage_timing(stage_timings_ms, "parse", parse_started_at)
+                parse_ms = _stage_elapsed_ms(parse_started_at)
+                _add_stage_timing_value(stage_timings_ms, "parse", parse_ms)
                 match_started_at = time.perf_counter()
                 expanded_matched = filter_matching_listings(
                     local_filter_queries[0],
@@ -512,7 +592,26 @@ class WatchFactsSearchWorkflow:
                 )
                 weak_match_count += expanded_weak_count
                 ambiguous_candidate_count += expanded_ambiguous_count
-                _add_stage_timing(stage_timings_ms, "match", match_started_at)
+                match_ms = _stage_elapsed_ms(match_started_at)
+                _add_stage_timing_value(stage_timings_ms, "match", match_ms)
+                retrieval_timings.append(
+                    RetrievalTiming(
+                        query=expanded_query,
+                        cache_status="miss",
+                        fetch_ms=fetch_ms,
+                        parse_ms=parse_ms,
+                        match_ms=match_ms,
+                        total_ms=_stage_elapsed_ms(retrieval_started_at),
+                        parsed_count=len(expanded_parsed),
+                        matched_count=len(expanded_matched),
+                        empty=not expanded_matched,
+                        server_filtered=expanded_scrape_result.server_filtered,
+                        playwright_fallback=(
+                            expanded_scrape_result.used_playwright_fallback
+                        ),
+                        reason_codes=("retrieval.expand_without_year_descriptor",),
+                    )
+                )
         result_pipeline_started_at = time.perf_counter()
         results = [_to_search_result(query, listing) for listing in matched]
         self._audit_search_results(
@@ -641,6 +740,7 @@ class WatchFactsSearchWorkflow:
                 "guardrail.blocked_final": blocked_final_count,
             },
             stage_timings_ms=dict(stage_timings_ms),
+            retrieval_timings=_mark_dominant_retrieval_timing(retrieval_timings),
         )
         logger.info(
             "event=query.end parsed_count=%d matched_count=%d result_count=%d",

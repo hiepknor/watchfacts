@@ -897,7 +897,7 @@ Likely files:
 
 ## Phase 6: Cold-Path Retrieval Speed Optimization
 
-Status: Proposed next phase.
+Status: In progress.
 
 Goal: reduce first-pass latency for bounded multi-query retrieval expansions
 without reducing recall, weakening local matcher eligibility, or adding broad
@@ -930,20 +930,32 @@ contributors.
 
 Acceptance:
 
-- [ ] Benchmark/audit output can explain which retrieval expansion consumed the
-  most cold-path time.
-- [ ] A supported cold-run control exists for benchmarks, such as a documented
+- [x] Search diagnostics and benchmark output can explain which retrieval
+  expansion consumed the most cold-path time.
+- [x] A supported cold-run control exists for benchmarks, such as a documented
   cache reset command or benchmark flag; do not rely on ad-hoc environment
   variables that the Makefile or benchmark script does not read.
-- [ ] Diagnostics do not expose cookies, session state, full HTML, or raw
+- [x] Diagnostics do not expose cookies, session state, full HTML, or raw
   WatchFacts response bodies.
-- [ ] Existing MCP payload schema remains backward compatible.
+- [x] Existing MCP payload schema remains backward compatible.
+
+Initial implementation slice:
+
+- [x] `SearchDiagnostics` emits `retrieval_timings` with query, cache status,
+  fetch/parse/match/total timings, parsed/matched counts, empty status,
+  server-filter/fallback flags, reason codes, and one dominant latency branch.
+- [x] `benchmark_mcp_queries.py` extracts and renders retrieval timing summaries
+  in text, markdown, and JSONL reports.
+- [x] `benchmark_mcp_queries.py --clear-search-cache` clears local
+  `search_cache` and `result_reference_cache` rows before each query run, and
+  `make mcp-benchmark` can pass it through with `MCP_BENCHMARK_EXTRA_ARGS`.
 
 Suggested verification:
 
 ```bash
 python -m pytest tests/test_benchmark_mcp_queries.py tests/test_search.py
 make mcp-benchmark
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
 ```
 
 ### Task 6.2: Bounded Parallel Retrieval Evaluation
@@ -966,7 +978,7 @@ Acceptance:
 Suggested verification:
 
 ```bash
-<supported cold-run benchmark command from Task 6.1>
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
 make search-engine-postdeploy-check
 ```
 

@@ -190,6 +190,55 @@ def test_validate_search_diagnostics_reports_bad_counts() -> None:
     assert "search_diagnostics.final_count must not exceed matched_count" in errors
 
 
+def test_validate_search_diagnostics_reports_bad_retrieval_timing_shape() -> None:
+    errors = validate_search_diagnostics(
+        {
+            "cache_hit": False,
+            "final_count": 0,
+            "retrieval_timings": [
+                {
+                    "query": "",
+                    "cache_status": "warm",
+                    "fetch_ms": -1,
+                    "parse_ms": True,
+                    "match_ms": 0,
+                    "total_ms": 0,
+                    "parsed_count": -1,
+                    "matched_count": 0,
+                    "empty": "no",
+                    "server_filtered": False,
+                    "playwright_fallback": False,
+                    "dominant": False,
+                    "reason_codes": [""],
+                }
+            ],
+        }
+    )
+
+    assert "search_diagnostics.retrieval_timings[0].query must be a non-empty string" in errors
+    assert (
+        "search_diagnostics.retrieval_timings[0].cache_status must be one of: hit, miss"
+        in errors
+    )
+    assert (
+        "search_diagnostics.retrieval_timings[0].fetch_ms must be a non-negative integer"
+        in errors
+    )
+    assert (
+        "search_diagnostics.retrieval_timings[0].parse_ms must be a non-negative integer"
+        in errors
+    )
+    assert (
+        "search_diagnostics.retrieval_timings[0].parsed_count must be a non-negative integer"
+        in errors
+    )
+    assert "search_diagnostics.retrieval_timings[0].empty must be a boolean" in errors
+    assert (
+        "search_diagnostics.retrieval_timings[0].reason_codes[0] must be a non-empty string"
+        in errors
+    )
+
+
 def test_validate_search_diagnostics_reports_bad_query_plan_shape() -> None:
     errors = validate_search_diagnostics(
         {
