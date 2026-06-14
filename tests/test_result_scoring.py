@@ -70,6 +70,7 @@ def test_score_result_demotes_color_descriptor_only_in_accessory_context() -> No
     assert score.quality_group == 1
     assert "guardrail.descriptor_context" in score.reasons
     assert "context.accessory_color_only:white" in score.reasons
+    assert "evidence.accessory_color:white" in score.reasons
 
 
 def test_rank_results_by_quality_prefers_product_color_over_accessory_color() -> None:
@@ -90,6 +91,19 @@ def test_rank_results_by_quality_prefers_product_color_over_accessory_color() ->
     assert ranked == [product_color, accessory_only]
 
 
+def test_score_result_records_product_color_evidence() -> None:
+    result = SearchResult(
+        "126500LN White 2025 Slider 34.5K",
+        posted_date="June 1, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="126500ln white")
+
+    assert score.quality_group == 0
+    assert "evidence.product_color:white" in score.reasons
+    assert "evidence.accessory_color:white" not in score.reasons
+
+
 def test_score_result_keeps_raw_panda_context_ahead_of_white_tag_guardrail() -> None:
     result = SearchResult(
         "REF: 126500LN YEAR: 2026 CONDITION: UNWORN W&C + WHITE TAG PRICE: £27,350",
@@ -105,6 +119,59 @@ def test_score_result_keeps_raw_panda_context_ahead_of_white_tag_guardrail() -> 
     assert score.quality_group == 0
     assert "guardrail.descriptor_context" not in score.reasons
     assert "context.accessory_color_only:white" not in score.reasons
+    assert "evidence.accessory_color:white" in score.reasons
+    assert "evidence.raw_scoped_product:panda" in score.reasons
+
+
+def test_score_result_excludes_stock_list_raw_context_from_color_evidence() -> None:
+    result = SearchResult(
+        "REF: 126500LN YEAR: 2026 CONDITION: UNWORN W&C + WHITE TAG PRICE: £27,350",
+        raw_listing_text=(
+            "HK STOCK LIST 116505 rainbow 284k "
+            "MODEL: PANDA DAYTONA REF: 126500LN YEAR: 2026 "
+            "CONDITION: UNWORN COMES AS: W&C + WHITE TAG PRICE: £27,350 "
+            "5726/1A blue 2022 132k"
+        ),
+        posted_date="March 26, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="126500ln white 2026")
+
+    assert score.quality_group == 1
+    assert "guardrail.descriptor_context" in score.reasons
+    assert "context.accessory_color_only:white" in score.reasons
+    assert "evidence.accessory_color:white" in score.reasons
+    assert "evidence.stock_list_excluded:panda" in score.reasons
+
+
+def test_score_result_does_not_use_raw_context_without_local_descriptor_evidence() -> None:
+    result = SearchResult(
+        "REF: 126500LN YEAR: 2026 CONDITION: UNWORN PRICE: £27,350",
+        raw_listing_text=(
+            "MODEL: PANDA DAYTONA REF: 126500LN YEAR: 2026 "
+            "CONDITION: UNWORN PRICE: £27,350"
+        ),
+        posted_date="March 26, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="126500ln white 2026")
+
+    assert score.quality_group == 0
+    assert "evidence.raw_scoped_product:panda" not in score.reasons
+    assert "guardrail.descriptor_context" not in score.reasons
+
+
+def test_score_result_does_not_demote_unaudited_accessory_color_context() -> None:
+    result = SearchResult(
+        "5711/1A black dial blue tag full set HKD 840k",
+        posted_date="June 13, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="5711 blue")
+
+    assert score.quality_group == 0
+    assert "guardrail.descriptor_context" not in score.reasons
+    assert "evidence.accessory_color:blue" not in score.reasons
 
 
 def test_rank_results_by_quality_demotes_daytona_without_panda_evidence() -> None:

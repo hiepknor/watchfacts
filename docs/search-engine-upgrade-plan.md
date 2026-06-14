@@ -1238,7 +1238,7 @@ make search-engine-postdeploy-check
 
 ## Phase 8: Context Evidence And Cold-Path Budgeting
 
-Status: planned from Phase 7 postdeploy evidence.
+Status: in progress from Phase 7 postdeploy evidence.
 
 Goal: turn the narrow Phase 7 guardrails into a small, reusable evidence model
 only where production audit proves the need, while reducing cold-path latency
@@ -1265,13 +1265,41 @@ without audit cases.
 
 Acceptance:
 
-- [ ] Existing Phase 7 behavior remains unchanged for `126500ln white`,
+- [x] Existing Phase 7 behavior remains unchanged for `126500ln white`,
   `126500ln white 2026`, and `daytona panda`.
-- [ ] Evidence reasons distinguish product, accessory, raw scoped, and
+- [x] Evidence reasons distinguish product, accessory, raw scoped, and
   stock-list-excluded context.
-- [ ] Tests prove unaudited nicknames and colors are not silently affected.
-- [ ] No new module is added unless it replaces duplicated logic in at least two
+- [x] Tests prove unaudited nicknames and colors are not silently affected.
+- [x] No new module is added unless it replaces duplicated logic in at least two
   current files.
+
+Implementation notes:
+
+- Added a small internal `DescriptorContextEvidence` model inside
+  `app/searching/result_scoring.py`; no new module or package was introduced.
+- Existing Phase 7 ranking behavior is unchanged. The model only centralizes the
+  context decision and emits auditable reason codes:
+  `evidence.product_color:white`, `evidence.accessory_color:white`,
+  `evidence.raw_scoped_product:panda`, and
+  `evidence.stock_list_excluded:panda`.
+- Raw scoped evidence is only considered when the local segment has accessory
+  color evidence and no local product-color evidence. It is still excluded for
+  stock-list scope.
+- `SEARCH_CACHE_VERSION` is unchanged because sort keys, result counts, result
+  payloads, and cache semantics did not change.
+
+Verification from 2026-06-15:
+
+- `python -m pytest tests/test_result_scoring.py -q` passed with `38 passed`.
+- `python -m pytest tests/test_search.py tests/test_audit_quality.py tests/test_result_scoring.py -q`
+  passed with `128 passed, 2 skipped`.
+- `python -m pytest -q` passed with `692 passed, 2 skipped`.
+- `python -m compileall app scripts` passed.
+- `python scripts/diagnostics/audit_quality.py "126500ln white" "daytona panda" --limit 5`
+  kept the same top result shape: `126500ln white` count `16`, top quality
+  groups `[0, 0, 0, 0, 0]`; `daytona panda` count `210`, top quality groups
+  `[0, 0, 0, 0, 0]`. The audit now exposes product, accessory, and raw scoped
+  evidence reasons for the relevant `126500ln white` rows.
 
 Suggested verification:
 

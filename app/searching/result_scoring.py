@@ -118,6 +118,13 @@ SCOPE_CONDITION_DATE_RE = re.compile(
 
 
 @dataclass(frozen=True)
+class DescriptorContextEvidence:
+    descriptor: str
+    accessory_only: bool
+    reason_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ResultScore:
     quality_group: int
     quality_severity: int
@@ -256,17 +263,25 @@ def _guardrail_score(
     nickname_reasons = _nickname_evidence_missing_reasons(plan, result)
     if nickname_reasons:
         return 1, ("guardrail.nickname_evidence_missing", *nickname_reasons)
+    descriptor_evidence = _descriptor_context_evidence(plan, result)
+    descriptor_evidence_reasons = _descriptor_evidence_reason_codes(
+        descriptor_evidence
+    )
     if plan.intent_kind not in {"reference_with_descriptor", "reference_with_year"}:
-        return 0, ()
+        return 0, descriptor_evidence_reasons
     if not plan.required_descriptors:
-        return 0, ()
-    context_reasons = _local_descriptor_context_reasons(plan, result)
+        return 0, descriptor_evidence_reasons
+    context_reasons = _local_descriptor_context_reasons(descriptor_evidence)
     if context_reasons:
-        return 1, ("guardrail.descriptor_context", *context_reasons)
+        return 1, (
+            "guardrail.descriptor_context",
+            *context_reasons,
+            *descriptor_evidence_reasons,
+        )
     conflict_reasons = _local_descriptor_conflict_reasons(plan, result)
     if conflict_reasons:
         return 1, ("guardrail.descriptor_conflict", *conflict_reasons)
-    return 0, ()
+    return 0, descriptor_evidence_reasons
 
 
 def _conflict_penalty_score(
@@ -389,10 +404,10 @@ def _nickname_has_local_evidence(nickname: str, local_tokens: list[str]) -> bool
     return False
 
 
-def _local_descriptor_context_reasons(
+def _descriptor_context_evidence(
     plan: QueryPlan,
     result: SearchResult,
-) -> tuple[str, ...]:
+) -> tuple[DescriptorContextEvidence, ...]:
     required_colors = (
         canonicalize_descriptor_tokens_as_set(plan.required_descriptors)
         & CANONICAL_COLOR_DESCRIPTOR_GROUP
@@ -404,10 +419,79 @@ def _local_descriptor_context_reasons(
     if not local_tokens:
         return ()
     return tuple(
-        f"context.accessory_color_only:{color}"
+        _color_descriptor_context_evidence(color, local_tokens, result)
         for color in sorted(required_colors)
-        if _descriptor_occurs_only_in_accessory_context(color, local_tokens)
-        and not _has_safe_raw_product_color_evidence(color, result)
+    )
+
+
+def _local_descriptor_context_reasons(
+    evidence_rows: tuple[DescriptorContextEvidence, ...],
+) -> tuple[str, ...]:
+    return tuple(
+        f"context.accessory_color_only:{evidence.descriptor}"
+        for evidence in evidence_rows
+        if evidence.accessory_only
+    )
+
+
+def _descriptor_evidence_reason_codes(
+    evidence_rows: tuple[DescriptorContextEvidence, ...],
+) -> tuple[str, ...]:
+    return tuple(
+        reason
+        for evidence in evidence_rows
+        for reason in evidence.reason_codes
+    )
+
+
+def _color_descriptor_context_evidence(
+    descriptor: str,
+    local_tokens: list[str],
+    result: SearchResult,
+) -> DescriptorContextEvidence:
+    canonical_descriptor = canonicalize_descriptor_token(descriptor)
+    canonical_tokens = _canonical_local_tokens(local_tokens)
+    matching_indexes = tuple(
+        index
+        for index, token in enumerate(canonical_tokens)
+        if token == canonical_descriptor
+    )
+    accessory_indexes = tuple(
+        index
+        for index in matching_indexes
+        if _token_index_has_accessory_context(canonical_tokens, index)
+    )
+    product_indexes = tuple(
+        index for index in matching_indexes if index not in accessory_indexes
+    )
+    if accessory_indexes and not product_indexes:
+        raw_product_terms, raw_excluded_terms = _raw_product_context_terms(
+            canonical_descriptor,
+            result,
+        )
+    else:
+        raw_product_terms, raw_excluded_terms = (), ()
+
+    reason_codes: list[str] = []
+    if product_indexes:
+        reason_codes.append(f"evidence.product_color:{canonical_descriptor}")
+    if accessory_indexes:
+        reason_codes.append(f"evidence.accessory_color:{canonical_descriptor}")
+    reason_codes.extend(
+        f"evidence.raw_scoped_product:{term}"
+        for term in raw_product_terms
+    )
+    reason_codes.extend(
+        f"evidence.stock_list_excluded:{term}"
+        for term in raw_excluded_terms
+    )
+
+    return DescriptorContextEvidence(
+        descriptor=canonical_descriptor,
+        accessory_only=bool(accessory_indexes)
+        and not product_indexes
+        and not raw_product_terms,
+        reason_codes=tuple(reason_codes),
     )
 
 
@@ -415,37 +499,27 @@ def _query_mentions_accessory_context(query: str) -> bool:
     return bool(set(normalize_text(query).split()) & ACCESSORY_COLOR_CONTEXT_TOKENS)
 
 
-def _descriptor_occurs_only_in_accessory_context(
-    descriptor: str,
-    local_tokens: list[str],
-) -> bool:
-    canonical_descriptor = canonicalize_descriptor_token(descriptor)
-    canonical_tokens = _canonical_local_tokens(local_tokens)
-    matching_indexes = [
-        index
-        for index, token in enumerate(canonical_tokens)
-        if token == canonical_descriptor
-    ]
-    if not matching_indexes:
-        return False
-    return all(
-        _token_index_has_accessory_context(canonical_tokens, index)
-        for index in matching_indexes
-    )
-
-
-def _has_safe_raw_product_color_evidence(
+def _raw_product_context_terms(
     descriptor: str,
     result: SearchResult,
-) -> bool:
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     if canonicalize_descriptor_token(descriptor) != "white":
-        return False
+        return (), ()
     if not result.raw_listing_text:
-        return False
-    if scope_confidence_reason(result) == "scope.stock_list":
-        return False
+        return (), ()
     raw_tokens = normalize_text(result.raw_listing_text).split()
-    return _nickname_has_local_evidence("panda", raw_tokens)
+    product_terms = _raw_product_evidence_terms(raw_tokens)
+    if not product_terms:
+        return (), ()
+    if scope_confidence_reason(result) == "scope.stock_list":
+        return (), product_terms
+    return product_terms, ()
+
+
+def _raw_product_evidence_terms(raw_tokens: list[str]) -> tuple[str, ...]:
+    if _nickname_has_local_evidence("panda", raw_tokens):
+        return ("panda",)
+    return ()
 
 
 def _token_index_has_accessory_context(tokens: tuple[str, ...], index: int) -> bool:
