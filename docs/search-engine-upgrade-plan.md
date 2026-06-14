@@ -2,11 +2,17 @@
 
 ## Status
 
-In progress.
+MCP deployed and production-validated for Phases 1-5.
+
+As of 2026-06-14, commit `62819a2` is pushed to `origin/master` and
+deployed to `watchfacts-mcp`. The Telegram bot deploy remains blocked by the
+operator-managed `TELEGRAM_BOT_TOKEN` value, not by code or test failures.
 
 ## Date
 
 2026-06-13
+
+Last reviewed: 2026-06-14
 
 ## Objective
 
@@ -68,6 +74,52 @@ daytona panda        -> Rolex Daytona white/black dial context
 These cases should share the same recognition, retrieval, and filtering
 machinery. The only brand-specific part should be compact taxonomy data and
 reference grammar.
+
+## Deployment Validation Evidence
+
+Latest validated deployment:
+
+- Commit: `62819a2`
+- Service: `watchfacts-mcp`
+- Date: 2026-06-14
+- Worktree state after deploy: clean and synced with `origin/master`
+
+Predeploy gate:
+
+- `make search-engine-predeploy-check` passed.
+- Local pytest passed with `671 passed, 2 skipped`.
+- `python -m compileall app scripts` passed.
+- Focused audit passed for `rm07-01 rg snow`, `rm07-01 rose gold`,
+  `rm07-01 white gold`, and `rm07-01 mother of pearl`; suspicious/quality
+  guardrails stayed clean.
+
+Deploy and postdeploy gate:
+
+- `make deploy-mcp` rebuilt and recreated `watchfacts-mcp`; the service became
+  healthy.
+- Container pytest passed with `673 passed`.
+- `make search-engine-postdeploy-check` passed.
+- MCP smoke passed `4/4`.
+- Default MCP benchmark passed `13/13` with hot-cache median latency around
+  `41ms`, p95 around `286ms`, max around `286ms`, and cache hits `13/13`.
+- Alias recall delta was zero for the canonical groups covering `rm07-01 mop`,
+  `rm07-01 rg`, `rm07-01 rg snow`, and `rm07-01 wg`.
+
+Operational blocker:
+
+- `make deploy-bot` reached runtime startup but Telegram rejected the placeholder
+  token `your_telegram_token`. The bot was stopped to avoid a restart loop.
+  This is an operator secret/configuration issue, not a search-engine code
+  failure.
+
+Remaining performance observation:
+
+- Hot-cache search is within target for the representative benchmark set.
+- Cold expanded retrieval remains the next speed bottleneck: observed cold
+  first-pass times were roughly `7.7s` for `126500ln white`, `28s` for
+  `daytona panda`, `29.9s` for `5711 blue`, and `13.5s` for `15500st blue`.
+  These timings did not fail the quality gate, but they should drive the next
+  optimization phase.
 
 ## Design Principles
 
@@ -163,7 +215,7 @@ Description: Move descriptor aliases, compound phrases, semantic groups, and
 conflict rules into one deterministic global rulebook. This layer is brand
 agnostic.
 
-Initial descriptor groups:
+Implemented descriptor groups:
 
 | Canonical | Aliases and phrases | Group | Conflicts |
 | --- | --- | --- | --- |
@@ -173,16 +225,27 @@ Initial descriptor groups:
 | `gray` | `gray`, `grey` | color | other color group members |
 | `choco` | `choco`, `chocolate`, `cho` | color/dial | other color group members |
 | `mete` | `mete`, `meteorite` | dial/material detail | none initially |
+
+Future descriptor candidates:
+
+| Canonical | Aliases and phrases | Group | Conflicts |
+| --- | --- | --- | --- |
 | `fullset` | `fullset`, `full set`, `complete set` | set | none initially |
 | `nos` | `nos`, `new old stock` | condition | none initially |
 
+`fullset` and `nos` are recognized in several parser, matcher, scoring, and
+similarity contexts today, but they are not yet centralized in the descriptor
+rulebook. Do not mark them as descriptor-rulebook coverage until the canonical
+rulebook, query parsing, listing matching, diagnostics, and tests all use the
+same representation.
+
 Acceptance:
 
-- [ ] `parse_query_terms()` and `tokenize_query()` use the same canonical rulebook.
-- [ ] `score_fuzzy_match()` and `result_scoring` use the same canonical rulebook.
-- [ ] `rg`, `rosegold`, and `rose gold` produce the same canonical descriptor.
-- [ ] Conflicting material descriptors are explicit metadata, not ad-hoc string checks.
-- [ ] Existing public import paths remain stable.
+- [x] `parse_query_terms()` and `tokenize_query()` use the same canonical rulebook.
+- [x] `score_fuzzy_match()` and `result_scoring` use the same canonical rulebook.
+- [x] `rg`, `rosegold`, and `rose gold` produce the same canonical descriptor.
+- [x] Conflicting material descriptors are explicit metadata, not ad-hoc string checks.
+- [x] Existing public import paths remain stable.
 
 Verification:
 
@@ -524,10 +587,10 @@ Target patterns:
 
 Acceptance:
 
-- [ ] Parser emits item segments with bounded text snippets.
-- [ ] Segment records keep parent source, seller, posted date, and image metadata.
-- [ ] Segment text does not leak unrelated neighboring product references.
-- [ ] `scope.stock_list` remains visible when confidence is lower.
+- [x] Parser emits item segments with bounded text snippets.
+- [x] Segment records keep parent source, seller, posted date, and image metadata.
+- [x] Segment text does not leak unrelated neighboring product references.
+- [x] `scope.stock_list` remains visible when confidence is lower.
 
 Initial implementation slice:
 
@@ -573,10 +636,10 @@ Suggested confidence fields:
 
 Acceptance:
 
-- [ ] Price evidence belongs to the selected segment.
-- [ ] Ambiguous parent images are omitted rather than shown incorrectly.
-- [ ] Audit output explains segment/image/price decisions.
-- [ ] Result-page and MCP result schemas remain backward compatible.
+- [x] Price evidence belongs to the selected segment.
+- [x] Ambiguous parent images are omitted rather than shown incorrectly.
+- [x] Audit output explains segment/image/price decisions.
+- [x] Result-page and MCP result schemas remain backward compatible.
 
 Initial implementation slice:
 
@@ -625,10 +688,10 @@ Feature set:
 
 Acceptance:
 
-- [ ] Ranking features are visible in `ResultScore.reasons` or audit fields.
-- [ ] Missing price remains demoted below clean priced results.
-- [ ] Stock-list scoped results can rank below full listings when all else is equal.
-- [ ] Ranking never admits a listing that matcher rejected.
+- [x] Ranking features are visible in `ResultScore.reasons` or audit fields.
+- [x] Missing price remains demoted below clean priced results.
+- [x] Stock-list scoped results can rank below full listings when all else is equal.
+- [x] Ranking never admits a listing that matcher rejected.
 
 Initial implementation slice:
 
@@ -832,6 +895,101 @@ Likely files:
 - `docs/operations.md`
 - `docs/search-engine-upgrade-plan.md`
 
+## Phase 6: Cold-Path Retrieval Speed Optimization
+
+Status: Proposed next phase.
+
+Goal: reduce first-pass latency for bounded multi-query retrieval expansions
+without reducing recall, weakening local matcher eligibility, or adding broad
+new abstractions.
+
+Current baseline from the 2026-06-14 MCP deploy:
+
+| Query | Observed cold first-pass latency | Result count |
+| --- | ---: | ---: |
+| `126500ln white` | ~7.7s | 16 |
+| `daytona panda` | ~28s | 211 |
+| `5711 blue` | ~29.9s | 28 |
+| `15500st blue` | ~13.5s | 6 |
+
+Non-negotiables:
+
+- Do not reduce result count or top-result quality for the Phase 5 benchmark
+  set.
+- Do not remove strict local eligibility checks to make retrieval faster.
+- Do not fetch unbounded WatchFacts pages.
+- Do not add another generic `engine` layer unless measurements show that an
+  existing boundary is doing two unrelated jobs.
+- Keep hot-cache latency at or below the current benchmark profile.
+
+### Task 6.1: Per-Retrieval-Query Timing Trace
+
+Description: Make cold benchmark output show timing per retrieval subquery and
+which subqueries were cache hits, cache misses, empty, or dominant latency
+contributors.
+
+Acceptance:
+
+- [ ] Benchmark/audit output can explain which retrieval expansion consumed the
+  most cold-path time.
+- [ ] A supported cold-run control exists for benchmarks, such as a documented
+  cache reset command or benchmark flag; do not rely on ad-hoc environment
+  variables that the Makefile or benchmark script does not read.
+- [ ] Diagnostics do not expose cookies, session state, full HTML, or raw
+  WatchFacts response bodies.
+- [ ] Existing MCP payload schema remains backward compatible.
+
+Suggested verification:
+
+```bash
+python -m pytest tests/test_benchmark_mcp_queries.py tests/test_search.py
+make mcp-benchmark
+```
+
+### Task 6.2: Bounded Parallel Retrieval Evaluation
+
+Description: Evaluate parallel fetching for independent retrieval expansions
+with a small fixed concurrency cap. Preserve deterministic merge order after
+fetching, and keep the local matcher as the only eligibility gate.
+
+Acceptance:
+
+- [ ] Cold latency improves for at least two of the multi-brand baseline
+  queries.
+- [ ] Result counts, top results, and alias recall remain equivalent to the
+  Phase 5 deployed baseline.
+- [ ] Concurrency cap is documented and configurable only through a safe
+  runtime setting.
+- [ ] Fetch failures are isolated to the affected retrieval branch and reported
+  through existing diagnostics/error handling.
+
+Suggested verification:
+
+```bash
+<supported cold-run benchmark command from Task 6.1>
+make search-engine-postdeploy-check
+```
+
+### Task 6.3: Cache And Prewarm Policy Tightening
+
+Description: Keep deploy/startup prewarm focused on proven common and benchmark
+queries, and avoid using prewarm as a substitute for fixing cold-path waste.
+
+Acceptance:
+
+- [ ] Prewarm remains best-effort and cannot mask a failing deploy gate.
+- [ ] Benchmark-default prewarm keeps alias groups hot and equivalent.
+- [ ] Cache-version changes are documented when retrieval behavior changes.
+- [ ] Operations docs explain when to use prewarm versus when to optimize
+  retrieval itself.
+
+Suggested verification:
+
+```bash
+make mcp-postdeploy-prewarm
+make search-engine-postdeploy-check
+```
+
 ## Metrics
 
 Track these before and after each phase:
@@ -840,7 +998,7 @@ Track these before and after each phase:
 | --- | --- |
 | alias-equivalent recall delta | Near zero for canonical equivalents |
 | hot-cache MCP latency | Usually below 100 ms for cached searches |
-| cold-path WatchFacts fetch latency | Recorded, not regressed without reason |
+| cold-path WatchFacts fetch latency | Recorded for every deploy; after Phase 6, reduced for multi-query retrieval without recall loss |
 | weak match rate | Does not increase |
 | ambiguous candidate rate | Decreases or becomes better explained |
 | brand-recognition coverage | Increases for audited high-value brands |
@@ -874,7 +1032,11 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Start with Phase 1 Task 1.1 and Task 1.2, then add Task 1.3 only for the
-highest-value audited brands. Query recognition is the foundation for retrieval
-planning and parser/ranking guardrails, and it has the smallest runtime risk
-when introduced with diagnostics first.
+Do not start a new matcher/parser/ranking expansion by default. Phases 1-5 are
+implemented and MCP-deployed; the next useful work is Phase 6, starting with
+Task 6.1 so cold-path latency can be attributed before any concurrency or cache
+policy changes.
+
+Only add more brand taxonomy or nickname rules when a fresh audit shows a real
+recall gap and the Phase 5 benchmark can prove that the added rule does not
+increase false positives or alias recall drift.
