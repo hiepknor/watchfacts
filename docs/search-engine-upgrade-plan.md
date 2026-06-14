@@ -897,13 +897,13 @@ Likely files:
 
 ## Phase 6: Cold-Path Retrieval Speed Optimization
 
-Status: In progress.
+Status: complete and deployed.
 
 Goal: reduce first-pass latency for bounded multi-query retrieval expansions
 without reducing recall, weakening local matcher eligibility, or adding broad
 new abstractions.
 
-Current baseline from the 2026-06-14 MCP deploy:
+Initial baseline from the 2026-06-14 MCP deploy:
 
 | Query | Observed cold first-pass latency | Result count |
 | --- | ---: | ---: |
@@ -1049,6 +1049,98 @@ make mcp-postdeploy-prewarm
 make search-engine-postdeploy-check
 ```
 
+Phase 6 deployment evidence:
+
+- Deployed server HEAD: `759b0fd`.
+- Runtime setting: `SEARCH_RETRIEVAL_CONCURRENCY=2`.
+- Production MCP deploy gate passed with container tests, compile checks,
+  bounded quality audit, hot-cache prewarm, benchmark-default prewarm, and
+  alias prewarm checks.
+- Postdeploy search-engine check passed with `mcp_smoke` `4/4`, MCP benchmark
+  `13/13`, hot-cache hits `13/13`, and alias recall delta `0`.
+
+## Phase 7: Production Observation And Evidence-Driven Search Improvements
+
+Status: planned.
+
+Goal: improve matcher, parser, ranking, and retrieval only from concrete
+production evidence, while keeping result quality and project size under
+control.
+
+Non-negotiables:
+
+- Do not add brand taxonomy, nickname expansion, parser heuristics, or ranking
+  rules without a failing audit case or benchmark evidence.
+- Do not widen prewarm lists to hide cold-path problems.
+- Do not add a new generic engine layer unless it removes duplicated behavior
+  or clarifies an existing boundary that is doing unrelated jobs.
+- Every behavior-changing search patch needs regression coverage and a cache
+  version decision.
+
+### Task 7.1: Update Production Baseline Snapshot
+
+Description: Capture the current deployed search baseline as a small,
+repeatable evidence artifact before adding more search rules.
+
+Acceptance:
+
+- [ ] A server-side command sequence records runtime config, hot benchmark,
+  cold benchmark, alias recall, cache hit rate, and top-result snippets.
+- [ ] The artifact names and command outputs are documented in deploy notes or
+  this plan.
+- [ ] The snapshot does not include secrets, WatchFacts cookies, browser state,
+  full HTML, or unbounded raw listings.
+
+Suggested verification:
+
+```bash
+make mcp-runtime-config
+make mcp-benchmark
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+```
+
+### Task 7.2: Real Query Gap Audit
+
+Description: Audit real or representative production queries and classify each
+gap before changing matcher, parser, ranking, or retrieval behavior.
+
+Acceptance:
+
+- [ ] Each finding is classified as query recognition, retrieval coverage,
+  parser segmentation, matcher false negative, matcher false positive, ranking,
+  image attribution, or cold-path latency.
+- [ ] Each accepted finding includes the query, expected behavior, current
+  behavior, top-result evidence, and a proposed regression fixture.
+- [ ] Findings that do not affect result quality or speed are explicitly
+  deferred instead of implemented.
+
+Suggested verification:
+
+```bash
+python scripts/diagnostics/audit_quality.py --limit 5
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+```
+
+### Task 7.3: Evidence-Based Fix Batch
+
+Description: Implement the smallest set of deterministic fixes for confirmed
+audit findings.
+
+Acceptance:
+
+- [ ] Each fix has a regression test or fixture tied to a specific finding.
+- [ ] The default MCP benchmark still passes with alias recall delta within the
+  configured threshold.
+- [ ] Result count and top-result drift are documented for affected queries.
+- [ ] `SEARCH_CACHE_VERSION` is bumped or explicitly documented as unchanged.
+
+Suggested verification:
+
+```bash
+python -m pytest
+make search-engine-postdeploy-check
+```
+
 ## Metrics
 
 Track these before and after each phase:
@@ -1091,11 +1183,13 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Do not start a new matcher/parser/ranking expansion by default. Phases 1-5 are
-implemented and MCP-deployed; the next useful work is Phase 6, starting with
-Task 6.1 so cold-path latency can be attributed before any concurrency or cache
-policy changes.
+Do not start a new matcher/parser/ranking expansion by default. Phase 6 is
+implemented, production-deployed, and running with
+`SEARCH_RETRIEVAL_CONCURRENCY=2`; the next useful work is Phase 7, starting
+with Task 7.1 so the current production baseline is captured before any new
+rules are added.
 
-Only add more brand taxonomy or nickname rules when a fresh audit shows a real
-recall gap and the Phase 5 benchmark can prove that the added rule does not
-increase false positives or alias recall drift.
+Only add more brand taxonomy, nickname rules, parser segmentation, or ranking
+logic when a fresh audit shows a real recall, precision, quality, or latency gap
+and the benchmark can prove that the fix does not increase false positives or
+alias recall drift.
