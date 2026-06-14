@@ -68,6 +68,30 @@ def test_makefile_has_search_engine_deploy_gate_targets() -> None:
     assert "search-engine-predeploy-check search-engine-postdeploy-check" in deploy_target
 
 
+def test_makefile_has_search_engine_baseline_snapshot_target() -> None:
+    makefile = Path("Makefile").read_text()
+    target = makefile.split("\nsearch-engine-baseline-snapshot:", 1)[1].split(
+        "\n\nquality-audit:",
+        1,
+    )[0]
+
+    assert "SEARCH_ENGINE_BASELINE_DIR ?= logs/search-engine-baseline" in makefile
+    assert "SEARCH_ENGINE_BASELINE_LABEL ?=" in makefile
+    assert "set -e" in target
+    assert "$(MAKE) mcp-runtime-config > \"$$out/runtime-config.txt\"" in target
+    assert (
+        "$(MAKE) MCP_BENCHMARK_FORMAT=markdown "
+        "MCP_BENCHMARK_EXTRA_ARGS= mcp-benchmark"
+    ) in target
+    assert "hot-benchmark.md" in target
+    assert (
+        "$(MAKE) MCP_BENCHMARK_FORMAT=markdown "
+        "MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache mcp-benchmark"
+    ) in target
+    assert "cold-benchmark.md" in target
+    assert "SEARCH_ENGINE_BASELINE_DIR=$$out" in target
+
+
 def test_makefile_has_ai_audit_triage_target() -> None:
     makefile = Path("Makefile").read_text()
     target = makefile.split("\nai-audit-triage:", 1)[1].split(

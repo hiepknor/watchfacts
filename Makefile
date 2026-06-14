@@ -12,6 +12,8 @@ SMOKE_QUERY ?= 5712g
 QUALITY_AUDIT_LIMIT ?= 5
 SEARCH_ENGINE_AUDIT_LIMIT ?= 5
 SEARCH_ENGINE_AUDIT_QUERIES ?= "rm07-01 rg snow" "rm07-01 rose gold" "rm07-01 white gold" "rm07-01 mother of pearl"
+SEARCH_ENGINE_BASELINE_DIR ?= logs/search-engine-baseline
+SEARCH_ENGINE_BASELINE_LABEL ?= $(shell date +%Y%m%d-%H%M%S)
 MCP_SMOKE_URL ?= http://127.0.0.1:8765/mcp
 MCP_SMOKE_TIMEOUT_SECONDS ?= 120
 MCP_BENCHMARK_FORMAT ?= markdown
@@ -37,7 +39,7 @@ export IMAGE
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy search-engine-predeploy-check search-engine-postdeploy-check search-engine-deploy-check quality-audit ai-audit-triage predeploy-quality-check
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy search-engine-predeploy-check search-engine-postdeploy-check search-engine-deploy-check search-engine-baseline-snapshot quality-audit ai-audit-triage predeploy-quality-check
 
 help:
 	@printf "%s\n" "watchfacts commands"
@@ -78,6 +80,7 @@ help:
 	@printf "%s\n" "  make search-engine-predeploy-check Run local search-engine deploy gate"
 	@printf "%s\n" "  make search-engine-postdeploy-check Run MCP smoke and benchmark after deploy"
 	@printf "%s\n" "  make search-engine-deploy-check Run both search-engine deploy gates"
+	@printf "%s\n" "  make search-engine-baseline-snapshot Capture runtime config plus hot/cold MCP benchmark artifacts"
 	@printf "%s\n" "  make quality-audit  Run the default production quality audit query set"
 	@printf "%s\n" "  make ai-audit-triage Summarize an audit artifact, optionally with OpenAI"
 	@printf "%s\n" "  make predeploy-quality-check Run local checks plus the default quality audit"
@@ -236,6 +239,16 @@ search-engine-postdeploy-check:
 	$(MAKE) mcp-benchmark
 
 search-engine-deploy-check: search-engine-predeploy-check search-engine-postdeploy-check
+
+search-engine-baseline-snapshot:
+	@set -e; \
+	out="$(SEARCH_ENGINE_BASELINE_DIR)/$(SEARCH_ENGINE_BASELINE_LABEL)"; \
+	mkdir -p "$$out"; \
+	$(MAKE) mcp-runtime-config > "$$out/runtime-config.txt"; \
+	$(MAKE) MCP_BENCHMARK_FORMAT=markdown MCP_BENCHMARK_EXTRA_ARGS= mcp-benchmark > "$$out/hot-benchmark.md"; \
+	$(MAKE) MCP_BENCHMARK_FORMAT=markdown MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache mcp-benchmark > "$$out/cold-benchmark.md"; \
+	printf "%s\n" "SEARCH_ENGINE_BASELINE_DIR=$$out"; \
+	ls -1 "$$out"
 
 quality-audit:
 	$(PYTHON) scripts/diagnostics/audit_quality.py --limit $(QUALITY_AUDIT_LIMIT)

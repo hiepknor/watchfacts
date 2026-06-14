@@ -1084,12 +1084,35 @@ repeatable evidence artifact before adding more search rules.
 
 Acceptance:
 
-- [ ] A server-side command sequence records runtime config, hot benchmark,
+- [x] A server-side command sequence records runtime config, hot benchmark,
   cold benchmark, alias recall, cache hit rate, and top-result snippets.
-- [ ] The artifact names and command outputs are documented in deploy notes or
+- [x] The artifact names and command outputs are documented in deploy notes or
   this plan.
-- [ ] The snapshot does not include secrets, WatchFacts cookies, browser state,
+- [x] The snapshot does not include secrets, WatchFacts cookies, browser state,
   full HTML, or unbounded raw listings.
+
+Baseline snapshot from 2026-06-15 production server:
+
+- Artifact directory: `logs/search-engine-baseline/20260615-phase7-task71`.
+- Files: `runtime-config.txt`, `hot-benchmark.md`, `cold-benchmark.md`.
+- Runtime: `search_retrieval_concurrency=2`,
+  `search_cache_ttl_seconds=1800`.
+- Hot benchmark: `13/13` passed, average `146ms`, median `97ms`, p95 `706ms`,
+  cache hits `13/13`.
+- Cold benchmark: `13/13` passed, average `11944ms`, median `10706ms`, p95
+  `22470ms`, cache misses `13/13`.
+- Alias recall remained equivalent in the benchmark alias groups; top-result
+  snippets are present in both benchmark artifacts.
+- Snapshot artifacts are limited to safe runtime config and benchmark markdown;
+  they do not include cookies, browser state, full HTML, or unbounded raw
+  listings.
+
+Implementation slice:
+
+- [x] Added `make search-engine-baseline-snapshot` to write
+  `runtime-config.txt`, `hot-benchmark.md`, and `cold-benchmark.md` under
+  `logs/search-engine-baseline/<label>/`.
+- [x] Added Makefile coverage for the snapshot target and artifact names.
 
 Suggested verification:
 
