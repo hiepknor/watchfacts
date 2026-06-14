@@ -8,6 +8,10 @@ As of 2026-06-15, commit `47bf74d` is pushed to `origin/master` and
 deployed to `watchfacts-mcp`. The Phase 7 search changes are active on the
 server with `SEARCH_CACHE_VERSION=search-v30`.
 
+Phase 8 implementation is complete locally and pending server deployment. The
+local branch carries `SEARCH_CACHE_VERSION=search-v31`; the server remains on
+`search-v30` until the next deploy.
+
 ## Date
 
 2026-06-13
@@ -1238,7 +1242,7 @@ make search-engine-postdeploy-check
 
 ## Phase 8: Context Evidence And Cold-Path Budgeting
 
-Status: in progress from Phase 7 postdeploy evidence.
+Status: complete locally and pending deploy.
 
 Goal: turn the narrow Phase 7 guardrails into a small, reusable evidence model
 only where production audit proves the need, while reducing cold-path latency
