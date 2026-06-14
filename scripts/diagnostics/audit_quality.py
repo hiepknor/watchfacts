@@ -20,7 +20,11 @@ from app.db import Database
 from app.fuzzy_diagnostics import score_fuzzy_match
 from app.issues import detect_suspicious_result
 from app.query_intent import build_query_plan, classify_query_intent
-from app.result_scoring import score_result
+from app.result_scoring import (
+    image_confidence_reason,
+    scope_confidence_reason,
+    score_result,
+)
 from app.search import SearchAuditEvent, WatchFactsSearchWorkflow, _search_cache_key
 from app.search_contracts import validate_search_diagnostics, validate_search_payload
 from app.search_result import SearchResult, stable_listing_id
@@ -41,10 +45,6 @@ DEFAULT_AUDIT_QUERIES = (
 DEFAULT_LIMIT = 5
 DEFAULT_SNIPPET_CHARS = 220
 ReportFormat = Literal["text", "json", "jsonl"]
-PRODUCT_REFERENCE_RE = re.compile(
-    r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
-    re.IGNORECASE,
-)
 SENSITIVE_CONTEXT_RE = re.compile(
     r"\b(?:cookie|authorization|bearer|api[_-]?key|token|password|secret)\b\s*[:=]\s*\S+",
     re.IGNORECASE,
@@ -645,25 +645,11 @@ def _final_row_event(query: str, row: AuditResultRow) -> dict[str, object]:
 
 
 def _scope_reason(result: SearchResult) -> str:
-    if result.scope_reason:
-        return result.scope_reason
-    raw_text = " ".join((result.raw_listing_text or "").split())
-    listing_text = " ".join(result.listing_text.split())
-    if not raw_text or raw_text == listing_text:
-        return "scope.full_listing"
-    if _looks_like_stock_list(raw_text):
-        return "scope.stock_list"
-    return "scope.scoped"
+    return scope_confidence_reason(result)
 
 
 def _image_reason(result: SearchResult, *, scope_reason: str) -> str:
-    if result.image_reason:
-        return result.image_reason
-    if result.image_url:
-        return "image.direct"
-    if scope_reason == "scope.stock_list":
-        return "image.omitted_bundle_ambiguous"
-    return "image.missing_source"
+    return image_confidence_reason(result, scope_reason=scope_reason)
 
 
 def _query_intent_from_final_result(query: str) -> str:
@@ -734,30 +720,6 @@ def _optional_int(value: object) -> int | None:
         return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
-
-
-def _looks_like_stock_list(value: str) -> bool:
-    references = {
-        token.casefold()
-        for token in PRODUCT_REFERENCE_RE.findall(value)
-        if _looks_like_product_reference(token)
-    }
-    return len(references) > 1
-
-
-def _looks_like_product_reference(token: str) -> bool:
-    normalized = token.casefold()
-    if normalized.isdigit() and len(normalized) == 4:
-        year = int(normalized)
-        if 1900 <= year <= 2099:
-            return False
-    if len(normalized) < 4 and "/" not in normalized:
-        return False
-    if any(currency in normalized for currency in ("hkd", "usd", "eur", "aed")):
-        return False
-    if re.fullmatch(r"\d+(?:\.\d+)?[km]", normalized):
-        return False
-    return True
 
 
 def _query_summary(

@@ -630,6 +630,17 @@ Acceptance:
 - [ ] Stock-list scoped results can rank below full listings when all else is equal.
 - [ ] Ranking never admits a listing that matcher rejected.
 
+Initial implementation slice:
+
+- [x] `ResultScore` exposes explicit deterministic ranking fields for alias
+  confidence, conflict penalty, scope confidence, and image confidence.
+- [x] Scope and image confidence are late tie-breakers after quality, date,
+  reference, descriptor, and price evidence.
+- [x] Stock-list scoped results rank below full-listing results when all prior
+  ranking features are tied.
+- [x] Audit scope/image reasoning now reuses the same deterministic helpers as
+  ranking.
+
 Verification:
 
 ```bash

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 import re
 
 from app.searching.issues import detect_suspicious_result
@@ -9,7 +10,7 @@ from app.searching.fuzzy_diagnostics import score_fuzzy_match
 from app.searching.matcher import explain_extraction
 from app.searching.matcher_aliases import canonicalize_descriptor_tokens_as_set
 from app.searching.matcher_normalization import normalize_text
-from app.searching.query_intent import classify_query_intent
+from app.searching.query_intent import build_query_plan, classify_query_intent
 from app.searching.search_result import SearchResult
 
 
@@ -59,29 +60,71 @@ PRICE_REASON_CODES = {
     "price.missing_visible",
     "price.ambiguous_neighbor",
 }
+ALIAS_CONFIDENCE_SCORES = {
+    "reference": 3,
+    "explicit": 2,
+    "collection": 1,
+    "nickname": 1,
+}
+SCOPE_CONFIDENCE_SCORES = {
+    "scope.full_listing": 2,
+    "scope.scoped": 1,
+    "scope.stock_list": 0,
+}
+IMAGE_CONFIDENCE_SCORES = {
+    "image.direct": 2,
+    "image.inherited_parent_first_item": 1,
+    "image.inherited_parent_reference": 1,
+    "image.omitted_bundle_ambiguous": 0,
+    "image.missing_source": 0,
+}
+STOCK_LIST_MARKER_RE = re.compile(
+    r"\b(?:hk\s+)?stock\s+list\b|\bstocklist\b",
+    re.IGNORECASE,
+)
+SCOPE_REFERENCE_RE = re.compile(
+    r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:[./-][A-Za-z0-9]+)*\b",
+    re.IGNORECASE,
+)
+SCOPE_CONDITION_DATE_RE = re.compile(
+    r"(?:n?\d{1,2}|\d{1,2}n)[/-]\d{2,4}y?"
+    r"|\d{2,4}[/-](?:n?\d{1,2}|\d{1,2}n)y?"
+    r"|\d{4}\.\d{1,2}y?",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
 class ResultScore:
     quality_group: int
     quality_severity: int
+    conflict_penalty_score: int
     posted_date_group: int
     posted_date_timestamp: float
+    alias_confidence_score: int
     exact_reference_score: int
     descriptor_score: int
     price_evidence_score: int
+    scope_confidence_score: int
+    image_confidence_score: int
     original_rank: int
     reasons: tuple[str, ...]
 
-    def sort_key(self) -> tuple[int, int, int, float, int, int, int, int]:
+    def sort_key(
+        self,
+    ) -> tuple[int, int, int, int, float, int, int, int, int, int, int, int]:
         return (
             self.quality_group,
+            self.conflict_penalty_score,
             self.quality_severity,
             self.posted_date_group,
             -self.posted_date_timestamp,
+            -self.alias_confidence_score,
             -self.exact_reference_score,
             -self.descriptor_score,
             -self.price_evidence_score,
+            -self.scope_confidence_score,
+            -self.image_confidence_score,
             self.original_rank,
         )
 
@@ -116,30 +159,47 @@ def score_result(
     quality_group, quality_severity, quality_reasons = _quality_score(result)
     guardrail_group, guardrail_reasons = _guardrail_score(result, query=query)
     quality_group = max(quality_group, guardrail_group)
+    conflict_penalty_score, conflict_reasons = _conflict_penalty_score(
+        guardrail_reasons
+    )
     posted_date_group, posted_date_timestamp, date_reason = _posted_date_score(
         result.posted_date
     )
+    alias_confidence_score, alias_reasons = _alias_confidence_score(query)
     (
         exact_reference_score,
         descriptor_score,
         relevance_reasons,
     ) = _relevance_score(result, query=query)
     price_evidence_score, price_reasons = _price_evidence_score(result)
+    scope_confidence_score, scope_reasons = _scope_confidence_score(result)
+    image_confidence_score, image_reasons = _image_confidence_score(
+        result,
+        scope_reason=scope_reasons[0],
+    )
     reasons = (
         *quality_reasons,
         *guardrail_reasons,
+        *conflict_reasons,
         date_reason,
+        *alias_reasons,
         *relevance_reasons,
         *price_reasons,
+        *scope_reasons,
+        *image_reasons,
     )
     return ResultScore(
         quality_group=quality_group,
         quality_severity=quality_severity,
+        conflict_penalty_score=conflict_penalty_score,
         posted_date_group=posted_date_group,
         posted_date_timestamp=posted_date_timestamp,
+        alias_confidence_score=alias_confidence_score,
         exact_reference_score=exact_reference_score,
         descriptor_score=descriptor_score,
         price_evidence_score=price_evidence_score,
+        scope_confidence_score=scope_confidence_score,
+        image_confidence_score=image_confidence_score,
         original_rank=original_rank,
         reasons=tuple(reason for reason in reasons if reason),
     )
@@ -182,6 +242,40 @@ def _guardrail_score(
     ):
         return 1, ("guardrail.descriptor_conflict",)
     return 0, ()
+
+
+def _conflict_penalty_score(
+    guardrail_reasons: tuple[str, ...],
+) -> tuple[int, tuple[str, ...]]:
+    if "guardrail.descriptor_conflict" in guardrail_reasons:
+        return 1, ("conflict.descriptor",)
+    return 0, ()
+
+
+def _alias_confidence_score(query: str | None) -> tuple[int, tuple[str, ...]]:
+    if not query:
+        return 0, ()
+
+    plan = _cached_query_plan(query)
+    best_confidence = ""
+    best_score = 0
+    for candidate in plan.brand_candidates:
+        confidence = candidate.get("confidence")
+        if not isinstance(confidence, str):
+            continue
+        score = ALIAS_CONFIDENCE_SCORES.get(confidence, 0)
+        if score > best_score:
+            best_confidence = confidence
+            best_score = score
+
+    if best_score == 0:
+        return 0, ()
+    return best_score, (f"alias.{best_confidence}",)
+
+
+@lru_cache(maxsize=256)
+def _cached_query_plan(query: str):
+    return build_query_plan(query)
 
 
 def _missing_short_model_suffix_phrase(
@@ -272,6 +366,79 @@ def price_evidence_reason(result: SearchResult) -> str:
         if PRICE_EVIDENCE_RE.search(raw_scan_text):
             return "price.ambiguous_neighbor"
     return "price.missing_visible"
+
+
+def _scope_confidence_score(result: SearchResult) -> tuple[int, tuple[str, ...]]:
+    reason = scope_confidence_reason(result)
+    return SCOPE_CONFIDENCE_SCORES[reason], (reason,)
+
+
+def scope_confidence_reason(result: SearchResult) -> str:
+    if result.scope_reason in SCOPE_CONFIDENCE_SCORES:
+        return result.scope_reason
+    raw_text = " ".join((result.raw_listing_text or "").split())
+    listing_text = " ".join(result.listing_text.split())
+    if not raw_text or raw_text == listing_text:
+        return "scope.full_listing"
+    if STOCK_LIST_MARKER_RE.search(raw_text) or _looks_like_unlabeled_stock_list(
+        raw_text
+    ):
+        return "scope.stock_list"
+    return "scope.scoped"
+
+
+def _looks_like_unlabeled_stock_list(value: str) -> bool:
+    references = {
+        token.casefold()
+        for token in SCOPE_REFERENCE_RE.findall(value)
+        if _looks_like_scope_product_reference(token)
+    }
+    return len(references) > 1
+
+
+def _looks_like_scope_product_reference(value: str) -> bool:
+    normalized = value.casefold().strip(":,.;")
+    if not normalized or not any(character.isdigit() for character in normalized):
+        return False
+    if normalized.isdigit():
+        return False
+    if SCOPE_CONDITION_DATE_RE.fullmatch(normalized):
+        return False
+    if re.fullmatch(r"\d+(?:\.\d+)?[km]", normalized):
+        return False
+    if any(
+        currency in normalized
+        for currency in ("hkd", "usd", "usdt", "eur", "aed", "chf")
+    ):
+        return False
+    if len(normalized) < 4 and "/" not in normalized:
+        return False
+    return True
+
+
+def _image_confidence_score(
+    result: SearchResult,
+    *,
+    scope_reason: str,
+) -> tuple[int, tuple[str, ...]]:
+    reason = image_confidence_reason(result, scope_reason=scope_reason)
+    return IMAGE_CONFIDENCE_SCORES[reason], (reason,)
+
+
+def image_confidence_reason(
+    result: SearchResult,
+    *,
+    scope_reason: str | None = None,
+) -> str:
+    if result.image_reason in IMAGE_CONFIDENCE_SCORES:
+        return result.image_reason
+    if result.image_url:
+        return "image.direct"
+    if scope_reason is None:
+        scope_reason = scope_confidence_reason(result)
+    if scope_reason == "scope.stock_list":
+        return "image.omitted_bundle_ambiguous"
+    return "image.missing_source"
 
 
 def parse_posted_date(value: str | None) -> datetime | None:

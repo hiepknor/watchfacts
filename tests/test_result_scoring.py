@@ -227,6 +227,94 @@ def test_rank_results_by_quality_prefers_visible_price_after_quality_date_and_re
     assert ranked == [with_price, without_price]
 
 
+def test_rank_results_by_quality_prefers_full_listing_scope_when_other_features_tie() -> None:
+    stock_list = SearchResult(
+        "5712G new 2024 115k",
+        posted_date="May 17, 2026",
+        raw_listing_text="HK STOCK LIST 116505 284k 5712G new 2024 115k",
+        scope_reason="scope.stock_list",
+        image_reason="image.omitted_bundle_ambiguous",
+    )
+    full_listing = SearchResult(
+        "5712G new 2024 115k",
+        posted_date="May 17, 2026",
+        scope_reason="scope.full_listing",
+        image_reason="image.missing_source",
+    )
+
+    stock_score = score_result(stock_list, original_rank=0, query="5712g")
+    full_score = score_result(full_listing, original_rank=1, query="5712g")
+    ranked = rank_results_by_quality([stock_list, full_listing], query="5712g")
+
+    assert stock_score.scope_confidence_score < full_score.scope_confidence_score
+    assert "scope.stock_list" in stock_score.reasons
+    assert "scope.full_listing" in full_score.reasons
+    assert ranked == [full_listing, stock_list]
+
+
+def test_score_result_marks_unlabeled_multi_reference_parent_as_stock_list_scope() -> None:
+    result = SearchResult(
+        "5726/1A 2021 full set 115k",
+        raw_listing_text=(
+            "PP 7130G-016 Paper of 2022 USD31000 "
+            "PP7010G-013 2025 full set US$63,000 "
+            "5726/1A 2021 full set 115k"
+        ),
+    )
+
+    score = score_result(result, original_rank=0, query="5726/1a")
+
+    assert score.scope_confidence_score == 0
+    assert "scope.stock_list" in score.reasons
+
+
+def test_rank_results_by_quality_prefers_direct_image_when_other_features_tie() -> None:
+    missing_image = SearchResult(
+        "5712G new 2024 115k",
+        posted_date="May 17, 2026",
+        image_reason="image.missing_source",
+    )
+    direct_image = SearchResult(
+        "5712G new 2024 115k",
+        posted_date="May 17, 2026",
+        image_url="https://watchfacts.example/5712g.jpg",
+        image_reason="image.direct",
+    )
+
+    missing_score = score_result(missing_image, original_rank=0, query="5712g")
+    direct_score = score_result(direct_image, original_rank=1, query="5712g")
+    ranked = rank_results_by_quality([missing_image, direct_image], query="5712g")
+
+    assert missing_score.image_confidence_score < direct_score.image_confidence_score
+    assert "image.missing_source" in missing_score.reasons
+    assert "image.direct" in direct_score.reasons
+    assert ranked == [direct_image, missing_image]
+
+
+def test_score_result_exposes_alias_feature() -> None:
+    result = SearchResult(
+        "Patek 5712G new 2024 115k",
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="patek 5712g")
+
+    assert score.alias_confidence_score > 0
+    assert "alias.explicit" in score.reasons
+
+
+def test_score_result_exposes_conflict_penalty_feature() -> None:
+    result = SearchResult(
+        "Patek 5205R black dial 2026 $428000",
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="5205r green")
+
+    assert score.conflict_penalty_score == 1
+    assert "conflict.descriptor" in score.reasons
+
+
 def test_rank_results_by_quality_demotes_short_model_suffix_phrase_miss() -> None:
     broad_stock_list = SearchResult(
         "1,163,000 145.032 Zeitwerk, Used Full set | HKD 821,000 Lange Zeitwerk",
