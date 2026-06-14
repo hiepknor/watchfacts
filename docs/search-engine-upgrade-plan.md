@@ -2,15 +2,12 @@
 
 ## Status
 
-MCP deployed and production-validated through Phase 7.
+Bot and MCP deployed and production-validated through Phase 8.
 
-As of 2026-06-15, commit `47bf74d` is pushed to `origin/master` and
-deployed to `watchfacts-mcp`. The Phase 7 search changes are active on the
-server with `SEARCH_CACHE_VERSION=search-v30`.
-
-Phase 8 implementation is complete locally and pending server deployment. The
-local branch carries `SEARCH_CACHE_VERSION=search-v31`; the server remains on
-`search-v30` until the next deploy.
+As of 2026-06-15, commit `6c8a894` is pushed to `origin/master` and
+deployed to the production `watchfacts-bot` and `watchfacts-mcp` services. The
+Phase 8 search changes are active on the server with
+`SEARCH_CACHE_VERSION=search-v31`.
 
 ## Date
 
@@ -83,37 +80,44 @@ reference grammar.
 
 Latest validated deployment:
 
-- Commit: `47bf74d`
-- Service: `watchfacts-mcp`
+- Commit: `6c8a894`
+- Services: `watchfacts-bot`, `watchfacts-mcp`
 - Date: 2026-06-15
+- Runtime cache version: `search-v31`
 - Worktree state after deploy: clean and synced with `origin/master`
 
-Phase 7 predeploy gate:
+Phase 8 predeploy gate:
 
-- Server `make deploy-mcp` passed.
-- Container pytest passed with `690 passed`.
+- Local `make search-engine-predeploy-check` passed.
+- Local pytest passed with `700 passed, 2 skipped`.
 - `python -m compileall app scripts` passed.
-- Default production quality audit passed during deploy.
+- Focused audit passed for `rm07-01 rg snow`, `rm07-01 rose gold`,
+  `rm07-01 white gold`, and `rm07-01 mother of pearl`.
 
 Deploy and postdeploy gate:
 
-- `make deploy-mcp` rebuilt and recreated `watchfacts-mcp`; the service became
-  healthy.
-- `make search-engine-postdeploy-check` passed.
-- MCP smoke passed `4/4`.
-- Default MCP benchmark passed `13/13` with hot-cache average `154ms`, median
-  `99ms`, p95 `739ms`, max `739ms`, and cache hits `13/13`.
+- Server `make deploy` rebuilt and recreated both production services.
+- Server container pytest passed with `702 passed`.
+- Server `python -m compileall app scripts` passed.
+- Production quality audit passed during deploy.
+- `watchfacts-bot` and `watchfacts-mcp` became healthy.
+- MCP postdeploy prewarm passed `14/14` on the smoke set with cache hits
+  `14/14`, average `147ms`, min `90ms`, and max `727ms`.
+- Default MCP benchmark/prewarm passed `26/26` after deploy.
+- Server `make mcp-smoke` passed `1/1` with the authorized HTTPX WatchFacts
+  smoke query.
 - Alias recall delta was zero for the canonical groups covering `rm07-01 mop`,
   `rm07-01 rg`, `rm07-01 rg snow`, and `rm07-01 wg`.
 
 Remaining performance observation:
 
 - Hot-cache search is within target for the representative benchmark set.
-- Cold expanded retrieval remains the next speed bottleneck: observed cold
-  first-pass times were roughly `7.7s` for `126500ln white`, `28s` for
-  `daytona panda`, `29.9s` for `5711 blue`, and `13.5s` for `15500st blue`.
-  These timings did not fail the quality gate, but they should drive the next
-  optimization phase.
+- Cold expanded retrieval remains the next speed bottleneck. The Phase 8 deploy
+  observed cold first-pass times of roughly `15.8s` for `rm07-01 rg`, `11.7s`
+  for `rm07-01 wg`, `10.5s` for `rm07-01 mop`, `11.0s` for
+  `rm07-01 rg snow`, `22.2s` for `daytona panda`, `19.2s` for `5711 blue`,
+  and `8.6s` for `15500st blue`. These timings did not fail the quality gate,
+  but they should drive the next retrieval-budget optimization phase.
 
 ## Design Principles
 
@@ -1242,7 +1246,7 @@ make search-engine-postdeploy-check
 
 ## Phase 8: Context Evidence And Cold-Path Budgeting
 
-Status: complete locally and pending deploy.
+Status: complete and deployed on 2026-06-15 at commit `6c8a894`.
 
 Goal: turn the narrow Phase 7 guardrails into a small, reusable evidence model
 only where production audit proves the need, while reducing cold-path latency
@@ -1336,8 +1340,8 @@ Implementation notes:
 - Audit text and JSONL final-result events include `segment_reason_codes` in the
   reason list, while raw previews still use the existing redaction path.
 - Bumped `SEARCH_CACHE_VERSION` from `search-v30` to `search-v31` because cached
-  result payload metadata changed. The deployed server status remains
-  `search-v30` until the next server deployment.
+  result payload metadata changed. The deployed server now reports
+  `search-v31`.
 
 Verification:
 
@@ -1513,8 +1517,9 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Phase 7 is implemented, pushed, and deployed at `47bf74d`. The next useful work
-is Phase 8 Task 8.1: extract the Phase 7 context checks into a minimal
-descriptor evidence model without changing behavior. Do not start another broad
+Phase 8 is implemented, pushed, and deployed at `6c8a894`. The next useful work
+is a narrow retrieval-budget optimization phase: reduce cold expanded-search
+cost for the high-latency representatives while proving no alias recall delta,
+result-count drift, or top-result quality regression. Do not start another broad
 matcher/parser/ranking expansion until fresh audit data shows a real quality or
 latency gap and the benchmark can prove no false-positive or recall regression.
