@@ -18,15 +18,22 @@ if str(PROJECT_ROOT) not in sys.path:
 from app.search_contracts import validate_search_payload
 
 
+DEFAULT_ALIAS_TOTAL_DELTA_RATIO = 0.10
+
 DEFAULT_BENCHMARK_QUERIES = (
-    "5205r green",
-    "126500ln white 2026",
-    "Panerai Luminor",
-    "Lange 1",
-    "Reverso tribute",
-    "Royal Oak Offshore",
-    "Omega Speedmaster",
-    "Black Bay chrono",
+    "rm07-01 rg",
+    "rm07-01 rosegold",
+    "rm07-01 rose gold",
+    "rm07-01 wg",
+    "rm07-01 white gold",
+    "rm07-01 mop",
+    "rm07-01 mother of pearl",
+    "rm07-01 rg snow",
+    "rm07-01 rose gold snow",
+    "126500ln white",
+    "daytona panda",
+    "5711 blue",
+    "15500st blue",
 )
 
 
@@ -40,6 +47,17 @@ class BenchmarkRow:
     total_count: int | None = None
     has_more: bool | None = None
     query_intent: str | None = None
+    canonical_query: str | None = None
+    brand_candidates: tuple[str, ...] = ()
+    references: tuple[str, ...] = ()
+    collections: tuple[str, ...] = ()
+    nicknames: tuple[str, ...] = ()
+    required_descriptors: tuple[str, ...] = ()
+    optional_descriptors: tuple[str, ...] = ()
+    conflict_descriptors: tuple[str, ...] = ()
+    retrieval_query_count: int | None = None
+    retrieval_queries: tuple[str, ...] = ()
+    retrieval_reason_codes: tuple[str, ...] = ()
     cache_hit: bool | None = None
     server_filtered: bool | None = None
     parsed_count: int | None = None
@@ -65,6 +83,19 @@ class BenchmarkRow:
                 self.source_missing_count,
             )
         ) + len(self.validation_errors)
+
+
+@dataclass(frozen=True)
+class AliasRecallCheck:
+    canonical_query: str
+    run_number: int
+    ok: bool
+    min_total: int
+    max_total: int
+    delta: int
+    delta_ratio: float
+    max_delta_ratio: float
+    query_totals: tuple[str, ...]
 
 
 async def run_benchmark(
@@ -182,6 +213,7 @@ def _row_from_payload(
     run_number: int = 1,
 ) -> BenchmarkRow:
     diagnostics = _dict_value(payload.get("search_diagnostics"))
+    query_plan = _dict_value(diagnostics.get("query_plan"))
     results = payload.get("results") if isinstance(payload.get("results"), list) else []
     top_results = tuple(
         _snippet(str(result.get("listing_text") or ""))
@@ -208,6 +240,17 @@ def _row_from_payload(
         total_count=_optional_int(payload.get("total_count")),
         has_more=payload.get("has_more") if isinstance(payload.get("has_more"), bool) else None,
         query_intent=_optional_str(diagnostics.get("query_intent")),
+        canonical_query=_optional_str(query_plan.get("canonical_query")),
+        brand_candidates=_brand_candidate_values(query_plan.get("brand_candidates")),
+        references=_reference_values(query_plan.get("references")),
+        collections=_string_tuple(query_plan.get("collections")),
+        nicknames=_string_tuple(query_plan.get("nicknames")),
+        required_descriptors=_string_tuple(query_plan.get("required_descriptors")),
+        optional_descriptors=_string_tuple(query_plan.get("optional_descriptors")),
+        conflict_descriptors=_string_tuple(query_plan.get("conflict_descriptors")),
+        retrieval_query_count=_optional_int(diagnostics.get("retrieval_query_count")),
+        retrieval_queries=_string_tuple(diagnostics.get("retrieval_queries")),
+        retrieval_reason_codes=_string_tuple(diagnostics.get("retrieval_reason_codes")),
         cache_hit=diagnostics.get("cache_hit")
         if isinstance(diagnostics.get("cache_hit"), bool)
         else None,
@@ -228,8 +271,18 @@ def _row_from_payload(
     )
 
 
-def render_markdown(rows: list[BenchmarkRow]) -> str:
+def render_markdown(
+    rows: list[BenchmarkRow],
+    *,
+    alias_checks: tuple[AliasRecallCheck, ...] | None = None,
+    require_alias_recall: bool = False,
+) -> str:
     summary = summarize_rows(rows)
+    checks = (
+        evaluate_alias_recall(rows)
+        if alias_checks is None
+        else alias_checks
+    )
     lines = [
         "# MCP Query Benchmark",
         "",
@@ -243,8 +296,15 @@ def render_markdown(rows: list[BenchmarkRow]) -> str:
             f"cache misses: {summary.get('cache_misses', 0)}"
         ),
         "",
-        "| Query | Run | OK | ms | total | intent | cache | warnings | stages | top result |",
-        "| --- | ---: | --- | ---: | ---: | --- | --- | ---: | --- | --- |",
+        (
+            "| Query | Run | OK | ms | total | canonical | intent | brand | ref | "
+            "collection | nickname | desc | retrieval | reasons | cache | "
+            "warnings | stages | top result |"
+        ),
+        (
+            "| --- | ---: | --- | ---: | ---: | --- | --- | --- | --- | --- | "
+            "--- | --- | --- | --- | --- | ---: | --- | --- |"
+        ),
     ]
     for row in rows:
         top = row.top_results[0] if row.top_results else row.error or ""
@@ -257,7 +317,15 @@ def render_markdown(rows: list[BenchmarkRow]) -> str:
                     "yes" if row.ok else "no",
                     str(row.elapsed_ms),
                     str(row.total_count if row.total_count is not None else "-"),
+                    _md(row.canonical_query or "-"),
                     _md(row.query_intent or "-"),
+                    _md(_csv(row.brand_candidates)),
+                    _md(_csv(row.references)),
+                    _md(_csv(row.collections)),
+                    _md(_csv(row.nicknames)),
+                    _md(_descriptor_summary(row)),
+                    _md(_retrieval_summary(row)),
+                    _md(_csv(row.retrieval_reason_codes)),
                     _md(_bool_label(row.cache_hit)),
                     str(row.warning_count),
                     _md(_stage_timing_summary(row.stage_timings_ms)),
@@ -266,11 +334,27 @@ def render_markdown(rows: list[BenchmarkRow]) -> str:
             )
             + " |"
         )
+    lines.extend(
+        _alias_recall_markdown_lines(
+            checks,
+            require_alias_recall=require_alias_recall,
+        )
+    )
     return "\n".join(lines)
 
 
-def render_text(rows: list[BenchmarkRow]) -> str:
+def render_text(
+    rows: list[BenchmarkRow],
+    *,
+    alias_checks: tuple[AliasRecallCheck, ...] | None = None,
+    require_alias_recall: bool = False,
+) -> str:
     lines: list[str] = []
+    checks = (
+        evaluate_alias_recall(rows)
+        if alias_checks is None
+        else alias_checks
+    )
     for row in rows:
         details = [
             f"query={row.query!r}",
@@ -280,6 +364,15 @@ def render_text(rows: list[BenchmarkRow]) -> str:
             f"total_count={row.total_count}",
             f"result_count={row.result_count}",
             f"intent={row.query_intent}",
+            f"canonical={row.canonical_query!r}",
+            f"brands={_csv(row.brand_candidates)}",
+            f"collections={_csv(row.collections)}",
+            f"nicknames={_csv(row.nicknames)}",
+            f"refs={_csv(row.references)}",
+            f"descriptors={_descriptor_summary(row)}",
+            f"retrieval_count={row.retrieval_query_count}",
+            f"retrieval_queries={_quoted_csv(row.retrieval_queries)}",
+            f"retrieval_reasons={_csv(row.retrieval_reason_codes)}",
             f"cache_hit={row.cache_hit}",
             f"warnings={row.warning_count}",
         ]
@@ -288,6 +381,12 @@ def render_text(rows: list[BenchmarkRow]) -> str:
         if row.error_type:
             details.append(f"error_type={row.error_type}")
         lines.append("MCP_BENCH " + " ".join(details))
+    lines.extend(
+        _alias_recall_text_lines(
+            checks,
+            require_alias_recall=require_alias_recall,
+        )
+    )
     summary = summarize_rows(rows)
     lines.append(
         "SUMMARY "
@@ -298,6 +397,55 @@ def render_text(rows: list[BenchmarkRow]) -> str:
 
 def render_jsonl(rows: list[BenchmarkRow]) -> str:
     return "\n".join(json.dumps(asdict(row), ensure_ascii=False) for row in rows)
+
+
+def evaluate_alias_recall(
+    rows: list[BenchmarkRow],
+    *,
+    max_delta_ratio: float = DEFAULT_ALIAS_TOTAL_DELTA_RATIO,
+) -> tuple[AliasRecallCheck, ...]:
+    groups: dict[tuple[str, int], dict[str, int]] = {}
+    for row in rows:
+        if not row.ok or row.total_count is None or not row.canonical_query:
+            continue
+        key = (row.canonical_query, row.run_number)
+        groups.setdefault(key, {})[row.query] = row.total_count
+
+    checks: list[AliasRecallCheck] = []
+    for (canonical_query, run_number), query_totals in sorted(groups.items()):
+        if len(query_totals) < 2:
+            continue
+        totals = list(query_totals.values())
+        min_total = min(totals)
+        max_total = max(totals)
+        delta = max_total - min_total
+        raw_delta_ratio = delta / max(max_total, 1)
+        checks.append(
+            AliasRecallCheck(
+                canonical_query=canonical_query,
+                run_number=run_number,
+                ok=raw_delta_ratio <= max_delta_ratio,
+                min_total=min_total,
+                max_total=max_total,
+                delta=delta,
+                delta_ratio=round(raw_delta_ratio, 3),
+                max_delta_ratio=max_delta_ratio,
+                query_totals=tuple(
+                    f"{query}:{total}" for query, total in sorted(query_totals.items())
+                ),
+            )
+        )
+    return tuple(checks)
+
+
+def alias_recall_passed(
+    checks: tuple[AliasRecallCheck, ...],
+    *,
+    require_evaluation: bool,
+) -> bool:
+    if require_evaluation and not checks:
+        return False
+    return all(check.ok for check in checks)
 
 
 def summarize_rows(rows: list[BenchmarkRow]) -> dict[str, int]:
@@ -412,6 +560,131 @@ def _stage_timing_summary(stage_timings_ms: dict[str, int]) -> str:
     return ",".join(parts)
 
 
+def _brand_candidate_values(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    candidates: list[str] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        brand = _optional_str(item.get("brand"))
+        if brand is None:
+            continue
+        confidence = _optional_str(item.get("confidence"))
+        candidates.append(f"{brand}:{confidence}" if confidence else brand)
+    return tuple(candidates)
+
+
+def _reference_values(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    references: list[str] = []
+    for item in value:
+        if isinstance(item, list):
+            reference = "".join(str(part) for part in item if _non_empty_str(part))
+        else:
+            reference = str(item) if _non_empty_str(item) else ""
+        if reference:
+            references.append(reference)
+    return tuple(references)
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(item) for item in value if _non_empty_str(item))
+
+
+def _csv(values: tuple[str, ...]) -> str:
+    return ",".join(values) if values else "-"
+
+
+def _quoted_csv(values: tuple[str, ...]) -> str:
+    return ",".join(repr(value) for value in values) if values else "-"
+
+
+def _retrieval_summary(row: BenchmarkRow) -> str:
+    count = row.retrieval_query_count
+    if count is None and not row.retrieval_queries:
+        return "-"
+    return f"{count if count is not None else '-'}:{_csv(row.retrieval_queries)}"
+
+
+def _alias_recall_text_lines(
+    checks: tuple[AliasRecallCheck, ...],
+    *,
+    require_alias_recall: bool,
+) -> list[str]:
+    if not checks:
+        if require_alias_recall:
+            return ["ALIAS_RECALL ok=false reason=no_canonical_alias_groups"]
+        return []
+    return [
+        (
+            "ALIAS_RECALL "
+            f"canonical={check.canonical_query!r} "
+            f"run={check.run_number} "
+            f"ok={str(check.ok).lower()} "
+            f"min_total={check.min_total} "
+            f"max_total={check.max_total} "
+            f"delta={check.delta} "
+            f"delta_ratio={check.delta_ratio:.3f} "
+            f"max_delta_ratio={check.max_delta_ratio:.3f} "
+            f"queries={_quoted_csv(check.query_totals)}"
+        )
+        for check in checks
+    ]
+
+
+def _alias_recall_markdown_lines(
+    checks: tuple[AliasRecallCheck, ...],
+    *,
+    require_alias_recall: bool,
+) -> list[str]:
+    if not checks and not require_alias_recall:
+        return []
+    lines = [
+        "",
+        "## Alias Recall",
+        "",
+        "| Canonical | Run | OK | min | max | delta | ratio | threshold | queries |",
+        "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    if not checks:
+        lines.append("| - | - | no | - | - | - | - | - | no canonical alias groups |")
+        return lines
+    for check in checks:
+        lines.append(
+            "| "
+            + " | ".join(
+                (
+                    _md(check.canonical_query),
+                    str(check.run_number),
+                    "yes" if check.ok else "no",
+                    str(check.min_total),
+                    str(check.max_total),
+                    str(check.delta),
+                    f"{check.delta_ratio:.3f}",
+                    f"{check.max_delta_ratio:.3f}",
+                    _md(_csv(check.query_totals)),
+                )
+            )
+            + " |"
+        )
+    return lines
+
+
+def _descriptor_summary(row: BenchmarkRow) -> str:
+    parts: list[str] = []
+    if row.required_descriptors:
+        parts.append(f"required:{_csv(row.required_descriptors)}")
+    if row.optional_descriptors:
+        parts.append(f"optional:{_csv(row.optional_descriptors)}")
+    if row.conflict_descriptors:
+        parts.append(f"conflict:{_csv(row.conflict_descriptors)}")
+    return ";".join(parts) if parts else "-"
+
+
 def _non_empty_str(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
@@ -473,6 +746,22 @@ def main() -> int:
     )
     parser.add_argument("--include-similar", action="store_true")
     parser.add_argument("--allow-empty", action="store_true")
+    parser.add_argument(
+        "--alias-total-delta-ratio",
+        type=float,
+        default=DEFAULT_ALIAS_TOTAL_DELTA_RATIO,
+        help="Maximum allowed total_count delta ratio across rows with the same canonical query.",
+    )
+    parser.add_argument(
+        "--require-alias-recall",
+        action="store_true",
+        help="Fail if no canonical alias groups can be evaluated.",
+    )
+    parser.add_argument(
+        "--skip-alias-recall-check",
+        action="store_true",
+        help="Do not fail the benchmark on alias recall comparison.",
+    )
     args = parser.parse_args()
     if args.limit <= 0:
         parser.error("--limit must be positive")
@@ -480,11 +769,14 @@ def main() -> int:
         parser.error("--timeout-seconds must be positive")
     if args.repeat <= 0:
         parser.error("--repeat must be positive")
+    if args.alias_total_delta_ratio < 0:
+        parser.error("--alias-total-delta-ratio must be non-negative")
 
     queries = list(args.queries or [])
     if args.query_file:
         queries.extend(_load_query_file(args.query_file))
-    if not queries:
+    using_default_queries = not queries
+    if using_default_queries:
         queries = list(DEFAULT_BENCHMARK_QUERIES)
 
     rows = asyncio.run(
@@ -498,13 +790,42 @@ def main() -> int:
             repeat=args.repeat,
         )
     )
+    alias_checks = evaluate_alias_recall(
+        rows,
+        max_delta_ratio=args.alias_total_delta_ratio,
+    )
+    require_alias_recall = (
+        False
+        if args.skip_alias_recall_check
+        else args.require_alias_recall or using_default_queries
+    )
     if args.format == "jsonl":
         print(render_jsonl(rows))
     elif args.format == "markdown":
-        print(render_markdown(rows))
+        print(
+            render_markdown(
+                rows,
+                alias_checks=alias_checks,
+                require_alias_recall=require_alias_recall,
+            )
+        )
     else:
-        print(render_text(rows))
-    return 0 if all(row.ok for row in rows) else 1
+        print(
+            render_text(
+                rows,
+                alias_checks=alias_checks,
+                require_alias_recall=require_alias_recall,
+            )
+        )
+    alias_ok = (
+        True
+        if args.skip_alias_recall_check
+        else alias_recall_passed(
+            alias_checks,
+            require_evaluation=require_alias_recall,
+        )
+    )
+    return 0 if all(row.ok for row in rows) and alias_ok else 1
 
 
 if __name__ == "__main__":

@@ -402,18 +402,28 @@ make mcp-prewarm
 MCP_PREWARM_FORMAT=jsonl make mcp-prewarm > mcp-prewarm.jsonl
 docker compose -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml exec -T watchfacts-mcp \
   python scripts/diagnostics/benchmark_mcp_queries.py \
-  --query "Panerai Luminor" --query "Lange 1" --format markdown --allow-empty
+  --query "rm07-01 rg" --query "rm07-01 rose gold" \
+  --query "126500ln white" --query "daytona panda" \
+  --format markdown --allow-empty
 docker compose -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml exec -T watchfacts-mcp \
   python scripts/diagnostics/benchmark_mcp_queries.py \
-  --query "5205r green" --repeat 2 --format markdown --allow-empty
+  --query "rm07-01 rg snow" --query "rm07-01 rose gold snow" \
+  --repeat 2 --format markdown --allow-empty
 ```
 
 Use the benchmark for pass/fail, latency, result counts, intent/cache
-diagnostics, stage timing summaries, and top-result snippets. Use `--repeat 2`
-for a quick cold/warm cache comparison; run 1 should show the uncached fetch path
-when the search cache is stale, while run 2 should normally show the cache-hit
-path. Use `audit_quality.py` when a query needs quality-group, scoring, image
-attribution, or raw-to-final funnel evidence.
+diagnostics, stage timing summaries, top-result snippets, canonical query,
+brand/reference/collection/nickname recognition, descriptor metadata, and
+retrieval expansion reason codes. The default benchmark set covers `rm07-01`
+alias pairs plus representative Rolex, Patek Philippe, and Audemars Piguet
+multi-brand queries. For default benchmark runs, the command also requires at
+least one canonical alias group and fails when alias-equivalent `total_count`
+values differ by more than 10%; tune this with `--alias-total-delta-ratio` or
+use `--skip-alias-recall-check` for exploratory custom runs. Use `--repeat 2`
+for a quick cold/warm cache comparison; run 1 should show the uncached fetch
+path when the search cache is stale, while run 2 should normally show the
+cache-hit path. Use `audit_quality.py` when a query needs quality-group,
+scoring, image attribution, or raw-to-final funnel evidence.
 
 Write machine-readable output for handoff or later fixture work:
 

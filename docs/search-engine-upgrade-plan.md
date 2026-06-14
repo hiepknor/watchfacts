@@ -732,11 +732,26 @@ daytona panda
 
 Acceptance:
 
-- [ ] Benchmark reports total count, top result, cache hit, and stage timings.
-- [ ] Alias-equivalent queries have comparable recall after canonicalization.
-- [ ] Brand/model/nickname queries report recognized brand, collection,
+- [x] Benchmark reports total count, top result, cache hit, and stage timings.
+- [x] Alias-equivalent queries have comparable recall after canonicalization,
+  enforced by a benchmark gate on canonical groups.
+- [x] Brand/model/nickname queries report recognized brand, collection,
   reference, descriptor, and retrieval expansion reason codes.
-- [ ] Benchmark output can be saved as JSONL for later comparison.
+- [x] Benchmark output can be saved as JSONL for later comparison.
+
+Initial implementation slice:
+
+- [x] `benchmark_mcp_queries.py` default queries now cover the alias-pair and
+  multi-brand set listed in this task.
+- [x] Benchmark rows include `canonical_query`, brand candidates, references,
+  collections, nicknames, required/optional/conflict descriptors, retrieval
+  queries, and retrieval reason codes from safe search diagnostics.
+- [x] Text, markdown, and JSONL renderers expose those fields so recall can be
+  compared by canonical query and retrieval expansion behavior can be reviewed
+  after a run.
+- [x] Text and markdown reports include an `Alias Recall` comparison that groups
+  rows by `canonical_query` and fails the benchmark when `total_count` differs
+  by more than 10% within an alias group.
 
 Verification:
 
@@ -748,11 +763,14 @@ python scripts/diagnostics/benchmark_mcp_queries.py \
   --query "rm07-01 white gold" \
   --query "rm07-01 mop" \
   --query "rm07-01 mother of pearl" \
+  --query "rm07-01 rg snow" \
+  --query "rm07-01 rose gold snow" \
   --query "126500ln white" \
   --query "daytona panda" \
   --query "5711 blue" \
   --query "15500st blue" \
   --format markdown \
+  --require-alias-recall \
   --allow-empty
 ```
 
