@@ -966,9 +966,9 @@ fetching, and keep the local matcher as the only eligibility gate.
 
 Acceptance:
 
-- [ ] Cold latency improves for at least two of the multi-brand baseline
+- [x] Cold latency improves for at least two of the multi-brand baseline
   queries.
-- [ ] Result counts, top results, and alias recall remain equivalent to the
+- [x] Result counts, top results, and alias recall remain equivalent to the
   Phase 5 deployed baseline.
 - [x] Concurrency cap is documented and configurable only through a safe
   runtime setting.
@@ -987,8 +987,26 @@ Initial implementation slice:
   failures still raise through the existing query error path.
 - [x] Partial branch fetch failures do not populate the final-result cache, so a
   later healthy run can refetch all retrieval branches.
-- [ ] Production cold benchmark has compared `SEARCH_RETRIEVAL_CONCURRENCY=1`
+- [x] Production cold benchmark has compared `SEARCH_RETRIEVAL_CONCURRENCY=1`
   versus `2` and confirmed no recall/top-result drift.
+
+Production benchmark evidence from 2026-06-15 server run:
+
+| Query | c1 cold | c2 cold | Delta | Total count drift | Top result drift |
+| --- | ---: | ---: | ---: | --- | --- |
+| `daytona panda` | `33361ms` | `22627ms` | `-32.2%` | none, `210` -> `210` | none |
+| `5711 blue` | `28594ms` | `21628ms` | `-24.4%` | none, `28` -> `28` | none |
+| `15500st blue` | `13492ms` | `8951ms` | `-33.7%` | none, `6` -> `6` | none |
+| `126500ln white` | `3969ms` | `3690ms` | `-7.0%` | none, `16` -> `16` | none |
+
+Artifacts:
+
+- `logs/mcp-benchmark-c1-20260615-004231.jsonl`
+- `logs/mcp-benchmark-c2-20260615-004552.jsonl`
+
+The official postdeploy check with server runtime
+`search_retrieval_concurrency=2` passed `mcp_smoke` `4/4`, MCP benchmark
+`13/13`, and alias recall delta `0` for all canonical alias groups.
 
 Suggested verification:
 
