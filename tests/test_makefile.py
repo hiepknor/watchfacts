@@ -41,6 +41,33 @@ def test_makefile_has_quality_audit_gate_targets() -> None:
     assert "check quality-audit" in predeploy_quality_target
 
 
+def test_makefile_has_search_engine_deploy_gate_targets() -> None:
+    makefile = Path("Makefile").read_text()
+    predeploy_target = makefile.split("\nsearch-engine-predeploy-check:", 1)[
+        1
+    ].split("\n\nsearch-engine-postdeploy-check:", 1)[0]
+    postdeploy_target = makefile.split("\nsearch-engine-postdeploy-check:", 1)[
+        1
+    ].split("\n\nsearch-engine-deploy-check:", 1)[0]
+    deploy_target = makefile.split("\nsearch-engine-deploy-check:", 1)[
+        1
+    ].split("\n\nquality-audit:", 1)[0]
+
+    assert "SEARCH_ENGINE_AUDIT_QUERIES" in makefile
+    assert "rm07-01 rg snow" in makefile
+    assert "rm07-01 rose gold" in makefile
+    assert "rm07-01 white gold" in makefile
+    assert "rm07-01 mother of pearl" in makefile
+    assert "git diff --check" in predeploy_target
+    assert "$(PYTHON) -m pytest -q" in predeploy_target
+    assert "$(PYTHON) -m compileall app scripts" in predeploy_target
+    assert "scripts/diagnostics/audit_quality.py" in predeploy_target
+    assert "--limit $(SEARCH_ENGINE_AUDIT_LIMIT)" in predeploy_target
+    assert "$(MAKE) mcp-smoke-set" in postdeploy_target
+    assert "$(MAKE) mcp-benchmark" in postdeploy_target
+    assert "search-engine-predeploy-check search-engine-postdeploy-check" in deploy_target
+
+
 def test_makefile_has_ai_audit_triage_target() -> None:
     makefile = Path("Makefile").read_text()
     target = makefile.split("\nai-audit-triage:", 1)[1].split(

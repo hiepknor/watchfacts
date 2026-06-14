@@ -10,6 +10,8 @@ SKIP_PULL ?= 0
 OPENWA_COMPOSE ?= 0
 SMOKE_QUERY ?= 5712g
 QUALITY_AUDIT_LIMIT ?= 5
+SEARCH_ENGINE_AUDIT_LIMIT ?= 5
+SEARCH_ENGINE_AUDIT_QUERIES ?= "rm07-01 rg snow" "rm07-01 rose gold" "rm07-01 white gold" "rm07-01 mother of pearl"
 MCP_SMOKE_URL ?= http://127.0.0.1:8765/mcp
 MCP_SMOKE_TIMEOUT_SECONDS ?= 120
 MCP_BENCHMARK_FORMAT ?= markdown
@@ -34,7 +36,7 @@ export IMAGE
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy quality-audit ai-audit-triage predeploy-quality-check
+.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy search-engine-predeploy-check search-engine-postdeploy-check search-engine-deploy-check quality-audit ai-audit-triage predeploy-quality-check
 
 help:
 	@printf "%s\n" "watchfacts commands"
@@ -72,6 +74,9 @@ help:
 	@printf "%s\n" "  make mcp-prewarm-benchmark-defaults Prewarm benchmark/common brand queries"
 	@printf "%s\n" "  make mcp-postdeploy-prewarm Best-effort cache prewarm after MCP deploy"
 	@printf "%s\n" "  make mcp-runtime-config Print safe effective MCP runtime config values"
+	@printf "%s\n" "  make search-engine-predeploy-check Run local search-engine deploy gate"
+	@printf "%s\n" "  make search-engine-postdeploy-check Run MCP smoke and benchmark after deploy"
+	@printf "%s\n" "  make search-engine-deploy-check Run both search-engine deploy gates"
 	@printf "%s\n" "  make quality-audit  Run the default production quality audit query set"
 	@printf "%s\n" "  make ai-audit-triage Summarize an audit artifact, optionally with OpenAI"
 	@printf "%s\n" "  make predeploy-quality-check Run local checks plus the default quality audit"
@@ -218,6 +223,18 @@ mcp-wait-healthy:
 		sleep 3; \
 		elapsed=$$((elapsed + 3)); \
 	done
+
+search-engine-predeploy-check:
+	git diff --check
+	$(PYTHON) -m pytest -q
+	$(PYTHON) -m compileall app scripts
+	$(PYTHON) scripts/diagnostics/audit_quality.py $(SEARCH_ENGINE_AUDIT_QUERIES) --limit $(SEARCH_ENGINE_AUDIT_LIMIT)
+
+search-engine-postdeploy-check:
+	$(MAKE) mcp-smoke-set
+	$(MAKE) mcp-benchmark
+
+search-engine-deploy-check: search-engine-predeploy-check search-engine-postdeploy-check
 
 quality-audit:
 	$(PYTHON) scripts/diagnostics/audit_quality.py --limit $(QUALITY_AUDIT_LIMIT)

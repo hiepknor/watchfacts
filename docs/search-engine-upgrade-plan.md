@@ -786,34 +786,49 @@ Description: Add a focused deploy gate for search-engine changes.
 Gate:
 
 ```bash
-python -m pytest -q
-python -m compileall app scripts
-git diff --check
-python scripts/diagnostics/audit_quality.py \
-  "rm07-01 rg snow" \
-  "rm07-01 rose gold" \
-  "rm07-01 white gold" \
-  "rm07-01 mother of pearl" \
-  --limit 5
-make mcp-smoke-set
+make search-engine-predeploy-check
+make deploy-mcp
+make search-engine-postdeploy-check
 ```
+
+`search-engine-predeploy-check` runs `git diff --check`, the full test suite,
+`compileall`, and the focused hard-case audit set. `search-engine-postdeploy-check`
+runs MCP smoke plus the default MCP benchmark, including the alias-recall gate
+from Task 5.1. Use `search-engine-deploy-check` only when the MCP service is
+already deployed and you want to run both gates against the current checkout and
+running service without recreating containers.
 
 Acceptance:
 
-- [ ] Search engine changes include before/after evidence for affected query classes.
-- [ ] Deploy notes mention cache-version bumps when behavior changes cached output.
-- [ ] MCP smoke passes after deploy.
-- [ ] Bot deploy is blocked only by configuration issues such as missing
+- [x] Search engine changes include before/after evidence for affected query classes.
+- [x] Deploy notes mention cache-version bumps when behavior changes cached output.
+- [x] MCP smoke passes after deploy.
+- [x] Bot deploy is blocked only by configuration issues such as missing
   `TELEGRAM_BOT_TOKEN`, not by code errors.
+
+Initial implementation slice:
+
+- [x] `Makefile` exposes `search-engine-predeploy-check`,
+  `search-engine-postdeploy-check`, and `search-engine-deploy-check` targets.
+- [x] The predeploy gate runs `git diff --check`, the full test suite,
+  `compileall`, and a focused hard-case audit for alias/material query classes.
+- [x] The postdeploy gate runs MCP smoke plus the default MCP benchmark, which
+  includes the alias-recall gate from Task 5.1.
+- [x] `docs/operations.md` documents before/after JSONL evidence, cache-version
+  note requirements, postdeploy MCP verification, and the bot deploy blocker
+  boundary.
 
 Verification:
 
 ```bash
+python -m pytest tests/test_makefile.py -q
 git diff --check
 ```
 
 Likely files:
 
+- `Makefile`
+- `tests/test_makefile.py`
 - `docs/operations.md`
 - `docs/search-engine-upgrade-plan.md`
 

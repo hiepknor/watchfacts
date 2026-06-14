@@ -425,6 +425,77 @@ path when the search cache is stale, while run 2 should normally show the
 cache-hit path. Use `audit_quality.py` when a query needs quality-group,
 scoring, image attribution, or raw-to-final funnel evidence.
 
+## Search Engine Deploy Gate
+
+Use this gate for changes to query recognition, retrieval planning, parsing,
+matching, dedupe, ranking, result serialization, or cache-affecting diagnostics.
+
+Predeploy gate:
+
+```bash
+make search-engine-predeploy-check
+```
+
+This runs repository whitespace checks, the full test suite, Python compile
+checks, and the focused hard-case audit set:
+
+```text
+rm07-01 rg snow
+rm07-01 rose gold
+rm07-01 white gold
+rm07-01 mother of pearl
+```
+
+When a search change affects a known query class, capture before/after evidence
+with JSONL so the delta is reviewable:
+
+```bash
+python scripts/diagnostics/audit_quality.py \
+  "rm07-01 rg snow" \
+  "rm07-01 rose gold" \
+  "rm07-01 white gold" \
+  "rm07-01 mother of pearl" \
+  --format jsonl --limit 5 > before-search-engine.jsonl
+
+python scripts/diagnostics/audit_quality.py \
+  "rm07-01 rg snow" \
+  "rm07-01 rose gold" \
+  "rm07-01 white gold" \
+  "rm07-01 mother of pearl" \
+  --format jsonl --limit 5 > after-search-engine.jsonl
+
+python scripts/diagnostics/audit_quality.py \
+  --compare-jsonl before-search-engine.jsonl after-search-engine.jsonl
+```
+
+If the change can alter cached output ordering, eligibility, extraction,
+scoring, quality gates, serialized result shape, or search diagnostics consumed
+by deploy gates, bump `SEARCH_CACHE_VERSION` in `app/searching/search.py`.
+Deploy notes should state either the old/new cache version or why no bump was
+needed.
+
+Deploy and postdeploy verification:
+
+```bash
+make deploy-mcp
+make search-engine-postdeploy-check
+```
+
+`make search-engine-postdeploy-check` runs `make mcp-smoke-set` and
+`make mcp-benchmark`, so MCP search response shape, alias recall, cache status,
+stage timings, and top-result snippets are checked against the running service.
+For changes that affect Telegram presentation or bot-owned code paths, deploy
+the bot after the MCP gate passes:
+
+```bash
+make deploy-bot
+```
+
+Do not treat unresolved code failures as bot deploy blockers. Code failures
+should be fixed before deploy by the predeploy gate; after that, bot deploy
+should only be blocked by runtime configuration issues such as missing
+`TELEGRAM_BOT_TOKEN`, `.env`, browser state, or other operator-managed secrets.
+
 Write machine-readable output for handoff or later fixture work:
 
 ```bash
@@ -451,8 +522,9 @@ python scripts/fixtures/generate_issue_fixtures.py issues-export.json > tests/te
 
 Checklist:
 
-- Run `make predeploy-quality-check` before deploy when matcher, extraction,
-  scoring, quality gates, or serialized result shape changes.
+- Run `make search-engine-predeploy-check` before deploy when query
+  recognition, retrieval, matcher, extraction, scoring, quality gates,
+  diagnostics, or serialized result shape changes.
 - Convert confirmed issues into regression tests before implementing fixes.
 - Run focused tests, then the full suite.
 - Bump `SEARCH_CACHE_VERSION` in `app/searching/search.py` when extraction, scoring,
