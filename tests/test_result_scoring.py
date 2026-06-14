@@ -59,6 +59,79 @@ def test_score_result_demotes_reference_descriptor_conflict_with_guardrail_reaso
     assert "guardrail.descriptor_conflict" in score.reasons
 
 
+def test_score_result_demotes_color_descriptor_only_in_accessory_context() -> None:
+    result = SearchResult(
+        "126500LN Daytona black dial, white tag, complete set $29,995",
+        posted_date="June 8, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="126500ln white")
+
+    assert score.quality_group == 1
+    assert "guardrail.descriptor_context" in score.reasons
+    assert "context.accessory_color_only:white" in score.reasons
+
+
+def test_rank_results_by_quality_prefers_product_color_over_accessory_color() -> None:
+    accessory_only = SearchResult(
+        "126500LN Daytona black dial, white tag, complete set $29,995",
+        posted_date="June 8, 2026",
+    )
+    product_color = SearchResult(
+        "126500LN White 2025 Slider 34.5K",
+        posted_date="June 1, 2026",
+    )
+
+    ranked = rank_results_by_quality(
+        [accessory_only, product_color],
+        query="126500ln white",
+    )
+
+    assert ranked == [product_color, accessory_only]
+
+
+def test_rank_results_by_quality_demotes_daytona_without_panda_evidence() -> None:
+    white_gold_only = SearchResult(
+        "Rolex Daytona White Gold Baby Lemans 126519 - New/Complete - 2025 - $45.5k",
+        posted_date="June 14, 2026",
+    )
+    exact_panda = SearchResult(
+        "Daytona Panda 126500ln 3/2026 New complete without white tag $36,600",
+        posted_date="June 14, 2026",
+    )
+    white_dial_proxy = SearchResult(
+        "Rolex Daytona White Dial 2023 Full Set HKD 255000",
+        posted_date="June 14, 2026",
+    )
+
+    ranked = rank_results_by_quality(
+        [white_gold_only, exact_panda, white_dial_proxy],
+        query="daytona panda",
+    )
+    white_gold_score = score_result(
+        white_gold_only,
+        original_rank=0,
+        query="daytona panda",
+    )
+
+    assert ranked == [exact_panda, white_dial_proxy, white_gold_only]
+    assert white_gold_score.quality_group == 1
+    assert "guardrail.nickname_evidence_missing" in white_gold_score.reasons
+    assert "nickname.missing:panda" in white_gold_score.reasons
+
+
+def test_score_result_does_not_demote_unaudited_nickname_proxy() -> None:
+    result = SearchResult(
+        "Rolex GMT Master red blue bezel full set $18,500",
+        posted_date="June 14, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="gmt pepsi")
+
+    assert score.quality_group == 0
+    assert "guardrail.nickname_evidence_missing" not in score.reasons
+
+
 def test_score_result_does_not_demote_missing_descriptor_as_conflict() -> None:
     result = SearchResult(
         "Patek 5205R 2026 $428000",

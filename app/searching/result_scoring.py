@@ -8,6 +8,7 @@ import re
 from app.searching.issues import detect_suspicious_result
 from app.searching.matcher import explain_extraction
 from app.searching.matcher_aliases import (
+    canonicalize_descriptor_token,
     canonicalize_descriptor_tokens_as_set,
     conflict_descriptor_tokens,
     descriptor_exists_in_tokens,
@@ -81,6 +82,25 @@ IMAGE_CONFIDENCE_SCORES = {
     "image.omitted_bundle_ambiguous": 0,
     "image.missing_source": 0,
 }
+ACCESSORY_COLOR_CONTEXT_TOKENS = {
+    "card",
+    "cards",
+    "label",
+    "labels",
+    "paper",
+    "papers",
+    "sticker",
+    "stickers",
+    "tag",
+    "tags",
+}
+ACCESSORY_COLOR_CONTEXT_GUARDRAIL_COLORS = {"white"}
+NICKNAME_EVIDENCE_GUARDRAIL_NICKNAMES = {"panda"}
+PANDA_PROXY_PHRASES = (
+    ("white", "dial"),
+    ("white", "dials"),
+    ("white", "face"),
+)
 STOCK_LIST_MARKER_RE = re.compile(
     r"\b(?:hk\s+)?stock\s+list\b|\bstocklist\b",
     re.IGNORECASE,
@@ -233,10 +253,16 @@ def _guardrail_score(
     plan = _cached_query_plan(query)
     if _missing_short_model_suffix_phrase(plan.required_descriptors, result):
         return 1, ("guardrail.brand_model_phrase_missing",)
+    nickname_reasons = _nickname_evidence_missing_reasons(plan, result)
+    if nickname_reasons:
+        return 1, ("guardrail.nickname_evidence_missing", *nickname_reasons)
     if plan.intent_kind not in {"reference_with_descriptor", "reference_with_year"}:
         return 0, ()
     if not plan.required_descriptors:
         return 0, ()
+    context_reasons = _local_descriptor_context_reasons(plan, result)
+    if context_reasons:
+        return 1, ("guardrail.descriptor_context", *context_reasons)
     conflict_reasons = _local_descriptor_conflict_reasons(plan, result)
     if conflict_reasons:
         return 1, ("guardrail.descriptor_conflict", *conflict_reasons)
@@ -303,11 +329,7 @@ def _local_descriptor_conflict_reasons(
     plan: QueryPlan,
     result: SearchResult,
 ) -> tuple[str, ...]:
-    trace = explain_extraction(plan.original_query, result.listing_text)
-    if plan.references and trace.selected_reference is None:
-        return ()
-    local_text = trace.output_text or result.listing_text
-    local_tokens = normalize_text(local_text).split()
+    local_tokens = _local_guardrail_tokens(plan, result)
     if not local_tokens:
         return ()
 
@@ -331,6 +353,118 @@ def _local_descriptor_conflict_reasons(
     return tuple(
         f"conflict.local_descriptor:{descriptor}"
         for descriptor in _dedupe_preserving_order(conflict_descriptors)
+    )
+
+
+def _nickname_evidence_missing_reasons(
+    plan: QueryPlan,
+    result: SearchResult,
+) -> tuple[str, ...]:
+    if not plan.nicknames:
+        return ()
+    local_tokens = _local_guardrail_tokens(plan, result)
+    if not local_tokens:
+        return ()
+    return tuple(
+        f"nickname.missing:{nickname}"
+        for nickname in plan.nicknames
+        if (
+            canonicalize_descriptor_token(nickname)
+            in NICKNAME_EVIDENCE_GUARDRAIL_NICKNAMES
+        )
+        if not _nickname_has_local_evidence(nickname, local_tokens)
+    )
+
+
+def _nickname_has_local_evidence(nickname: str, local_tokens: list[str]) -> bool:
+    canonical_tokens = _canonical_local_tokens(local_tokens)
+    canonical_nickname = canonicalize_descriptor_token(nickname)
+    if canonical_nickname in canonical_tokens:
+        return True
+    if canonical_nickname == "panda":
+        return any(
+            _contains_token_phrase(canonical_tokens, phrase)
+            for phrase in PANDA_PROXY_PHRASES
+        )
+    return False
+
+
+def _local_descriptor_context_reasons(
+    plan: QueryPlan,
+    result: SearchResult,
+) -> tuple[str, ...]:
+    required_colors = (
+        canonicalize_descriptor_tokens_as_set(plan.required_descriptors)
+        & CANONICAL_COLOR_DESCRIPTOR_GROUP
+        & ACCESSORY_COLOR_CONTEXT_GUARDRAIL_COLORS
+    )
+    if not required_colors or _query_mentions_accessory_context(plan.original_query):
+        return ()
+    local_tokens = _local_guardrail_tokens(plan, result)
+    if not local_tokens:
+        return ()
+    return tuple(
+        f"context.accessory_color_only:{color}"
+        for color in sorted(required_colors)
+        if _descriptor_occurs_only_in_accessory_context(color, local_tokens)
+    )
+
+
+def _query_mentions_accessory_context(query: str) -> bool:
+    return bool(set(normalize_text(query).split()) & ACCESSORY_COLOR_CONTEXT_TOKENS)
+
+
+def _descriptor_occurs_only_in_accessory_context(
+    descriptor: str,
+    local_tokens: list[str],
+) -> bool:
+    canonical_descriptor = canonicalize_descriptor_token(descriptor)
+    canonical_tokens = _canonical_local_tokens(local_tokens)
+    matching_indexes = [
+        index
+        for index, token in enumerate(canonical_tokens)
+        if token == canonical_descriptor
+    ]
+    if not matching_indexes:
+        return False
+    return all(
+        _token_index_has_accessory_context(canonical_tokens, index)
+        for index in matching_indexes
+    )
+
+
+def _token_index_has_accessory_context(tokens: tuple[str, ...], index: int) -> bool:
+    previous_token = tokens[index - 1] if index > 0 else ""
+    next_token = tokens[index + 1] if index + 1 < len(tokens) else ""
+    return (
+        previous_token in ACCESSORY_COLOR_CONTEXT_TOKENS
+        or next_token in ACCESSORY_COLOR_CONTEXT_TOKENS
+    )
+
+
+def _local_guardrail_tokens(plan: QueryPlan, result: SearchResult) -> list[str]:
+    trace = explain_extraction(plan.original_query, result.listing_text)
+    if plan.references and trace.selected_reference is None:
+        return []
+    local_text = trace.output_text or result.listing_text
+    return normalize_text(local_text).split()
+
+
+def _canonical_local_tokens(tokens: list[str]) -> tuple[str, ...]:
+    return tuple(
+        canonical_token
+        for token in tokens
+        if (canonical_token := canonicalize_descriptor_token(token))
+    )
+
+
+def _contains_token_phrase(tokens: tuple[str, ...], phrase: tuple[str, ...]) -> bool:
+    phrase_length = len(phrase)
+    if phrase_length == 0:
+        return False
+    return any(
+        tokens[index : index + phrase_length] == phrase
+        for index in range(len(tokens) - phrase_length + 1)
     )
 
 
