@@ -470,14 +470,19 @@ Initial implementation slice:
 - [x] Patek Philippe `5711 blue` expansion is skipped when extra query
   descriptors change intent, such as another brand or an unmodeled strap/detail
   term.
-- [ ] Add Audemars Piguet `15500st blue` Royal Oak expansion.
+- [x] Audemars Piguet `15500st blue` expands through raw query, `15500st`,
+  and `royal oak 15500st blue`, then uses strict local filtering so sibling
+  references such as `15510st blue` do not pass.
+- [x] Audemars Piguet `15500st blue` expansion is skipped when extra query
+  descriptors change intent, such as another brand or an unmodeled strap/detail
+  term.
 
 Acceptance:
 
-- [ ] Retrieval expansions are bounded per query and visible in diagnostics.
-- [ ] Each expansion has a local eligibility rule before it can affect output.
-- [ ] Brand/model/nickname expansions do not change reference-only behavior.
-- [ ] Equivalent canonical queries share cache keys when safe; broad nickname
+- [x] Retrieval expansions are bounded per query and visible in diagnostics.
+- [x] Each expansion has a local eligibility rule before it can affect output.
+- [x] Brand/model/nickname expansions do not change reference-only behavior.
+- [x] Equivalent canonical queries share cache keys when safe; broad nickname
   expansions keep separate keys when they represent different retrieval intent.
 
 Verification:

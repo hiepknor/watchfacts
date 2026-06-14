@@ -209,6 +209,18 @@ RETRIEVAL_EXPANSION_RULES: tuple[RetrievalExpansionRule, ...] = (
         required_descriptors=("blue",),
         allowed_extra_descriptors=("nautilus", "patek", "philippe", "pp"),
     ),
+    RetrievalExpansionRule(
+        collection="royal_oak",
+        retrieval_queries=(
+            "15500st",
+            "royal oak 15500st blue",
+        ),
+        local_filter_queries=("15500st blue",),
+        reason_code="retrieval.collection_expansion:royal_oak",
+        reference_terms=("15500st",),
+        required_descriptors=("blue",),
+        allowed_extra_descriptors=("ap", "audemars", "piguet", "royal", "oak"),
+    ),
 )
 
 

@@ -1726,6 +1726,177 @@ def test_retrieval_plan_allows_safe_5711_blue_context_descriptors(
     assert retrieval_plan.strict_local_filter is True
 
 
+def test_search_workflow_expands_15500st_blue_retrieval_with_reference_scoped_filters(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        if query == "15500st blue":
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "15500ST Blue Dial 2021 Full Set HKD 520000",
+                  "companyName": "Dealer Blue",
+                  "repostedAt": "2026-06-13 10:00:00",
+                  "number": 111,
+                  "frontImage": "https://watchfacts.example/15500st-blue.jpg"
+                },
+                {
+                  "title": "15500ST Black Dial 2021 Full Set HKD 500000",
+                  "companyName": "Dealer Black",
+                  "repostedAt": "2026-06-13 10:00:00",
+                  "number": 112,
+                  "frontImage": "https://watchfacts.example/15500st-black.jpg"
+                }
+              ]
+            }
+            """
+        elif query == "15500st":
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "Audemars Piguet 15500ST.OO.1220ST.01 Blue Dial 2020 HKD 500000",
+                  "companyName": "Dealer Ref",
+                  "repostedAt": "2026-06-12 10:00:00",
+                  "number": 222,
+                  "frontImage": "https://watchfacts.example/15500st-ref-blue.jpg"
+                },
+                {
+                  "title": "Audemars Piguet 15510ST Blue Dial 2020 HKD 470000",
+                  "companyName": "Dealer Other Ref",
+                  "repostedAt": "2026-06-12 10:00:00",
+                  "number": 223,
+                  "frontImage": "https://watchfacts.example/15510st-blue.jpg"
+                }
+              ]
+            }
+            """
+        else:
+            html = """
+            {
+              "listings": [
+                {
+                  "title": "Royal Oak 15500ST Blue Dial 2019 Full Set HKD 490000",
+                  "companyName": "Dealer Royal Oak",
+                  "repostedAt": "2026-06-11 10:00:00",
+                  "number": 333,
+                  "frontImage": "https://watchfacts.example/royal-oak-15500st-blue.jpg"
+                }
+              ]
+            }
+            """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("15500st blue"))
+    result_texts = {result.listing_text for result in results}
+
+    assert fetch_queries == [
+        "15500st blue",
+        "15500st",
+        "royal oak 15500st blue",
+    ]
+    assert result_texts == {
+        "15500ST Blue Dial 2021 Full Set HKD 520000",
+        "Audemars Piguet 15500ST.OO.1220ST.01 Blue Dial 2020 HKD 500000",
+        "15500ST Blue Dial 2019 Full Set HKD 490000",
+    }
+    assert all("Black Dial" not in result.listing_text for result in results)
+    assert all("15510ST" not in result.listing_text for result in results)
+    assert workflow.last_search_diagnostics is not None
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["retrieval_query_count"] == 3
+    assert diagnostics_payload["retrieval_queries"] == [
+        "15500st blue",
+        "15500st",
+        "royal oak 15500st blue",
+    ]
+    assert "retrieval.collection_expansion:royal_oak" in diagnostics_payload[
+        "retrieval_reason_codes"
+    ]
+
+
+@pytest.mark.parametrize("query", ["rolex 15500st blue", "15500st blue leather"])
+def test_search_workflow_does_not_expand_15500st_blue_when_extra_descriptors_change_intent(
+    tmp_path,
+    query: str,
+) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        html = """
+        {
+          "listings": [
+            {
+              "title": "Audemars Piguet 15500ST.OO.1220ST.01 Blue Dial 2020 HKD 500000",
+              "companyName": "Dealer Ref",
+              "repostedAt": "2026-06-12 10:00:00",
+              "number": 222,
+              "frontImage": "https://watchfacts.example/15500st-ref-blue.jpg"
+            }
+          ]
+        }
+        """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search(query))
+
+    assert fetch_queries == ["15500st"]
+    assert results == []
+    assert workflow.last_search_diagnostics is not None
+    assert workflow.last_search_diagnostics.retrieval_reason_codes == (
+        "retrieval.reference_with_descriptors",
+    )
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_fetch_queries"),
+    [
+        (
+            "ap 15500st blue",
+            ("ap 15500st blue", "15500st", "royal oak 15500st blue"),
+        ),
+        (
+            "audemars piguet 15500st blue",
+            (
+                "audemars piguet 15500st blue",
+                "15500st",
+                "royal oak 15500st blue",
+            ),
+        ),
+        ("royal oak 15500st blue", ("royal oak 15500st blue", "15500st")),
+    ],
+)
+def test_retrieval_plan_allows_safe_15500st_blue_context_descriptors(
+    query: str,
+    expected_fetch_queries: tuple[str, ...],
+) -> None:
+    query_plan = search_module.build_query_plan(query)
+    retrieval_plan = search_module._build_retrieval_plan(query, query_plan)
+
+    assert retrieval_plan.fetch_queries == expected_fetch_queries
+    assert retrieval_plan.local_filter_queries == (query, "15500st blue")
+    assert retrieval_plan.strict_local_filter is True
+
+
 def test_search_workflow_does_not_use_reference_only_fallback_for_multi_descriptor_query(
     tmp_path,
 ) -> None:
