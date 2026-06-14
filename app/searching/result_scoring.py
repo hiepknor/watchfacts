@@ -407,6 +407,7 @@ def _local_descriptor_context_reasons(
         f"context.accessory_color_only:{color}"
         for color in sorted(required_colors)
         if _descriptor_occurs_only_in_accessory_context(color, local_tokens)
+        and not _has_safe_raw_product_color_evidence(color, result)
     )
 
 
@@ -431,6 +432,20 @@ def _descriptor_occurs_only_in_accessory_context(
         _token_index_has_accessory_context(canonical_tokens, index)
         for index in matching_indexes
     )
+
+
+def _has_safe_raw_product_color_evidence(
+    descriptor: str,
+    result: SearchResult,
+) -> bool:
+    if canonicalize_descriptor_token(descriptor) != "white":
+        return False
+    if not result.raw_listing_text:
+        return False
+    if scope_confidence_reason(result) == "scope.stock_list":
+        return False
+    raw_tokens = normalize_text(result.raw_listing_text).split()
+    return _nickname_has_local_evidence("panda", raw_tokens)
 
 
 def _token_index_has_accessory_context(tokens: tuple[str, ...], index: int) -> bool:

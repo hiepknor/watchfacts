@@ -90,6 +90,23 @@ def test_rank_results_by_quality_prefers_product_color_over_accessory_color() ->
     assert ranked == [product_color, accessory_only]
 
 
+def test_score_result_keeps_raw_panda_context_ahead_of_white_tag_guardrail() -> None:
+    result = SearchResult(
+        "REF: 126500LN YEAR: 2026 CONDITION: UNWORN W&C + WHITE TAG PRICE: £27,350",
+        raw_listing_text=(
+            "MODEL: PANDA DAYTONA REF: 126500LN YEAR: 2026 "
+            "CONDITION: UNWORN COMES AS: W&C + WHITE TAG PRICE: £27,350"
+        ),
+        posted_date="March 26, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="126500ln white 2026")
+
+    assert score.quality_group == 0
+    assert "guardrail.descriptor_context" not in score.reasons
+    assert "context.accessory_color_only:white" not in score.reasons
+
+
 def test_rank_results_by_quality_demotes_daytona_without_panda_evidence() -> None:
     white_gold_only = SearchResult(
         "Rolex Daytona White Gold Baby Lemans 126519 - New/Complete - 2025 - $45.5k",
