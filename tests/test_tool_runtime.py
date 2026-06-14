@@ -89,6 +89,10 @@ def test_watchfacts_search_payload_serializes_results_for_tool_runtime(tmp_path)
                 seller="Issac",
                 seller_phone="17826241887",
                 raw_listing_text="raw listing text",
+                scope_reason="scope.scoped",
+                image_reason="image.missing_source",
+                price_reason="price.visible",
+                segment_reason_codes=("segment.reference_boundary",),
                 similar_results=(SearchResult("5712G similar"),),
             ),
             SearchResult("5712R 2016 HKD 830000"),
@@ -137,6 +141,10 @@ def test_watchfacts_search_payload_serializes_results_for_tool_runtime(tmp_path)
     assert result["listing_text"] == "5712G Used 2015 - 76k usdt"
     assert result["seller"] == "Issac"
     assert result["seller_phone"] == "17826241887"
+    assert result["scope_reason"] == "scope.scoped"
+    assert result["image_reason"] == "image.missing_source"
+    assert result["price_reason"] == "price.visible"
+    assert result["segment_reason_codes"] == ["segment.reference_boundary"]
     assert result["similar_results"] == []
 
 

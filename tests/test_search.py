@@ -301,6 +301,29 @@ def test_search_workflow_preserves_seller_phone_from_watchfacts_json(tmp_path) -
     assert results[0].seller_phone == "17826241887"
 
 
+def test_search_result_cache_roundtrip_preserves_evidence_metadata() -> None:
+    result = SearchResult(
+        "5712g new 2024 -> 115k",
+        raw_listing_text=(
+            "HK STOCK LIST 116505 rainbow 284k "
+            "5712g new 2024 -> 115k 5726/1A used 2022 68k"
+        ),
+        scope_reason="scope.stock_list",
+        image_reason="image.omitted_bundle_ambiguous",
+        price_reason="price.visible",
+        segment_reason_codes=(
+            "segment.stock_list_marker",
+            "segment.reference_boundary",
+        ),
+    )
+
+    roundtripped = search_module._deserialize_results(
+        search_module._serialize_results([result])
+    )
+
+    assert roundtripped == [result]
+
+
 def test_search_workflow_serves_repeated_query_from_cache(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = FIXTURE.read_text()
@@ -2511,6 +2534,13 @@ def test_server_filtered_json_stock_list_scopes_reference_and_omits_bundle_image
     )
     assert results[0].seller == "Mr Et"
     assert results[0].image_url is None
+    assert results[0].scope_reason == "scope.stock_list"
+    assert results[0].image_reason == "image.omitted_bundle_ambiguous"
+    assert results[0].price_reason == "price.visible"
+    assert results[0].segment_reason_codes == (
+        "segment.stock_list_marker",
+        "segment.reference_boundary",
+    )
 
 
 def test_search_workflow_logs_counts_without_query_or_state_path(tmp_path, caplog) -> None:

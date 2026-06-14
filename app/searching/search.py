@@ -7,7 +7,7 @@ import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.config import Settings
 from app.db import Database
@@ -40,7 +40,11 @@ from app.searching.matcher_rulebook import (
     RETRIEVAL_EXPANSION_RULES,
     RetrievalExpansionRule,
 )
-from app.searching.result_scoring import rank_results_by_quality, score_result
+from app.searching.result_scoring import (
+    price_evidence_reason,
+    rank_results_by_quality,
+    score_result,
+)
 from app.integrations.scraper import ScrapeResult, fetch_watchfacts_html
 from app.searching.search_result import SearchResult, search_results_to_dicts
 from app.searching.similarity import group_similar_results
@@ -49,7 +53,7 @@ from app.searching.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger("app.search")
-SEARCH_CACHE_VERSION = "search-v26"
+SEARCH_CACHE_VERSION = "search-v27"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -1098,19 +1102,24 @@ class WatchFactsSearchWorkflow:
 
 def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:
     listing_text = extract_relevant_listing_text(query, listing.listing_text)
-    return SearchResult(
+    image_attribution = attribute_product_image(
+        listing,
+        listing_text=listing_text,
+        query=query,
+    )
+    result = SearchResult(
         listing_text=listing_text,
         seller=listing.seller,
         seller_phone=listing.seller_phone,
         posted_date=listing.posted_date,
-        image_url=_product_image_url(
-            listing,
-            listing_text=listing_text,
-            query=query,
-        ),
+        image_url=image_attribution.image_url,
         source_url=listing.source_url,
         raw_listing_text=listing.raw_listing_text or listing.listing_text,
+        scope_reason=_scope_reason_for_listing(listing, listing_text=listing_text),
+        image_reason=image_attribution.reason,
+        segment_reason_codes=listing.segment_reason_codes,
     )
+    return replace(result, price_reason=price_evidence_reason(result))
 
 
 def _should_block_short_model_phrase_miss(
@@ -1176,17 +1185,17 @@ def _raw_has_local_short_model_phrase(
     return False
 
 
-def _product_image_url(
+def _scope_reason_for_listing(
     listing: ListingCandidate,
     *,
-    listing_text: str | None = None,
-    query: str = "",
-) -> str | None:
-    return attribute_product_image(
-        listing,
-        listing_text=listing_text,
-        query=query,
-    ).image_url
+    listing_text: str,
+) -> str:
+    if listing.scope_reason:
+        return listing.scope_reason
+    raw_text = listing.raw_listing_text or listing.listing_text
+    if normalize_text(raw_text) == normalize_text(listing_text):
+        return "scope.full_listing"
+    return "scope.scoped"
 
 
 def attribute_product_image(
@@ -1795,8 +1804,18 @@ def _search_result_from_dict(item: object) -> SearchResult:
         similar_results=tuple(_search_result_from_dict(value) for value in similar),
         raw_listing_text=_optional_str(item.get("raw_listing_text")),
         seller_phone=_optional_str(item.get("seller_phone")),
+        scope_reason=_optional_str(item.get("scope_reason")),
+        image_reason=_optional_str(item.get("image_reason")),
+        price_reason=_optional_str(item.get("price_reason")),
+        segment_reason_codes=_optional_str_tuple(item.get("segment_reason_codes")),
     )
 
 
 def _optional_str(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _optional_str_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))

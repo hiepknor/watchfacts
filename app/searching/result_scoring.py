@@ -54,6 +54,11 @@ COLOR_DESCRIPTOR_GROUP = {
 CANONICAL_COLOR_DESCRIPTOR_GROUP = canonicalize_descriptor_tokens_as_set(
     COLOR_DESCRIPTOR_GROUP,
 )
+PRICE_REASON_CODES = {
+    "price.visible",
+    "price.missing_visible",
+    "price.ambiguous_neighbor",
+}
 
 
 @dataclass(frozen=True)
@@ -249,10 +254,24 @@ def _relevance_score(
 
 
 def _price_evidence_score(result: SearchResult) -> tuple[int, tuple[str, ...]]:
+    reason = price_evidence_reason(result)
+    if reason == "price.visible":
+        return 1, (reason,)
+    return 0, (reason,)
+
+
+def price_evidence_reason(result: SearchResult) -> str:
+    if result.price_reason in PRICE_REASON_CODES:
+        return result.price_reason
     scan_text = KARAT_GOLD_RE.sub(" ", result.listing_text)
     if PRICE_EVIDENCE_RE.search(scan_text):
-        return 1, ("price.visible",)
-    return 0, ("price.missing_visible",)
+        return "price.visible"
+    raw_text = result.raw_listing_text
+    if raw_text and normalize_text(raw_text) != normalize_text(result.listing_text):
+        raw_scan_text = KARAT_GOLD_RE.sub(" ", raw_text)
+        if PRICE_EVIDENCE_RE.search(raw_scan_text):
+            return "price.ambiguous_neighbor"
+    return "price.missing_visible"
 
 
 def parse_posted_date(value: str | None) -> datetime | None:

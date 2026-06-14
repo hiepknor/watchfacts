@@ -320,7 +320,7 @@ def _result_payload(
 ) -> dict[str, Any]:
     result_id = source_result_id(query, rank, result)
     listing_text = _clean_text(result.listing_text, MAX_TEXT_CHARS)
-    return {
+    payload: dict[str, Any] = {
         "rank": rank,
         "result_id": result_id,
         "stable_listing_id": stable_listing_id(result),
@@ -340,6 +340,8 @@ def _result_payload(
             for similar in result.similar_results
         ],
     }
+    _attach_evidence_payload(payload, result)
+    return payload
 
 
 def _similar_result_payload(
@@ -348,7 +350,7 @@ def _similar_result_payload(
     config: ResultPageConfig,
 ) -> dict[str, Any]:
     listing_text = _clean_text(result.listing_text, MAX_TEXT_CHARS)
-    return {
+    payload: dict[str, Any] = {
         "listing_text": listing_text,
         "listing_text_preview": {
             density: _listing_preview_text(listing_text, density)
@@ -360,6 +362,24 @@ def _similar_result_payload(
         "source_url": _normalize_url(result.source_url, config.watchfacts_url),
         "seller_phone": _clean_optional_text(result.seller_phone, max_chars=64),
     }
+    _attach_evidence_payload(payload, result)
+    return payload
+
+
+def _attach_evidence_payload(payload: dict[str, Any], result: SearchResult) -> None:
+    scope_reason = _clean_optional_text(result.scope_reason, max_chars=80)
+    image_reason = _clean_optional_text(result.image_reason, max_chars=80)
+    price_reason = _clean_optional_text(result.price_reason, max_chars=80)
+    if scope_reason is not None:
+        payload["scope_reason"] = scope_reason
+    if image_reason is not None:
+        payload["image_reason"] = image_reason
+    if price_reason is not None:
+        payload["price_reason"] = price_reason
+    if result.segment_reason_codes:
+        payload["segment_reason_codes"] = [
+            _clean_text(reason, 120) for reason in result.segment_reason_codes
+        ]
 
 
 def _listing_preview_text(value: str, density: str) -> str:

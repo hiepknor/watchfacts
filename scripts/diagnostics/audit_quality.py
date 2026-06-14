@@ -645,6 +645,8 @@ def _final_row_event(query: str, row: AuditResultRow) -> dict[str, object]:
 
 
 def _scope_reason(result: SearchResult) -> str:
+    if result.scope_reason:
+        return result.scope_reason
     raw_text = " ".join((result.raw_listing_text or "").split())
     listing_text = " ".join(result.listing_text.split())
     if not raw_text or raw_text == listing_text:
@@ -655,6 +657,8 @@ def _scope_reason(result: SearchResult) -> str:
 
 
 def _image_reason(result: SearchResult, *, scope_reason: str) -> str:
+    if result.image_reason:
+        return result.image_reason
     if result.image_url:
         return "image.direct"
     if scope_reason == "scope.stock_list":

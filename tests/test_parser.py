@@ -221,6 +221,11 @@ def test_parse_json_stock_list_title_emits_item_segments_with_parent_metadata() 
             source_url="/flash-sales/9714092",
             match_text="116505 rainbow 284k",
             raw_listing_text=parent_text,
+            scope_reason="scope.stock_list",
+            segment_reason_codes=(
+                "segment.stock_list_marker",
+                "segment.reference_boundary",
+            ),
         ),
         ListingCandidate(
             listing_text="5712g new 2024 -> 115k",
@@ -231,6 +236,11 @@ def test_parse_json_stock_list_title_emits_item_segments_with_parent_metadata() 
             source_url="/flash-sales/9714092",
             match_text="5712g new 2024 -> 115k",
             raw_listing_text=parent_text,
+            scope_reason="scope.stock_list",
+            segment_reason_codes=(
+                "segment.stock_list_marker",
+                "segment.reference_boundary",
+            ),
         ),
         ListingCandidate(
             listing_text="5726/1A used 2022 68k",
@@ -241,6 +251,11 @@ def test_parse_json_stock_list_title_emits_item_segments_with_parent_metadata() 
             source_url="/flash-sales/9714092",
             match_text="5726/1A used 2022 68k",
             raw_listing_text=parent_text,
+            scope_reason="scope.stock_list",
+            segment_reason_codes=(
+                "segment.stock_list_marker",
+                "segment.reference_boundary",
+            ),
         ),
     ]
 
@@ -271,6 +286,11 @@ def test_parse_json_stock_list_title_keeps_condition_date_inside_segment() -> No
             source_url="/flash-sales/9714092",
             match_text="5712g new N3/2026 -> 115k",
             raw_listing_text=parent_text,
+            scope_reason="scope.stock_list",
+            segment_reason_codes=(
+                "segment.stock_list_marker",
+                "segment.reference_boundary",
+            ),
         ),
         ListingCandidate(
             listing_text="5726/1A used 2022 68k",
@@ -279,6 +299,11 @@ def test_parse_json_stock_list_title_keeps_condition_date_inside_segment() -> No
             source_url="/flash-sales/9714092",
             match_text="5726/1A used 2022 68k",
             raw_listing_text=parent_text,
+            scope_reason="scope.stock_list",
+            segment_reason_codes=(
+                "segment.stock_list_marker",
+                "segment.reference_boundary",
+            ),
         ),
     ]
 

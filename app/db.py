@@ -1570,6 +1570,30 @@ def _search_result_from_dict(item: object) -> SearchResult | None:
             if isinstance(item.get("seller_phone"), str)
             else None
         ),
+        scope_reason=(
+            item.get("scope_reason")
+            if isinstance(item.get("scope_reason"), str)
+            else None
+        ),
+        image_reason=(
+            item.get("image_reason")
+            if isinstance(item.get("image_reason"), str)
+            else None
+        ),
+        price_reason=(
+            item.get("price_reason")
+            if isinstance(item.get("price_reason"), str)
+            else None
+        ),
+        segment_reason_codes=(
+            tuple(
+                value
+                for value in item.get("segment_reason_codes")
+                if isinstance(value, str)
+            )
+            if isinstance(item.get("segment_reason_codes"), list)
+            else ()
+        ),
     )
 
 

@@ -19,6 +19,10 @@ class SearchResult:
     similar_results: tuple["SearchResult", ...] = ()
     raw_listing_text: str | None = None
     seller_phone: str | None = None
+    scope_reason: str | None = None
+    image_reason: str | None = None
+    price_reason: str | None = None
+    segment_reason_codes: tuple[str, ...] = ()
 
 
 def source_result_id(query: str, rank: int, result: SearchResult) -> str:
@@ -93,6 +97,14 @@ def search_result_to_dict(
         "source_url": result.source_url,
         "seller_phone": result.seller_phone,
     }
+    if result.scope_reason is not None:
+        payload["scope_reason"] = result.scope_reason
+    if result.image_reason is not None:
+        payload["image_reason"] = result.image_reason
+    if result.price_reason is not None:
+        payload["price_reason"] = result.price_reason
+    if result.segment_reason_codes:
+        payload["segment_reason_codes"] = list(result.segment_reason_codes)
     if include_similar:
         payload["similar_results"] = [
             search_result_to_dict(

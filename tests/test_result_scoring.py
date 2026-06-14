@@ -169,6 +169,22 @@ def test_rank_results_by_quality_demotes_incomplete_scoped_stock_list_segment() 
     assert ranked == [clean, incomplete]
 
 
+def test_score_result_marks_parent_only_price_as_ambiguous_neighbor() -> None:
+    result = SearchResult(
+        "5712g new 2024",
+        raw_listing_text=(
+            "HK STOCK LIST 116505 rainbow 284k "
+            "5712g new 2024 -> 115k 5726/1A used 2022 68k"
+        ),
+        posted_date="May 18, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="5712g")
+
+    assert score.price_evidence_score == 0
+    assert "price.ambiguous_neighbor" in score.reasons
+
+
 def test_rank_results_by_quality_preserves_original_order_when_scores_tie() -> None:
     first = SearchResult("5205R 2026-04 $428000", posted_date="May 17, 2026")
     second = SearchResult("5205R 2026-04 $429000", posted_date="May 17, 2026")

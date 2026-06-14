@@ -19,6 +19,8 @@ class ListingCandidate:
     source_url: str | None = None
     match_text: str | None = None
     raw_listing_text: str | None = None
+    scope_reason: str | None = None
+    segment_reason_codes: tuple[str, ...] = ()
 
 
 LISTING_SELECTORS = [
@@ -126,6 +128,11 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
                         source_url=source_url,
                         match_text=segment,
                         raw_listing_text=parent_text,
+                        scope_reason="scope.stock_list",
+                        segment_reason_codes=(
+                            "segment.stock_list_marker",
+                            "segment.reference_boundary",
+                        ),
                     )
                 )
         else:

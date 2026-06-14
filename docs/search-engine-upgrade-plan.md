@@ -578,6 +578,18 @@ Acceptance:
 - [ ] Audit output explains segment/image/price decisions.
 - [ ] Result-page and MCP result schemas remain backward compatible.
 
+Initial implementation slice:
+
+- [x] `SearchResult` can carry optional `scope_reason`, `image_reason`,
+  `price_reason`, and `segment_reason_codes` metadata without changing required
+  MCP/result-page fields.
+- [x] JSON stock-list item segments attach stock-list scope and segment boundary
+  reason codes at parse time.
+- [x] Price scoring distinguishes segment-local visible prices from parent-only
+  neighboring prices via `price.ambiguous_neighbor`.
+- [x] Search cache, result-reference cache, MCP payloads, result-page sidecars,
+  and audit reports preserve evidence metadata when present.
+
 Verification:
 
 ```bash
