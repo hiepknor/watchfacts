@@ -672,10 +672,21 @@ reject/demote item-local: black ceramic
 
 Acceptance:
 
-- [ ] Conflict checks apply only when the conflicting descriptor is local to the
+- [x] Conflict checks apply only when the conflicting descriptor is local to the
   same reference/item segment.
-- [ ] Reference-only queries do not inherit descriptor conflict filtering.
-- [ ] Audit emits conflict reason codes.
+- [x] Reference-only queries do not inherit descriptor conflict filtering.
+- [x] Audit emits conflict reason codes.
+
+Initial implementation slice:
+
+- [x] Result scoring now uses `QueryPlan.conflict_descriptors` for material
+  conflicts such as `rg` versus `wg`.
+- [x] Conflict demotion scans the matcher-selected local output text rather
+  than the raw parent listing context.
+- [x] Legacy color conflict demotion remains available, but now emits explicit
+  `conflict.local_descriptor:*` reason codes.
+- [x] Reference-only queries bypass descriptor conflict demotion.
+- [x] `SEARCH_CACHE_VERSION` is bumped for behavior-changing ranking output.
 
 Verification:
 

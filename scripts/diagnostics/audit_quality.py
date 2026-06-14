@@ -142,7 +142,7 @@ def build_query_report(
                 fuzzy_reference_score=fuzzy.reference_score,
                 fuzzy_descriptor_overlap_score=fuzzy.descriptor_overlap_score,
                 query_intent=query_intent,
-                guardrail_action=_row_guardrail_action(fuzzy),
+                guardrail_action=_row_guardrail_action(score.reasons, fuzzy),
                 score_reasons=score.reasons,
                 fuzzy_reason_codes=fuzzy.reason_codes,
                 suspicious_reasons=tuple(issue.reason for issue in suspicious),
@@ -656,7 +656,9 @@ def _query_intent_from_final_result(query: str) -> str:
     return classify_query_intent(query).kind
 
 
-def _row_guardrail_action(fuzzy) -> str:
+def _row_guardrail_action(score_reasons: tuple[str, ...], fuzzy) -> str:
+    if "guardrail.descriptor_conflict" in score_reasons:
+        return "demote"
     if fuzzy.reference_score >= 100 and fuzzy.descriptor_overlap_score < 50:
         return "warn"
     return "none"

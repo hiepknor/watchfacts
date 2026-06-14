@@ -337,3 +337,25 @@ def test_build_query_report_marks_stock_list_scope_and_redacts_raw_preview() -> 
     assert "[REDACTED_PATH]" in row.raw_listing_preview
     assert report.summary.server_filtered_result_count == 1
     assert report.summary.scoped_stock_list_count == 1
+
+
+def test_build_query_report_emits_descriptor_conflict_reason_codes() -> None:
+    result = SearchResult(
+        "RM07-01 WG Snow Onyx N4-26 360000 USDT",
+        posted_date="May 17, 2026",
+    )
+
+    report = build_query_report("rm07-01 rg snow", [result], limit=1)
+    row = report.rows[0]
+    events = [
+        json.loads(line)
+        for line in format_jsonl_report([report]).splitlines()
+    ]
+    final_event = next(event for event in events if event["type"] == "final_result")
+
+    assert row.guardrail_action == "demote"
+    assert "guardrail.descriptor_conflict" in row.score_reasons
+    assert "conflict.local_descriptor:wg" in row.score_reasons
+    assert final_event["guardrail_action"] == "demote"
+    assert "guardrail.descriptor_conflict" in final_event["reason_codes"]
+    assert "conflict.local_descriptor:wg" in final_event["reason_codes"]

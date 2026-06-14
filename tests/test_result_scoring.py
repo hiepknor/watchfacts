@@ -315,6 +315,63 @@ def test_score_result_exposes_conflict_penalty_feature() -> None:
     assert "conflict.descriptor" in score.reasons
 
 
+def test_score_result_demotes_query_plan_descriptor_conflict() -> None:
+    result = SearchResult(
+        "RM07-01 WG Snow Onyx N4-26 360000 USDT",
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="rm07-01 rg snow")
+
+    assert score.quality_group == 1
+    assert score.conflict_penalty_score == 1
+    assert "guardrail.descriptor_conflict" in score.reasons
+    assert "conflict.local_descriptor:wg" in score.reasons
+
+
+def test_score_result_ignores_descriptor_conflict_outside_selected_segment() -> None:
+    result = SearchResult(
+        "RM07-01 RG Snow Diamonds Red Lips Good Condition 260000US",
+        raw_listing_text=(
+            "RM07-01 RG Snow Diamonds Red Lips Good Condition 260000US "
+            "RM07-01 WG Snow Onyx N4-26 360000 USDT"
+        ),
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="rm07-01 rg snow")
+
+    assert score.quality_group == 0
+    assert score.conflict_penalty_score == 0
+    assert "guardrail.descriptor_conflict" not in score.reasons
+
+
+def test_score_result_does_not_apply_descriptor_conflict_to_reference_only_query() -> None:
+    result = SearchResult(
+        "RM07-01 WG Snow Onyx N4-26 360000 USDT",
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="rm07-01")
+
+    assert score.quality_group == 0
+    assert score.conflict_penalty_score == 0
+    assert "guardrail.descriptor_conflict" not in score.reasons
+
+
+def test_score_result_does_not_apply_descriptor_conflict_without_selected_reference() -> None:
+    result = SearchResult(
+        "Patek black dial full set $428000",
+        posted_date="May 17, 2026",
+    )
+
+    score = score_result(result, original_rank=0, query="5205r green")
+
+    assert score.quality_group == 0
+    assert score.conflict_penalty_score == 0
+    assert "guardrail.descriptor_conflict" not in score.reasons
+
+
 def test_rank_results_by_quality_demotes_short_model_suffix_phrase_miss() -> None:
     broad_stock_list = SearchResult(
         "1,163,000 145.032 Zeitwerk, Used Full set | HKD 821,000 Lange Zeitwerk",

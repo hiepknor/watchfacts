@@ -6,11 +6,14 @@ from functools import lru_cache
 import re
 
 from app.searching.issues import detect_suspicious_result
-from app.searching.fuzzy_diagnostics import score_fuzzy_match
 from app.searching.matcher import explain_extraction
-from app.searching.matcher_aliases import canonicalize_descriptor_tokens_as_set
+from app.searching.matcher_aliases import (
+    canonicalize_descriptor_tokens_as_set,
+    conflict_descriptor_tokens,
+    descriptor_exists_in_tokens,
+)
 from app.searching.matcher_normalization import normalize_text
-from app.searching.query_intent import build_query_plan, classify_query_intent
+from app.searching.query_intent import QueryPlan, build_query_plan
 from app.searching.search_result import SearchResult
 
 
@@ -227,20 +230,16 @@ def _guardrail_score(
 ) -> tuple[int, tuple[str, ...]]:
     if not query:
         return 0, ()
-    intent = classify_query_intent(query)
-    if _missing_short_model_suffix_phrase(intent.required_descriptor_tokens, result):
+    plan = _cached_query_plan(query)
+    if _missing_short_model_suffix_phrase(plan.required_descriptors, result):
         return 1, ("guardrail.brand_model_phrase_missing",)
-    if intent.kind not in {"reference_with_descriptor", "reference_with_year"}:
+    if plan.intent_kind not in {"reference_with_descriptor", "reference_with_year"}:
         return 0, ()
-    if not intent.required_descriptor_tokens:
+    if not plan.required_descriptors:
         return 0, ()
-    fuzzy = score_fuzzy_match(query, result.listing_text)
-    if (
-        fuzzy.reference_score >= 100
-        and fuzzy.descriptor_overlap_score < 50
-        and _has_required_descriptor_conflict(intent.required_descriptor_tokens, result)
-    ):
-        return 1, ("guardrail.descriptor_conflict",)
+    conflict_reasons = _local_descriptor_conflict_reasons(plan, result)
+    if conflict_reasons:
+        return 1, ("guardrail.descriptor_conflict", *conflict_reasons)
     return 0, ()
 
 
@@ -274,7 +273,7 @@ def _alias_confidence_score(query: str | None) -> tuple[int, tuple[str, ...]]:
 
 
 @lru_cache(maxsize=256)
-def _cached_query_plan(query: str):
+def _cached_query_plan(query: str) -> QueryPlan:
     return build_query_plan(query)
 
 
@@ -300,21 +299,95 @@ def _missing_short_model_suffix_phrase(
     )
 
 
-def _has_required_descriptor_conflict(
-    required_descriptor_tokens: tuple[str, ...],
+def _local_descriptor_conflict_reasons(
+    plan: QueryPlan,
     result: SearchResult,
+) -> tuple[str, ...]:
+    trace = explain_extraction(plan.original_query, result.listing_text)
+    if plan.references and trace.selected_reference is None:
+        return ()
+    local_text = trace.output_text or result.listing_text
+    local_tokens = normalize_text(local_text).split()
+    if not local_tokens:
+        return ()
+
+    conflict_descriptors: list[str] = []
+    if _has_query_plan_descriptor_conflict(
+        plan.required_descriptors,
+        plan.conflict_descriptors,
+        local_tokens,
+    ):
+        conflict_descriptors.extend(
+            descriptor
+            for descriptor in plan.conflict_descriptors
+            if descriptor_exists_in_tokens(descriptor, local_tokens)
+        )
+    conflict_descriptors.extend(
+        _local_color_conflict_descriptors(plan.required_descriptors, local_tokens)
+    )
+
+    if not conflict_descriptors:
+        return ()
+    return tuple(
+        f"conflict.local_descriptor:{descriptor}"
+        for descriptor in _dedupe_preserving_order(conflict_descriptors)
+    )
+
+
+def _has_query_plan_descriptor_conflict(
+    required_descriptor_tokens: tuple[str, ...],
+    conflict_descriptors: tuple[str, ...],
+    local_tokens: list[str],
 ) -> bool:
+    if not conflict_descriptors:
+        return False
+    missing_conflictable_required = [
+        descriptor
+        for descriptor in canonicalize_descriptor_tokens_as_set(
+            required_descriptor_tokens
+        )
+        if conflict_descriptor_tokens((descriptor,))
+        and not descriptor_exists_in_tokens(descriptor, local_tokens)
+    ]
+    if not missing_conflictable_required:
+        return False
+    return any(
+        descriptor_exists_in_tokens(descriptor, local_tokens)
+        for descriptor in conflict_descriptors
+    )
+
+
+def _local_color_conflict_descriptors(
+    required_descriptor_tokens: tuple[str, ...],
+    local_tokens: list[str],
+) -> tuple[str, ...]:
     required_colors = (
         canonicalize_descriptor_tokens_as_set(required_descriptor_tokens)
         & CANONICAL_COLOR_DESCRIPTOR_GROUP
     )
     if not required_colors:
-        return False
+        return ()
+    if any(
+        descriptor_exists_in_tokens(descriptor, local_tokens)
+        for descriptor in required_colors
+    ):
+        return ()
     listing_colors = (
-        canonicalize_descriptor_tokens_as_set(normalize_text(result.listing_text).split())
+        canonicalize_descriptor_tokens_as_set(local_tokens)
         & CANONICAL_COLOR_DESCRIPTOR_GROUP
     )
-    return bool(listing_colors and required_colors.isdisjoint(listing_colors))
+    return tuple(sorted(listing_colors - required_colors))
+
+
+def _dedupe_preserving_order(values: list[str]) -> tuple[str, ...]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        deduped.append(value)
+        seen.add(value)
+    return tuple(deduped)
 
 
 def _posted_date_score(value: str | None) -> tuple[int, float, str]:
