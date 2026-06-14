@@ -1445,10 +1445,27 @@ positives, missed retrieval, or ranking drift.
 
 Acceptance:
 
-- [ ] Brand additions require before/after audit evidence.
-- [ ] Brand aliases live in the existing rulebook data, not scattered branches.
-- [ ] The default benchmark and focused audit remain stable after each accepted
+- [x] Brand additions require before/after audit evidence.
+- [x] Brand aliases live in the existing rulebook data, not scattered branches.
+- [x] The default benchmark and focused audit remain stable after each accepted
   brand addition.
+
+Implementation notes:
+
+- Added `docs/brand-recognition-backlog.md` as the gate for future brand taxonomy
+  changes.
+- The gate requires before/after audit evidence, a concrete failure mode, tests,
+  and benchmark/focused-audit verification before accepting a brand addition.
+- Accepted brand aliases must live in existing rulebook data:
+  `BRAND_ALIAS_RULES`, `COLLECTION_RULES`, `NICKNAME_RULES`, or
+  `REFERENCE_GRAMMAR_RULES`.
+- `FPJ Elegante Titanium` remains deferred: the audit shows missing brand
+  candidate metadata, but current top rows remain relevant and the active issue
+  is ambiguous parent-image ownership rather than retrieval or ranking drift.
+
+Verification:
+
+- Documentation-only change verified with `git diff --check`.
 
 ## Metrics
 

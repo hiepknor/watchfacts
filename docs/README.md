@@ -18,6 +18,7 @@ service for structured integrations, result pages, diagnostics, and handoff.
 | [System Design Review](system-design-review.md) | Architecture review snapshot, strengths, risks, and prioritized follow-ups |
 | [Search Quality Improvement Plan](search-quality-improvement-plan.md) | One-month plan for image attribution, stock-list scoping, audit visibility, and deploy verification |
 | [Search Engine Upgrade Plan](search-engine-upgrade-plan.md) | Concrete plan for pipeline naming, query recognition, multi-brand taxonomy, retrieval planning, candidate processing, result delivery, and evaluation gates |
+| [Brand Recognition Backlog](brand-recognition-backlog.md) | Gate and backlog for brand taxonomy additions that require audit evidence before code changes |
 | [Continuous Improvement Spec](continuous-improvement.md) | Feedback buttons, issue storage, suspicious-result detection, and regression loop |
 | [Result Quality Scoring Spec](result-quality-scoring.md) | Next-phase ranking, matcher diagnostics, score reasons, and refactor guardrails |
 | [Production Quality Audit Spec](production-quality-audit.md) | Production query audit loop, issue classification, ambiguous price policy, and deploy verification |
