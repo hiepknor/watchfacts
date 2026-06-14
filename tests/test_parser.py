@@ -191,5 +191,97 @@ def test_parse_json_nested_variant_without_nested_image_does_not_inherit_parent_
     ]
 
 
+def test_parse_json_stock_list_title_emits_item_segments_with_parent_metadata() -> None:
+    html = """
+    {
+      "listings": [
+        {
+          "title": "HK STOCK LIST 116505 rainbow 284k 5712g new 2024 -> 115k 5726/1A used 2022 68k",
+          "companyName": "Mr Et",
+          "companyWhatsapp": "17826241887",
+          "repostedAt": "2026-06-10 10:00:00",
+          "frontImage": "https://watchfacts.example/stock-list-cover.jpg",
+          "number": 9714092
+        }
+      ]
+    }
+    """
+    parent_text = (
+        "HK STOCK LIST 116505 rainbow 284k "
+        "5712g new 2024 -> 115k 5726/1A used 2022 68k"
+    )
+
+    assert parse_listings(html) == [
+        ListingCandidate(
+            listing_text="116505 rainbow 284k",
+            seller="Mr Et",
+            seller_phone="17826241887",
+            posted_date="June 10, 2026",
+            image_url="https://watchfacts.example/stock-list-cover.jpg",
+            source_url="/flash-sales/9714092",
+            match_text="116505 rainbow 284k",
+            raw_listing_text=parent_text,
+        ),
+        ListingCandidate(
+            listing_text="5712g new 2024 -> 115k",
+            seller="Mr Et",
+            seller_phone="17826241887",
+            posted_date="June 10, 2026",
+            image_url="https://watchfacts.example/stock-list-cover.jpg",
+            source_url="/flash-sales/9714092",
+            match_text="5712g new 2024 -> 115k",
+            raw_listing_text=parent_text,
+        ),
+        ListingCandidate(
+            listing_text="5726/1A used 2022 68k",
+            seller="Mr Et",
+            seller_phone="17826241887",
+            posted_date="June 10, 2026",
+            image_url="https://watchfacts.example/stock-list-cover.jpg",
+            source_url="/flash-sales/9714092",
+            match_text="5726/1A used 2022 68k",
+            raw_listing_text=parent_text,
+        ),
+    ]
+
+
+def test_parse_json_stock_list_title_keeps_condition_date_inside_segment() -> None:
+    html = """
+    {
+      "listings": [
+        {
+          "title": "HK STOCK LIST 5712g new N3/2026 -> 115k 5726/1A used 2022 68k",
+          "companyName": "Mr Et",
+          "repostedAt": "2026-06-10 10:00:00",
+          "number": 9714092
+        }
+      ]
+    }
+    """
+    parent_text = (
+        "HK STOCK LIST 5712g new N3/2026 -> 115k "
+        "5726/1A used 2022 68k"
+    )
+
+    assert parse_listings(html) == [
+        ListingCandidate(
+            listing_text="5712g new N3/2026 -> 115k",
+            seller="Mr Et",
+            posted_date="June 10, 2026",
+            source_url="/flash-sales/9714092",
+            match_text="5712g new N3/2026 -> 115k",
+            raw_listing_text=parent_text,
+        ),
+        ListingCandidate(
+            listing_text="5726/1A used 2022 68k",
+            seller="Mr Et",
+            posted_date="June 10, 2026",
+            source_url="/flash-sales/9714092",
+            match_text="5726/1A used 2022 68k",
+            raw_listing_text=parent_text,
+        ),
+    ]
+
+
 def test_parse_listings_returns_empty_list_when_no_listing_container_exists() -> None:
     assert parse_listings("<html><body><p>No listings here</p></body></html>") == []

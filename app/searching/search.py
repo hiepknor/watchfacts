@@ -49,7 +49,7 @@ from app.searching.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger("app.search")
-SEARCH_CACHE_VERSION = "search-v25"
+SEARCH_CACHE_VERSION = "search-v26"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -1109,7 +1109,7 @@ def _to_search_result(query: str, listing: ListingCandidate) -> SearchResult:
             query=query,
         ),
         source_url=listing.source_url,
-        raw_listing_text=listing.listing_text,
+        raw_listing_text=listing.raw_listing_text or listing.listing_text,
     )
 
 
@@ -1199,11 +1199,12 @@ def attribute_product_image(
         return ImageAttribution(None, "image.missing_source")
 
     candidate_text = listing_text or listing.listing_text
-    if normalize_text(candidate_text) == normalize_text(listing.listing_text):
+    raw_text = listing.raw_listing_text or listing.listing_text
+    if normalize_text(candidate_text) == normalize_text(raw_text):
         return ImageAttribution(listing.image_url, "image.direct")
-    if _looks_like_multi_listing_for_image(listing.listing_text):
+    if _looks_like_multi_listing_for_image(raw_text):
         if _is_first_scoped_listing_for_image(
-            raw_text=listing.listing_text,
+            raw_text=raw_text,
             candidate_text=candidate_text,
         ):
             return ImageAttribution(

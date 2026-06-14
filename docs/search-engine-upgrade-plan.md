@@ -529,6 +529,15 @@ Acceptance:
 - [ ] Segment text does not leak unrelated neighboring product references.
 - [ ] `scope.stock_list` remains visible when confidence is lower.
 
+Initial implementation slice:
+
+- [x] JSON listing titles with explicit stock-list markers are split into
+  item-level candidates using product-reference boundaries.
+- [x] Stock-list item candidates keep parent seller, posted date, source URL,
+  seller phone, and source image metadata.
+- [x] Stock-list item candidates preserve the full parent title as raw context
+  so audit and quality checks can still identify `scope.stock_list`.
+
 Verification:
 
 ```bash

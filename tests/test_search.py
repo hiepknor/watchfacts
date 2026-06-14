@@ -2505,6 +2505,10 @@ def test_server_filtered_json_stock_list_scopes_reference_and_omits_bundle_image
 
     assert len(results) == 1
     assert results[0].listing_text == "5712g new 2024 → 115k"
+    assert results[0].raw_listing_text == (
+        "HK STOCK LIST 116505 aftermarket rainbow watch only → 284k "
+        "5712g new 2024 → 115k 116500 panda 2025 → 31k"
+    )
     assert results[0].seller == "Mr Et"
     assert results[0].image_url is None
 

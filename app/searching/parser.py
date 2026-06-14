@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -17,6 +18,7 @@ class ListingCandidate:
     image_url: str | None = None
     source_url: str | None = None
     match_text: str | None = None
+    raw_listing_text: str | None = None
 
 
 LISTING_SELECTORS = [
@@ -27,6 +29,20 @@ LISTING_SELECTORS = [
     ".watch-listing",
     ".product",
 ]
+STOCK_LIST_MARKER_RE = re.compile(
+    r"\b(?:hk\s+)?stock\s+list\b|\bstocklist\b",
+    re.IGNORECASE,
+)
+PRODUCT_REFERENCE_RE = re.compile(
+    r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:[./-][A-Za-z0-9]+)*\b",
+    re.IGNORECASE,
+)
+STOCK_LIST_CONDITION_DATE_RE = re.compile(
+    r"(?:n?\d{1,2}|\d{1,2}n)[/-]\d{2,4}y?"
+    r"|\d{2,4}[/-](?:n?\d{1,2}|\d{1,2}n)y?"
+    r"|\d{4}\.\d{1,2}y?",
+    re.IGNORECASE,
+)
 
 
 def parse_listings(html: str) -> list[ListingCandidate]:
@@ -97,17 +113,33 @@ def _parse_json_listing_item(item: dict[str, Any]) -> list[ListingCandidate]:
 
     candidates: list[ListingCandidate] = []
     if parent_text:
-        candidates.append(
-            ListingCandidate(
-                listing_text=parent_text,
-                seller=seller or None,
-                seller_phone=_json_seller_phone(item),
-                posted_date=posted_date,
-                image_url=parent_image,
-                source_url=source_url,
-                match_text=parent_match_text,
+        stock_segments = _stock_list_segments(parent_text)
+        if stock_segments:
+            for segment in stock_segments:
+                candidates.append(
+                    ListingCandidate(
+                        listing_text=segment,
+                        seller=seller or None,
+                        seller_phone=_json_seller_phone(item),
+                        posted_date=posted_date,
+                        image_url=parent_image,
+                        source_url=source_url,
+                        match_text=segment,
+                        raw_listing_text=parent_text,
+                    )
+                )
+        else:
+            candidates.append(
+                ListingCandidate(
+                    listing_text=parent_text,
+                    seller=seller or None,
+                    seller_phone=_json_seller_phone(item),
+                    posted_date=posted_date,
+                    image_url=parent_image,
+                    source_url=source_url,
+                    match_text=parent_match_text,
+                )
             )
-        )
 
     nested = nested_listings
     if has_nested_listings:
@@ -203,6 +235,55 @@ def _source_url(node: Tag) -> str | None:
 
 def _clean_text(value: str | None) -> str:
     return " ".join(str(value).split()) if value else ""
+
+
+def _stock_list_segments(value: str) -> list[str]:
+    if not STOCK_LIST_MARKER_RE.search(value):
+        return []
+
+    matches = [
+        match
+        for match in PRODUCT_REFERENCE_RE.finditer(value)
+        if _looks_like_product_reference(match.group(0))
+    ]
+    references = {_clean_reference(match.group(0)) for match in matches}
+    if len(matches) < 2 or len(references) < 2:
+        return []
+
+    segments: list[str] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(value)
+        segment = _clean_stock_list_segment(value[match.start() : end])
+        if segment:
+            segments.append(segment)
+    return segments if len(segments) > 1 else []
+
+
+def _clean_stock_list_segment(value: str) -> str:
+    return _clean_text(value.strip(" \t\r\n-–—•*|,;:"))
+
+
+def _clean_reference(value: str) -> str:
+    return value.casefold().strip(":,.;")
+
+
+def _looks_like_product_reference(value: str) -> bool:
+    normalized = _clean_reference(value)
+    if not normalized or not any(character.isdigit() for character in normalized):
+        return False
+    if STOCK_LIST_CONDITION_DATE_RE.fullmatch(normalized):
+        return False
+    if re.fullmatch(r"\d+(?:\.\d+)?[km]", normalized):
+        return False
+    if normalized.isdigit() and len(normalized) == 4:
+        year = int(normalized)
+        if 1900 <= year <= 2099:
+            return False
+    if any(currency in normalized for currency in ("hkd", "usd", "usdt", "eur", "aed")):
+        return False
+    if len(normalized) < 4 and "/" not in normalized:
+        return False
+    return True
 
 
 def _build_match_text(*parts: str | None) -> str:
