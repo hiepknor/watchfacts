@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.diagnostics.benchmark_mcp_queries import (
+    DEFAULT_ALIAS_TOTAL_DELTA_RATIO,
     DEFAULT_BENCHMARK_QUERIES,
     _call_search,
     _dedupe_queries,
@@ -41,9 +42,23 @@ class PrewarmRow:
     cache_hit: bool | None = None
     total_count: int | None = None
     result_count: int | None = None
+    canonical_query: str | None = None
     error_type: str | None = None
     error: str | None = None
     pass_name: str = "warm"
+
+
+@dataclass(frozen=True)
+class PrewarmAliasRecallCheck:
+    canonical_query: str
+    pass_name: str
+    ok: bool
+    min_total: int
+    max_total: int
+    delta: int
+    delta_ratio: float
+    max_delta_ratio: float
+    query_totals: tuple[str, ...]
 
 
 async def prewarm_queries(
@@ -126,7 +141,12 @@ async def _prewarm_query(
             error=str(exc)[:500],
             pass_name=pass_name,
         )
-    return _row_from_payload(query=query, payload=payload, elapsed_ms=_elapsed_ms(started_at), pass_name=pass_name)
+    return _row_from_payload(
+        query=query,
+        payload=payload,
+        elapsed_ms=_elapsed_ms(started_at),
+        pass_name=pass_name,
+    )
 
 
 def _row_from_payload(
@@ -138,6 +158,7 @@ def _row_from_payload(
 ) -> PrewarmRow:
     diagnostics = payload.get("search_diagnostics")
     diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
+    query_plan = _dict_value(diagnostics.get("query_plan"))
     return PrewarmRow(
         query=query,
         ok=True,
@@ -147,11 +168,17 @@ def _row_from_payload(
         else None,
         total_count=_optional_int(payload.get("total_count")),
         result_count=_optional_int(payload.get("result_count")),
+        canonical_query=_optional_str(query_plan.get("canonical_query")),
         pass_name=pass_name,
     )
 
 
-def render_text(rows: list[PrewarmRow]) -> str:
+def render_text(
+    rows: list[PrewarmRow],
+    *,
+    alias_checks: tuple[PrewarmAliasRecallCheck, ...] | None = None,
+    require_alias_recall: bool = False,
+) -> str:
     lines: list[str] = []
     for row in rows:
         parts = [
@@ -163,9 +190,17 @@ def render_text(rows: list[PrewarmRow]) -> str:
             f"total_count={row.total_count}",
             f"result_count={row.result_count}",
         ]
+        if row.canonical_query:
+            parts.append(f"canonical={row.canonical_query!r}")
         if row.error_type:
             parts.append(f"error_type={row.error_type}")
         lines.append("MCP_PREWARM " + " ".join(parts))
+    lines.extend(
+        _alias_recall_text_lines(
+            alias_checks or (),
+            require_alias_recall=require_alias_recall,
+        )
+    )
     lines.append(
         "SUMMARY "
         + " ".join(f"{key}={value}" for key, value in sorted(summarize_rows(rows).items()))
@@ -194,8 +229,73 @@ def summarize_rows(rows: list[PrewarmRow]) -> dict[str, int]:
     return summary
 
 
+def evaluate_prewarm_alias_recall(
+    rows: list[PrewarmRow],
+    *,
+    max_delta_ratio: float = DEFAULT_ALIAS_TOTAL_DELTA_RATIO,
+) -> tuple[PrewarmAliasRecallCheck, ...]:
+    groups: dict[tuple[str, str], dict[str, int]] = {}
+    for row in rows:
+        if not row.ok or row.total_count is None or not row.canonical_query:
+            continue
+        key = (row.canonical_query, row.pass_name)
+        groups.setdefault(key, {})[row.query] = row.total_count
+
+    checks: list[PrewarmAliasRecallCheck] = []
+    for (canonical_query, pass_name), query_totals in sorted(groups.items()):
+        if len(query_totals) < 2:
+            continue
+        totals = list(query_totals.values())
+        min_total = min(totals)
+        max_total = max(totals)
+        delta = max_total - min_total
+        raw_delta_ratio = delta / max(max_total, 1)
+        checks.append(
+            PrewarmAliasRecallCheck(
+                canonical_query=canonical_query,
+                pass_name=pass_name,
+                ok=raw_delta_ratio <= max_delta_ratio,
+                min_total=min_total,
+                max_total=max_total,
+                delta=delta,
+                delta_ratio=round(raw_delta_ratio, 3),
+                max_delta_ratio=max_delta_ratio,
+                query_totals=tuple(
+                    f"{query}:{total}" for query, total in sorted(query_totals.items())
+                ),
+            )
+        )
+    return tuple(checks)
+
+
+def prewarm_passed(
+    rows: list[PrewarmRow],
+    *,
+    alias_checks: tuple[PrewarmAliasRecallCheck, ...] = (),
+    require_alias_recall: bool = False,
+    require_hot_cache: bool = False,
+) -> bool:
+    if not all(row.ok for row in rows):
+        return False
+    if require_hot_cache:
+        verify_rows = [row for row in rows if row.pass_name == "verify"]
+        if not verify_rows or any(row.cache_hit is not True for row in verify_rows):
+            return False
+    if require_alias_recall and not alias_checks:
+        return False
+    return all(check.ok for check in alias_checks)
+
+
 def _optional_int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _dict_value(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _bool_label(value: bool | None) -> str:
@@ -208,6 +308,32 @@ def _bool_label(value: bool | None) -> str:
 
 def _elapsed_ms(started_at: float) -> int:
     return max(0, int((time.perf_counter() - started_at) * 1000))
+
+
+def _alias_recall_text_lines(
+    checks: tuple[PrewarmAliasRecallCheck, ...],
+    *,
+    require_alias_recall: bool,
+) -> list[str]:
+    if not checks:
+        if require_alias_recall:
+            return ["MCP_PREWARM_ALIAS ok=false reason=no_canonical_alias_groups"]
+        return []
+    lines: list[str] = []
+    for check in checks:
+        lines.append(
+            "MCP_PREWARM_ALIAS "
+            f"pass={check.pass_name} "
+            f"canonical={check.canonical_query!r} "
+            f"ok={str(check.ok).lower()} "
+            f"min={check.min_total} "
+            f"max={check.max_total} "
+            f"delta={check.delta} "
+            f"ratio={check.delta_ratio:.3f} "
+            f"threshold={check.max_delta_ratio:.3f} "
+            f"queries={','.join(check.query_totals)!r}"
+        )
+    return lines
 
 
 def main() -> int:
@@ -234,11 +360,19 @@ def main() -> int:
     parser.add_argument("--verify-hot", action="store_true")
     parser.add_argument("--use-benchmark-defaults", action="store_true")
     parser.add_argument("--format", choices=("text", "jsonl"), default="text")
+    parser.add_argument(
+        "--alias-total-delta-ratio",
+        type=float,
+        default=DEFAULT_ALIAS_TOTAL_DELTA_RATIO,
+        help="Maximum allowed total_count delta ratio across benchmark alias groups.",
+    )
     args = parser.parse_args()
     if args.limit <= 0:
         parser.error("--limit must be positive")
     if args.timeout_seconds <= 0:
         parser.error("--timeout-seconds must be positive")
+    if args.alias_total_delta_ratio < 0:
+        parser.error("--alias-total-delta-ratio must be non-negative")
 
     queries = list(args.queries or [])
     if args.query_file:
@@ -259,11 +393,35 @@ def main() -> int:
             verify_hot=args.verify_hot,
         )
     )
+    alias_checks = (
+        evaluate_prewarm_alias_recall(
+            rows,
+            max_delta_ratio=args.alias_total_delta_ratio,
+        )
+        if args.use_benchmark_defaults
+        else ()
+    )
+    require_alias_recall = args.use_benchmark_defaults
     if args.format == "jsonl":
         print(render_jsonl(rows))
     else:
-        print(render_text(rows))
-    return 0 if all(row.ok for row in rows) else 1
+        print(
+            render_text(
+                rows,
+                alias_checks=alias_checks,
+                require_alias_recall=require_alias_recall,
+            )
+        )
+    return (
+        0
+        if prewarm_passed(
+            rows,
+            alias_checks=alias_checks,
+            require_alias_recall=require_alias_recall,
+            require_hot_cache=args.verify_hot,
+        )
+        else 1
+    )
 
 
 if __name__ == "__main__":

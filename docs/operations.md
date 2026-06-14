@@ -108,11 +108,13 @@ Access control:
 - `SEARCH_MAX_CONCURRENT_SEARCHES=1` serializes non-Telegram WatchFacts searches,
   including MCP requests, while identical queries still coalesce.
 - `SEARCH_RETRIEVAL_CONCURRENCY=1` keeps retrieval branches inside one search
-  sequential by default. Set `2` to evaluate bounded parallel branch fetching
-  after comparing cold benchmark output; the runtime rejects values above `4`.
+  sequential by default. Set `2` only after a cold production benchmark confirms
+  lower latency with no result-count, top-result, or alias-recall drift; the
+  runtime rejects values above `4`.
 - Use `make mcp-prewarm` after deploy or from a light cron to warm common
   production query cache entries. Add `MCP_PREWARM_FORMAT=jsonl` when the output
-  should be archived as an ops artifact.
+  should be archived as an ops artifact. Prewarm is a latency helper, not a
+  deploy gate or a substitute for fixing cold-path retrieval waste.
 - Existing production `.env` files are not overwritten by `.env.example`.
   After changing cache policy, run `make mcp-runtime-config` on the server and
   verify `search_cache_ttl_seconds=1800` and
@@ -276,13 +278,17 @@ logs.
 `make deploy-mcp` does the same for `watchfacts-mcp`, runs the bounded quality
 audit gate, force-recreates the MCP container, waits for health, then prewarms
 representative MCP search queries on a best-effort basis before showing recent
-MCP logs. The prewarm step covers both hard quality cases and benchmark/common
-brand queries, reducing first-query latency by populating the shared SQLite
-search cache used by both MCP and the Telegram bot. Set
+MCP logs. The quality audit and health wait are hard deploy gates; postdeploy
+prewarm failures are converted to warnings so they cannot roll back or mask the
+deploy result. The prewarm step covers both hard quality cases and
+benchmark/common brand queries, reducing first-query latency by populating the
+shared SQLite search cache used by both MCP and the Telegram bot. Set
 `MCP_POSTDEPLOY_PREWARM=0` to skip all warmup, or
 `MCP_POSTDEPLOY_PREWARM_BENCHMARK_DEFAULTS=0` to skip the extra benchmark/common
 brand warmup pass. Prewarm verifies the hot-cache path by default; set
-`MCP_PREWARM_VERIFY_HOT=0` to skip the second verification pass.
+`MCP_PREWARM_VERIFY_HOT=0` to skip the second verification pass. Benchmark
+default prewarm also checks canonical alias groups with the same 10% default
+`total_count` drift threshold used by `make mcp-benchmark`.
 
 `make deploy` deploys both `watchfacts-bot` and `watchfacts-mcp`.
 
@@ -404,6 +410,7 @@ MCP_BENCHMARK_FORMAT=jsonl make mcp-benchmark > mcp-benchmark.jsonl
 make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
 make mcp-runtime-config
 make mcp-prewarm
+make mcp-prewarm-benchmark-defaults
 MCP_PREWARM_FORMAT=jsonl make mcp-prewarm > mcp-prewarm.jsonl
 docker compose -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml exec -T watchfacts-mcp \
   python scripts/diagnostics/benchmark_mcp_queries.py \
@@ -437,8 +444,11 @@ make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
 This clears local `search_cache` and `result_reference_cache` rows before each
 query run. For retrieval parallelism changes, compare cold benchmark output
 with `SEARCH_RETRIEVAL_CONCURRENCY=1` and `2` on the running MCP service before
-raising the setting further. Use `audit_quality.py` when a query needs
-quality-group, scoring, image attribution, or raw-to-final funnel evidence.
+raising the setting further. If hot-cache latency is good but cold-path latency
+is poor, run the cold benchmark and optimize retrieval, parsing, or matching;
+do not widen prewarm lists to hide slow uncached behavior. Use `audit_quality.py`
+when a query needs quality-group, scoring, image attribution, or raw-to-final
+funnel evidence.
 
 ## Search Engine Deploy Gate
 
@@ -484,10 +494,12 @@ python scripts/diagnostics/audit_quality.py \
 ```
 
 If the change can alter cached output ordering, eligibility, extraction,
-scoring, quality gates, serialized result shape, or search diagnostics consumed
-by deploy gates, bump `SEARCH_CACHE_VERSION` in `app/searching/search.py`.
-Deploy notes should state either the old/new cache version or why no bump was
-needed.
+scoring, quality gates, serialized result shape, retrieval expansion semantics,
+or search diagnostics consumed by deploy gates, bump `SEARCH_CACHE_VERSION` in
+`app/searching/search.py`. Runtime-only retrieval concurrency changes do not
+need a cache-version bump when benchmark evidence shows equivalent result
+counts, top results, and alias recall. Deploy notes should state either the
+old/new cache version or why no bump was needed.
 
 Deploy and postdeploy verification:
 

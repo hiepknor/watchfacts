@@ -149,15 +149,41 @@ def test_makefile_has_mcp_benchmark_target() -> None:
 def test_makefile_has_mcp_prewarm_target() -> None:
     makefile = Path("Makefile").read_text()
     prewarm_target = makefile.split("\nmcp-prewarm:", 1)[1].split(
-        "\n\nmcp-wait-healthy:",
+        "\n\nmcp-prewarm-benchmark-defaults:",
         1,
     )[0]
+    benchmark_prewarm_target = makefile.split(
+        "\nmcp-prewarm-benchmark-defaults:",
+        1,
+    )[1].split("\n\nmcp-postdeploy-prewarm:", 1)[0]
+    postdeploy_prewarm_target = makefile.split(
+        "\nmcp-postdeploy-prewarm:",
+        1,
+    )[1].split("\n\nmcp-runtime-config:", 1)[0]
+    deploy_mcp_target = makefile.split("\ndeploy-mcp:", 1)[1].split(
+        "\n\ndeploy-bot-mcp:",
+        1,
+    )[0]
+    search_engine_postdeploy_target = makefile.split(
+        "\nsearch-engine-postdeploy-check:",
+        1,
+    )[1].split("\n\nsearch-engine-deploy-check:", 1)[0]
 
     assert "scripts/diagnostics/prewarm_mcp_cache.py" in prewarm_target
     assert '--url "$(MCP_SMOKE_URL)"' in prewarm_target
     assert "$(MCP_PREWARM_VERIFY_HOT_ARGS)" in prewarm_target
     assert "--format $(MCP_PREWARM_FORMAT)" in prewarm_target
-    assert "--use-benchmark-defaults" in prewarm_target
+    assert "--use-benchmark-defaults" not in prewarm_target
+    assert "--use-benchmark-defaults" in benchmark_prewarm_target
+    assert "mcp-predeploy-check" in deploy_mcp_target
+    assert "$(MAKE) mcp-postdeploy-prewarm" in deploy_mcp_target
+    assert '$(MAKE) mcp-prewarm || printf "%s\\n"' in postdeploy_prewarm_target
+    assert (
+        '$(MAKE) mcp-prewarm-benchmark-defaults || printf "%s\\n"'
+        in postdeploy_prewarm_target
+    )
+    assert "deploy remains active" in postdeploy_prewarm_target
+    assert "mcp-prewarm" not in search_engine_postdeploy_target
 
 
 def test_makefile_has_mcp_runtime_config_target() -> None:

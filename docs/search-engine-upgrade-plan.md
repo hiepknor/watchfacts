@@ -1022,11 +1022,25 @@ queries, and avoid using prewarm as a substitute for fixing cold-path waste.
 
 Acceptance:
 
-- [ ] Prewarm remains best-effort and cannot mask a failing deploy gate.
-- [ ] Benchmark-default prewarm keeps alias groups hot and equivalent.
-- [ ] Cache-version changes are documented when retrieval behavior changes.
-- [ ] Operations docs explain when to use prewarm versus when to optimize
+- [x] Prewarm remains best-effort and cannot mask a failing deploy gate.
+- [x] Benchmark-default prewarm keeps alias groups hot and equivalent.
+- [x] Cache-version changes are documented when retrieval behavior changes.
+- [x] Operations docs explain when to use prewarm versus when to optimize
   retrieval itself.
+
+Initial implementation slice:
+
+- [x] `mcp-postdeploy-prewarm` keeps both common-query and benchmark-default
+  prewarm failures best-effort through warning-only handling after hard
+  predeploy and health gates.
+- [x] `prewarm_mcp_cache.py --verify-hot` fails when the verify pass does not
+  hit the search cache.
+- [x] `prewarm_mcp_cache.py --use-benchmark-defaults` checks canonical alias
+  group `total_count` equivalence with the benchmark drift threshold.
+- [x] `docs/operations.md` documents prewarm as a latency helper, not a deploy
+  gate or a substitute for cold-path retrieval optimization.
+- [x] `docs/operations.md` documents when retrieval changes require
+  `SEARCH_CACHE_VERSION` bumps and when runtime-only concurrency changes do not.
 
 Suggested verification:
 
