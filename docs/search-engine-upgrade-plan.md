@@ -2,17 +2,17 @@
 
 ## Status
 
-MCP deployed and production-validated for Phases 1-5.
+MCP deployed and production-validated through Phase 7.
 
-As of 2026-06-14, commit `62819a2` is pushed to `origin/master` and
-deployed to `watchfacts-mcp`. The Telegram bot deploy remains blocked by the
-operator-managed `TELEGRAM_BOT_TOKEN` value, not by code or test failures.
+As of 2026-06-15, commit `47bf74d` is pushed to `origin/master` and
+deployed to `watchfacts-mcp`. The Phase 7 search changes are active on the
+server with `SEARCH_CACHE_VERSION=search-v30`.
 
 ## Date
 
 2026-06-13
 
-Last reviewed: 2026-06-14
+Last reviewed: 2026-06-15
 
 ## Objective
 
@@ -79,38 +79,28 @@ reference grammar.
 
 Latest validated deployment:
 
-- Commit: `62819a2`
+- Commit: `47bf74d`
 - Service: `watchfacts-mcp`
-- Date: 2026-06-14
+- Date: 2026-06-15
 - Worktree state after deploy: clean and synced with `origin/master`
 
-Predeploy gate:
+Phase 7 predeploy gate:
 
-- `make search-engine-predeploy-check` passed.
-- Local pytest passed with `671 passed, 2 skipped`.
+- Server `make deploy-mcp` passed.
+- Container pytest passed with `690 passed`.
 - `python -m compileall app scripts` passed.
-- Focused audit passed for `rm07-01 rg snow`, `rm07-01 rose gold`,
-  `rm07-01 white gold`, and `rm07-01 mother of pearl`; suspicious/quality
-  guardrails stayed clean.
+- Default production quality audit passed during deploy.
 
 Deploy and postdeploy gate:
 
 - `make deploy-mcp` rebuilt and recreated `watchfacts-mcp`; the service became
   healthy.
-- Container pytest passed with `673 passed`.
 - `make search-engine-postdeploy-check` passed.
 - MCP smoke passed `4/4`.
-- Default MCP benchmark passed `13/13` with hot-cache median latency around
-  `41ms`, p95 around `286ms`, max around `286ms`, and cache hits `13/13`.
+- Default MCP benchmark passed `13/13` with hot-cache average `154ms`, median
+  `99ms`, p95 `739ms`, max `739ms`, and cache hits `13/13`.
 - Alias recall delta was zero for the canonical groups covering `rm07-01 mop`,
   `rm07-01 rg`, `rm07-01 rg snow`, and `rm07-01 wg`.
-
-Operational blocker:
-
-- `make deploy-bot` reached runtime startup but Telegram rejected the placeholder
-  token `your_telegram_token`. The bot was stopped to avoid a restart loop.
-  This is an operator secret/configuration issue, not a search-engine code
-  failure.
 
 Remaining performance observation:
 
@@ -1061,7 +1051,7 @@ Phase 6 deployment evidence:
 
 ## Phase 7: Production Observation And Evidence-Driven Search Improvements
 
-Status: planned.
+Status: deployed on 2026-06-15 at commit `47bf74d`.
 
 Goal: improve matcher, parser, ranking, and retrieval only from concrete
 production evidence, while keeping result quality and project size under
@@ -1179,11 +1169,65 @@ audit findings.
 
 Acceptance:
 
-- [ ] Each fix has a regression test or fixture tied to a specific finding.
-- [ ] The default MCP benchmark still passes with alias recall delta within the
+- [x] Each fix has a regression test or fixture tied to a specific finding.
+- [x] The default MCP benchmark still passes with alias recall delta within the
   configured threshold.
-- [ ] Result count and top-result drift are documented for affected queries.
-- [ ] `SEARCH_CACHE_VERSION` is bumped or explicitly documented as unchanged.
+- [x] Result count and top-result drift are documented for affected queries.
+- [x] `SEARCH_CACHE_VERSION` is bumped or explicitly documented as unchanged.
+
+Implemented fix batch:
+
+- Added a ranking guardrail that demotes `white` descriptor matches when the
+  only local evidence is accessory context such as `white tag`, `white card`,
+  or `white label`, and the user query did not ask for that accessory context.
+- Added a `panda` nickname-evidence guardrail for `daytona panda`: exact
+  `panda` text or a `white dial` / `white face` proxy stays clean; generic
+  white-material Daytona rows are demoted. The guardrail is scoped to `panda`
+  only; unaudited nicknames such as `pepsi` are not changed.
+- Added a scoped raw-evidence exception so a segment that only says
+  `WHITE TAG` is not demoted when its non-stock-list raw parent contains
+  product context such as `MODEL: PANDA DAYTONA`.
+- Bumped `SEARCH_CACHE_VERSION` from `search-v29` to `search-v30` because ranked
+  output changed.
+
+Regression coverage:
+
+- Accessory-only `white tag` no longer outranks a product-color `126500LN White`
+  listing for `126500ln white`.
+- `Daytona Panda` and `Daytona White Dial` outrank a generic
+  `Daytona White Gold Baby Lemans` row for `daytona panda`.
+- Raw scoped `MODEL: PANDA DAYTONA` evidence prevents a true panda `WHITE TAG`
+  segment from being demoted.
+- Unaudited nickname proxies such as `gmt pepsi` are not affected by the new
+  `panda` guardrail.
+
+Production verification from 2026-06-15:
+
+- Deployed commit: `47bf74d`.
+- Container deploy tests: `690 passed`.
+- Local pre-push tests for the final hotfix: `688 passed, 2 skipped`.
+- `make search-engine-postdeploy-check` passed: MCP smoke `4/4`, benchmark
+  `13/13`, cache hits `13/13`, alias recall delta `0`.
+- Final baseline artifacts:
+  `logs/search-engine-baseline/20260615-phase7-final/runtime-config.txt`,
+  `hot-benchmark.md`, and `cold-benchmark.md`.
+- Runtime: `search_retrieval_concurrency=2`,
+  `search_cache_ttl_seconds=1800`.
+- Hot benchmark: `13/13` passed, average `178ms`, median `100ms`, p95
+  `1016ms`, cache hits `13/13`.
+- Cold benchmark: `13/13` passed, average `12014ms`, median `10565ms`, p95
+  `26597ms`, cache misses `13/13`.
+- Focused audit artifacts:
+  `logs/search-engine-audit/20260615-phase7-final/audit.txt`,
+  `audit.jsonl`, and `audit-summary.csv`.
+
+Affected-query drift:
+
+| Query | Before Phase 7 fix | After Phase 7 fix |
+| --- | --- | --- |
+| `daytona panda` | Top result was `Rolex Daytona White Gold Baby Lemans 126519...`; exact `Daytona Panda 126500ln...` rows were below it. | Result count stayed `210`; top three rows are exact `Daytona Panda 126500ln...`; `White Dial` proxy remains eligible below exact panda evidence. |
+| `126500ln white` | Top 5 included black-dial or black-Daytona rows where `white` only came from `white tag/card`. | Result count stayed `16`; top 5 all have product white or scoped raw panda evidence, and no `guardrail.descriptor_context` reason appears in the top 5. |
+| `126500ln white 2026` | The first deploy attempt exposed an edge case where raw `MODEL: PANDA DAYTONA` was demoted because the segment only said `WHITE TAG`. | Result count stayed `3`; top quality groups are `[0, 0, 0]`, and the raw panda-context segment remains clean. |
 
 Suggested verification:
 
@@ -1191,6 +1235,106 @@ Suggested verification:
 python -m pytest
 make search-engine-postdeploy-check
 ```
+
+## Phase 8: Context Evidence And Cold-Path Budgeting
+
+Status: planned from Phase 7 postdeploy evidence.
+
+Goal: turn the narrow Phase 7 guardrails into a small, reusable evidence model
+only where production audit proves the need, while reducing cold-path latency
+without hiding cost through broader prewarm.
+
+Design stance:
+
+- Do not create new `engine` packages for Phase 8. Keep the project smaller by
+  improving the existing query recognition, matcher, parser, scoring, and
+  diagnostics boundaries.
+- Move repeated context checks into compact helpers or rulebook data only after
+  a second audited case needs the same behavior.
+- Demote questionable results with explicit reason codes before considering
+  hard filtering.
+- Keep raw-parent evidence disabled for stock-list scope unless item ownership
+  is proven.
+
+### Task 8.1: Descriptor Evidence Model
+
+Description: Define a minimal descriptor-evidence helper for product context,
+accessory context, raw scoped context, and excluded stock-list context. Start
+with the Phase 7 `white tag` / `panda` evidence and add no new descriptor groups
+without audit cases.
+
+Acceptance:
+
+- [ ] Existing Phase 7 behavior remains unchanged for `126500ln white`,
+  `126500ln white 2026`, and `daytona panda`.
+- [ ] Evidence reasons distinguish product, accessory, raw scoped, and
+  stock-list-excluded context.
+- [ ] Tests prove unaudited nicknames and colors are not silently affected.
+- [ ] No new module is added unless it replaces duplicated logic in at least two
+  current files.
+
+Suggested verification:
+
+```bash
+python -m pytest tests/test_result_scoring.py tests/test_search.py tests/test_audit_quality.py
+python scripts/diagnostics/audit_quality.py "126500ln white" "daytona panda" --limit 5
+```
+
+### Task 8.2: Parser Evidence For Scoped Raw Parents
+
+Description: Make parser/scoping output expose why raw parent evidence is safe
+or unsafe, instead of leaving scoring to infer it from `scope_reason` alone.
+
+Acceptance:
+
+- [ ] Scoped result payloads can explain whether raw parent evidence was used,
+  ignored, or excluded.
+- [ ] Stock-list raw evidence stays excluded unless item-to-image/text ownership
+  is deterministic.
+- [ ] Audit output includes the new reason codes without exposing full raw HTML
+  or sensitive session data.
+
+### Task 8.3: Cold-Path Retrieval Budget Audit
+
+Description: Instrument and compare cold retrieval branches so the next speed
+change is based on branch-level cost and recall contribution, not guesswork.
+
+Acceptance:
+
+- [ ] Cold benchmark artifacts include per-query and per-branch timing for the
+  slow representatives: `daytona panda`, `5711 blue`, `15500st blue`, and
+  `rm07-01 rg snow`.
+- [ ] Each candidate optimization states expected recall risk before code
+  changes.
+- [ ] No prewarm list is expanded as a substitute for reducing cold-path cost.
+- [ ] Any retrieval-plan change is checked against alias recall delta and
+  result-count drift.
+
+### Task 8.4: Image Attribution Decision Gate
+
+Description: Revisit high missing-image cases only if an audit can prove safe
+item-to-image ownership. This is a decision gate, not an automatic parser
+rewrite.
+
+Acceptance:
+
+- [ ] `image.omitted_bundle_ambiguous` cases are grouped by raw layout pattern.
+- [ ] A proposed image fix must show deterministic ownership evidence and a
+  regression fixture.
+- [ ] If ownership is still ambiguous, the finding remains deferred.
+
+### Task 8.5: Brand Recognition Backlog
+
+Description: Track brand-recognition gaps such as `FPJ Elegante Titanium`
+without adding taxonomy until absence of brand recognition causes false
+positives, missed retrieval, or ranking drift.
+
+Acceptance:
+
+- [ ] Brand additions require before/after audit evidence.
+- [ ] Brand aliases live in the existing rulebook data, not scattered branches.
+- [ ] The default benchmark and focused audit remain stable after each accepted
+  brand addition.
 
 ## Metrics
 
@@ -1234,13 +1378,8 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Do not start a new matcher/parser/ranking expansion by default. Phase 6 is
-implemented, production-deployed, and running with
-`SEARCH_RETRIEVAL_CONCURRENCY=2`; the next useful work is Phase 7, starting
-with Task 7.1 so the current production baseline is captured before any new
-rules are added.
-
-Only add more brand taxonomy, nickname rules, parser segmentation, or ranking
-logic when a fresh audit shows a real recall, precision, quality, or latency gap
-and the benchmark can prove that the fix does not increase false positives or
-alias recall drift.
+Phase 7 is implemented, pushed, and deployed at `47bf74d`. The next useful work
+is Phase 8 Task 8.1: extract the Phase 7 context checks into a minimal
+descriptor evidence model without changing behavior. Do not start another broad
+matcher/parser/ranking expansion until fresh audit data shows a real quality or
+latency gap and the benchmark can prove no false-positive or recall regression.
