@@ -1129,13 +1129,41 @@ gap before changing matcher, parser, ranking, or retrieval behavior.
 
 Acceptance:
 
-- [ ] Each finding is classified as query recognition, retrieval coverage,
+- [x] Each finding is classified as query recognition, retrieval coverage,
   parser segmentation, matcher false negative, matcher false positive, ranking,
   image attribution, or cold-path latency.
-- [ ] Each accepted finding includes the query, expected behavior, current
+- [x] Each accepted finding includes the query, expected behavior, current
   behavior, top-result evidence, and a proposed regression fixture.
-- [ ] Findings that do not affect result quality or speed are explicitly
+- [x] Findings that do not affect result quality or speed are explicitly
   deferred instead of implemented.
+
+Production gap audit from 2026-06-15:
+
+- Artifact directory: `logs/search-engine-audit/20260615-phase7-task72`.
+- Files: `audit.txt`, `audit.jsonl`, `audit-summary.csv`.
+- Query set: `rm07-01 rg snow`, `rm07-01 wg`, `rm07-01 mop`,
+  `daytona panda`, `126500ln white`, `5711 blue`, `15500st blue`,
+  `FPJ Elegante Titanium`, and `RM65-01 Lebron`.
+- Summary metrics: weak match rate `0.0000`, ambiguous candidate rate
+  `0.0000`, dedupe drop rate `0.0000`, low-fuzzy included count `2`,
+  missing image rate `0.3095`, and stock-list scoped rate `0.0000`.
+- Validation errors: `0` for every audited query.
+
+Accepted findings:
+
+| Query | Classification | Expected behavior | Current evidence | Proposed regression fixture |
+| --- | --- | --- | --- | --- |
+| `126500ln white` | matcher false positive, ranking | A white-dial/product-color result should outrank listings where `white` only appears in accessory context such as `white tag` or `white tag & card`. | Top 5 included black-dial or black-Daytona listings because the required `white` descriptor was satisfied by `white tag`; examples include `126500LN Daytona black dial ... white tag` and `126500ln black daytona ... white tag`. | Result-scoring fixture with a true `126500LN White ...` listing and black listings containing only `white tag/card`, asserting accessory-only color evidence is demoted and ranked after product-color evidence. |
+| `daytona panda` | ranking, nickname evidence | Exact `panda` listings or strong dial-color proxy evidence should outrank generic Daytona listings where `white` is material context rather than panda/dial context. | Count `210`; top result was `Rolex Daytona White Gold Baby Lemans 126519...` with fuzzy `40`, while exact `Daytona Panda 126500ln...` rows were ranked below it. | Result-scoring fixture with `Daytona Panda`, `Daytona White Dial`, and `Daytona White Gold Baby Lemans`, asserting exact/proxy panda evidence ranks first and the white-gold-only listing is demoted. |
+
+Deferred findings:
+
+| Query | Classification | Evidence | Decision |
+| --- | --- | --- | --- |
+| `rm07-01 rg snow`, `rm07-01 mop`, `15500st blue`, `FPJ Elegante Titanium`, `RM65-01 Lebron` | image attribution | Missing images were caused by `image.omitted_bundle_ambiguous` on scoped bundle/list posts; top result text and seller/source remained present. | Deferred. This is an intentional guardrail; do not show ambiguous parent images unless a future parser can prove item-to-image ownership. |
+| `FPJ Elegante Titanium` | query recognition | The query plan had no brand candidate, but all audited top rows still matched FPJ/Elegante/Titanium text and no validation or suspicious-result errors appeared. | Deferred until a future audit shows brand-recognition absence causing false positives, missed retrieval, or ranking drift. |
+| Full audited set | cold-path latency | Task 7.1 cold benchmark remained the dominant speed cost: average `11944ms`, p95 `22470ms`, cache misses `13/13`. | Deferred to the next performance phase because Task 7.3 should stay focused on confirmed quality/ranking fixes, not another retrieval architecture change. |
+| `rm07-01 wg`, `rm07-01 mop`, `5711 blue`, `15500st blue`, `FPJ Elegante Titanium`, `RM65-01 Lebron` | retrieval coverage, parser segmentation, matcher false negative | Representative top rows were relevant; no weak/ambiguous/dedupe drift and no validation errors. | Deferred because no current evidence showed missed result coverage or parser segmentation quality loss. |
 
 Suggested verification:
 
