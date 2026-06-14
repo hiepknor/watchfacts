@@ -385,7 +385,11 @@ def _reason_codes(row: dict[str, Any]) -> tuple[str, ...]:
             reasons.extend(str(item) for item in value if item is not None)
     summary = row.get("summary")
     if isinstance(summary, dict):
-        for nested_key in ("suspicious_reason_counts", "image_reason_counts"):
+        for nested_key in (
+            "suspicious_reason_counts",
+            "image_reason_counts",
+            "image_layout_pattern_counts",
+        ):
             nested = summary.get(nested_key)
             if isinstance(nested, dict):
                 reasons.extend(str(reason) for reason in nested)

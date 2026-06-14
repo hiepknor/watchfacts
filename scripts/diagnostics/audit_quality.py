@@ -53,6 +53,14 @@ SENSITIVE_CONTEXT_PATH_RE = re.compile(
     r"(?:data/)?(?:\.env|watchfacts_state\.json)",
     re.IGNORECASE,
 )
+IMAGE_LAYOUT_STOCK_LIST_RE = re.compile(
+    r"\b(?:hk\s+)?stock\s+list\b|\bstocklist\b",
+    re.IGNORECASE,
+)
+IMAGE_LAYOUT_REFERENCE_RE = re.compile(
+    r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:[./-][A-Za-z0-9]+)*\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -65,6 +73,7 @@ class AuditQuerySummary:
     validation_error_count: int
     suspicious_reason_counts: dict[str, int]
     image_reason_counts: dict[str, int]
+    image_layout_pattern_counts: dict[str, int]
 
 
 @dataclass(frozen=True)
@@ -88,6 +97,7 @@ class AuditResultRow:
     image_reason: str
     scope_reason: str
     segment_reason_codes: tuple[str, ...]
+    image_layout_pattern: str | None
     server_filtered: bool
     raw_listing_preview: str | None
     stable_listing_id: str
@@ -128,6 +138,11 @@ def build_query_report(
         )
         scope_reason = _scope_reason(result)
         image_reason = _image_reason(result, scope_reason=scope_reason)
+        image_layout_pattern = _image_layout_pattern(
+            result,
+            image_reason=image_reason,
+            scope_reason=scope_reason,
+        )
         fuzzy = score_fuzzy_match(query, result.listing_text)
         query_intent = _query_intent_from_final_result(query)
         rows.append(
@@ -151,6 +166,7 @@ def build_query_report(
                 image_reason=image_reason,
                 scope_reason=scope_reason,
                 segment_reason_codes=result.segment_reason_codes,
+                image_layout_pattern=image_layout_pattern,
                 server_filtered=server_filtered,
                 raw_listing_preview=_raw_listing_preview(result, snippet_chars),
                 stable_listing_id=stable_listing_id(result),
@@ -203,6 +219,16 @@ def format_text_report(reports: list[AuditQueryReport]) -> str:
                     for reason, count in sorted(report.summary.image_reason_counts.items())
                 )
             )
+        if report.summary.image_layout_pattern_counts:
+            lines.append(
+                " image_layout_counts="
+                + ",".join(
+                    f"{pattern}:{count}"
+                    for pattern, count in sorted(
+                        report.summary.image_layout_pattern_counts.items()
+                    )
+                )
+            )
         if report.validation_errors:
             lines.append(
                 " validation_errors="
@@ -232,6 +258,7 @@ def format_text_report(reports: list[AuditQueryReport]) -> str:
             lines.append(
                 f" diagnostics=image_reason:{row.image_reason} "
                 f"scope_reason:{row.scope_reason} server_filtered:{row.server_filtered} "
+                f"image_layout:{row.image_layout_pattern or '-'} "
                 f"query_intent:{row.query_intent} "
                 f"guardrail_action:{row.guardrail_action} "
                 f"stable_listing_id:{row.stable_listing_id}"
@@ -644,10 +671,16 @@ def _final_row_event(query: str, row: AuditResultRow) -> dict[str, object]:
             *row.suspicious_reasons,
             *row.fuzzy_reason_codes,
             *row.segment_reason_codes,
+            *(
+                (f"image_layout:{row.image_layout_pattern}",)
+                if row.image_layout_pattern
+                else ()
+            ),
             row.image_reason,
             row.scope_reason,
         ],
         "scope_reason": row.scope_reason,
+        "image_layout_pattern": row.image_layout_pattern,
     }
 
 
@@ -657,6 +690,65 @@ def _scope_reason(result: SearchResult) -> str:
 
 def _image_reason(result: SearchResult, *, scope_reason: str) -> str:
     return image_confidence_reason(result, scope_reason=scope_reason)
+
+
+def _image_layout_pattern(
+    result: SearchResult,
+    *,
+    image_reason: str,
+    scope_reason: str,
+) -> str | None:
+    if image_reason != "image.omitted_bundle_ambiguous":
+        return None
+    raw_text = result.raw_listing_text or result.listing_text
+    if scope_reason == "scope.stock_list" or IMAGE_LAYOUT_STOCK_LIST_RE.search(
+        raw_text
+    ):
+        return "layout.stock_list"
+    raw_references = _image_layout_references(raw_text)
+    listing_references = set(_image_layout_references(result.listing_text))
+    if any(raw_references.count(reference) > 1 for reference in listing_references):
+        return "layout.repeated_reference"
+    if len(set(raw_references)) >= 2:
+        return "layout.multi_reference_bundle"
+    if _normalize_layout_text(raw_text) != _normalize_layout_text(result.listing_text):
+        return "layout.scoped_parent"
+    return "layout.unknown"
+
+
+def _image_layout_references(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [
+        normalized
+        for token in IMAGE_LAYOUT_REFERENCE_RE.findall(value)
+        if (normalized := _normalize_layout_reference(token))
+        and _looks_like_layout_reference(normalized)
+    ]
+
+
+def _normalize_layout_reference(value: str) -> str:
+    return value.casefold().strip(":,.;")
+
+
+def _looks_like_layout_reference(value: str) -> bool:
+    if not value or not any(character.isdigit() for character in value):
+        return False
+    if re.fullmatch(r"\d+(?:\.\d+)?[km]", value):
+        return False
+    if value.isdigit() and len(value) == 4:
+        year = int(value)
+        if 1900 <= year <= 2099:
+            return False
+    if any(currency in value for currency in ("hkd", "usd", "usdt", "eur", "aed")):
+        return False
+    if len(value) < 4 and "/" not in value:
+        return False
+    return True
+
+
+def _normalize_layout_text(value: str | None) -> str:
+    return " ".join((value or "").casefold().split())
 
 
 def _query_intent_from_final_result(query: str) -> str:
@@ -739,8 +831,13 @@ def _query_summary(
     image_missing_count = sum(1 for row in rows if not row.has_image)
     suspicious_counts: dict[str, int] = {}
     image_counts: dict[str, int] = {}
+    image_layout_counts: dict[str, int] = {}
     for row in rows:
         image_counts[row.image_reason] = image_counts.get(row.image_reason, 0) + 1
+        if row.image_layout_pattern:
+            image_layout_counts[row.image_layout_pattern] = (
+                image_layout_counts.get(row.image_layout_pattern, 0) + 1
+            )
         for reason in row.suspicious_reasons:
             suspicious_counts[reason] = suspicious_counts.get(reason, 0) + 1
     return AuditQuerySummary(
@@ -754,6 +851,7 @@ def _query_summary(
         validation_error_count=len(validation_errors),
         suspicious_reason_counts=suspicious_counts,
         image_reason_counts=image_counts,
+        image_layout_pattern_counts=image_layout_counts,
     )
 
 

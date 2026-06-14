@@ -72,7 +72,12 @@ def test_load_artifact_accepts_pretty_audit_json_report(tmp_path) -> None:
                 {
                     "query": "5712r",
                     "result_count": 1,
-                    "summary": {"audited_result_count": 1},
+                    "summary": {
+                        "audited_result_count": 1,
+                        "image_layout_pattern_counts": {
+                            "layout.multi_reference_bundle": 1
+                        },
+                    },
                     "rows": [
                         {
                             "rank": 1,
@@ -95,6 +100,7 @@ def test_load_artifact_accepts_pretty_audit_json_report(tmp_path) -> None:
     assert summary.final_result_count == 1
     assert summary.query_counts["5712r"] == 2
     assert summary.reason_counts["quality.clean"] == 1
+    assert summary.reason_counts["layout.multi_reference_bundle"] == 1
 
 
 def test_build_ai_triage_prompt_redacts_sensitive_values(tmp_path) -> None:

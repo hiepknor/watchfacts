@@ -1401,10 +1401,41 @@ rewrite.
 
 Acceptance:
 
-- [ ] `image.omitted_bundle_ambiguous` cases are grouped by raw layout pattern.
-- [ ] A proposed image fix must show deterministic ownership evidence and a
+- [x] `image.omitted_bundle_ambiguous` cases are grouped by raw layout pattern.
+- [x] A proposed image fix must show deterministic ownership evidence and a
   regression fixture.
-- [ ] If ownership is still ambiguous, the finding remains deferred.
+- [x] If ownership is still ambiguous, the finding remains deferred.
+
+Implementation notes:
+
+- Added `image_layout_pattern` to audit rows and JSONL final-result events for
+  `image.omitted_bundle_ambiguous` cases.
+- Added `image_layout_pattern_counts` to audit summaries so high missing-image
+  cases group by raw layout shape before any parser/image change.
+- Current groups are `layout.stock_list`, `layout.repeated_reference`,
+  `layout.multi_reference_bundle`, `layout.scoped_parent`, and `layout.unknown`.
+- AI audit triage now reads `image_layout_pattern_counts`, so layout groups are
+  preserved in downstream summaries.
+- No image attribution behavior changed. Parent images remain omitted unless a
+  future fix proves item-to-image ownership with deterministic evidence and a
+  regression fixture.
+
+Focused audit evidence from 2026-06-15:
+
+| Query | Missing image rate | Layout groups | Decision |
+| --- | ---: | --- | --- |
+| `FPJ Elegante Titanium` | 3/5 | `layout.multi_reference_bundle:3` | Defer image fix; raw parent contains multiple unrelated references. |
+| `RM65-01 Lebron` | 4/5 | `layout.repeated_reference:3`, `layout.multi_reference_bundle:1` | Defer image fix; repeated reference variants and bundle ordering are ambiguous. |
+
+Verification:
+
+- `python -m pytest tests/test_audit_quality.py tests/test_ai_audit_triage.py -q`
+  passed with `20 passed`.
+- `python -m compileall scripts/diagnostics/audit_quality.py scripts/diagnostics/ai_audit_triage.py`
+  passed.
+- `python scripts/diagnostics/audit_quality.py "FPJ Elegante Titanium" "RM65-01 Lebron" --limit 5`
+  produced layout counts without exposing full raw HTML.
+- `git diff --check` passed.
 
 ### Task 8.5: Brand Recognition Backlog
 

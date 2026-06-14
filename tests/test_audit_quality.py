@@ -329,6 +329,7 @@ def test_build_query_report_marks_stock_list_scope_and_redacts_raw_preview() -> 
 
     assert row.scope_reason == "scope.stock_list"
     assert row.image_reason == "image.omitted_bundle_ambiguous"
+    assert row.image_layout_pattern == "layout.stock_list"
     assert row.server_filtered is True
     assert row.raw_listing_preview is not None
     assert "cookie=session" not in row.raw_listing_preview
@@ -337,6 +338,35 @@ def test_build_query_report_marks_stock_list_scope_and_redacts_raw_preview() -> 
     assert "[REDACTED_PATH]" in row.raw_listing_preview
     assert report.summary.server_filtered_result_count == 1
     assert report.summary.scoped_stock_list_count == 1
+    assert report.summary.image_layout_pattern_counts == {"layout.stock_list": 1}
+
+
+def test_build_query_report_groups_ambiguous_image_by_layout_pattern() -> None:
+    result = SearchResult(
+        "FPJ Elegante titanium 48mm 2019 fullset HKD785K",
+        raw_listing_text=(
+            "5712/1r 2025 1,975m 5990/1 2021 1,98m "
+            "FPJ Elegante titanium 48mm 2019 fullset HKD785K"
+        ),
+        image_reason="image.omitted_bundle_ambiguous",
+        scope_reason="scope.scoped",
+    )
+
+    report = build_query_report("FPJ Elegante Titanium", [result], limit=1)
+    output = format_text_report([report])
+    events = [
+        json.loads(line)
+        for line in format_jsonl_report([report]).splitlines()
+    ]
+    final_event = next(event for event in events if event["type"] == "final_result")
+
+    assert report.rows[0].image_layout_pattern == "layout.multi_reference_bundle"
+    assert report.summary.image_layout_pattern_counts == {
+        "layout.multi_reference_bundle": 1
+    }
+    assert "image_layout_counts=layout.multi_reference_bundle:1" in output
+    assert "image_layout:layout.multi_reference_bundle" in final_event["reason_codes"]
+    assert final_event["image_layout_pattern"] == "layout.multi_reference_bundle"
 
 
 def test_build_query_report_emits_descriptor_conflict_reason_codes() -> None:
