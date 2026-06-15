@@ -19,6 +19,7 @@ from scripts.diagnostics.benchmark_mcp_queries import (
     _load_query_file,
     _selected_queries,
     alias_recall_passed,
+    evaluate_case_expectations,
     evaluate_alias_recall,
     _row_from_payload,
     render_jsonl,
@@ -311,6 +312,33 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     assert decoded[0]["retrieval_timings"][1]["failed"] is True
     assert decoded[0]["retrieval_timings"][1]["error_type"] == "RuntimeError"
     assert decoded[1]["error_type"] == "RuntimeError"
+
+
+def test_renderers_emit_case_expectation_sections() -> None:
+    rows = [
+        BenchmarkRow(
+            query="RP Journe Elegante Titanium",
+            ok=True,
+            elapsed_ms=99,
+            run_number=1,
+            total_count=2,
+            result_count=1,
+            query_intent="brand",
+            canonical_query="RP Journe Elegante Titanium",
+            top_results=("F.P. Journe Elegante Titanium",),
+            failure_mode="brand_recognition",
+            expected_min_total_count=1,
+            expected_top_result_fragments=("F.P. Journe",),
+        )
+    ]
+
+    checks = evaluate_case_expectations(rows)
+    text = render_text(rows, case_checks=checks)
+    markdown = render_markdown(rows, case_checks=checks)
+
+    assert "CASE_EXPECTATION query='RP Journe Elegante Titanium'" in text
+    assert "## Case Expectations" in markdown
+    assert "brand_recognition" in markdown
 
 
 def test_summarize_rows_uses_successful_queries_only() -> None:
@@ -629,6 +657,62 @@ def test_default_query_cases_can_be_materialized_from_registry() -> None:
     assert len({case.query.casefold() for case in DEFAULT_BENCHMARK_QUERY_CASES}) == len(
         DEFAULT_BENCHMARK_QUERIES
     )
+
+
+def test_evaluate_case_expectations_flags_total_and_top_result_regressions() -> None:
+    checks = evaluate_case_expectations(
+        [
+            BenchmarkRow(
+                query="RP Journe Elegante Titanium",
+                ok=True,
+                elapsed_ms=100,
+                run_number=1,
+                total_count=2,
+                failure_mode="brand_recognition",
+                expected_min_total_count=2,
+                expected_top_result_fragments=("F.P. Journe",),
+                top_results=("F.P. Journe Elegante Titanium in mint condition",),
+            ),
+            BenchmarkRow(
+                query="F.P. Journe Elegante Titanium",
+                ok=True,
+                elapsed_ms=120,
+                run_number=1,
+                total_count=1,
+                failure_mode="brand_recognition",
+                expected_min_total_count=2,
+                expected_top_result_fragments=("FPJ Elegante Titanium",),
+                top_results=("Some unrelated result",),
+            ),
+        ]
+    )
+
+    assert len(checks) == 2
+    assert checks[0].ok is True
+    assert checks[0].matched_top_result_fragments == ("F.P. Journe",)
+    assert checks[1].ok is False
+    assert checks[1].observed_total_count == 1
+    assert checks[1].expected_min_total_count == 2
+    assert any(
+        "missing_expected_top_result_fragments" in reason
+        for reason in checks[1].reasons
+    )
+
+
+def test_evaluate_case_expectations_skips_queries_without_expectations() -> None:
+    checks = evaluate_case_expectations(
+        [
+            BenchmarkRow(
+                query="rm07-01 rg",
+                ok=True,
+                elapsed_ms=10,
+                failure_mode="recognition",
+                total_count=1,
+                top_results=("no expectations on this case",),
+            )
+        ]
+    )
+    assert checks == ()
 
 
 

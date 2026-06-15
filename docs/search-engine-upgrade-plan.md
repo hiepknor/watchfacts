@@ -1966,6 +1966,9 @@ Task 10.4 progress:
   - `F.P. Journe Elegante Titanium`
 - This expands the regression surface for brand-alias recognition and retrieval
   fallback behavior.
+- Implemented benchmark hard-fail checks for case metadata so recognized cases with
+  `expected_min_total_count` / `expected_top_result_fragments` must pass before the
+  benchmark exits successfully.
 - Remaining acceptance criteria in this task are still tracked for future
   enrichment by failure mode and explicit expected-count/top-result rules.
 

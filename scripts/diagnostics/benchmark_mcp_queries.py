@@ -161,6 +161,19 @@ class AliasRecallCheck:
     query_totals: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class CaseExpectationCheck:
+    query: str
+    run_number: int
+    failure_mode: str
+    ok: bool
+    observed_total_count: int | None
+    expected_min_total_count: int | None
+    expected_top_result_fragments: tuple[str, ...]
+    matched_top_result_fragments: tuple[str, ...]
+    reasons: tuple[str, ...] = ()
+
+
 async def run_benchmark(
     *,
     url: str,
@@ -351,6 +364,7 @@ def render_markdown(
     rows: list[BenchmarkRow],
     *,
     alias_checks: tuple[AliasRecallCheck, ...] | None = None,
+    case_checks: tuple[CaseExpectationCheck, ...] | None = None,
     require_alias_recall: bool = False,
 ) -> str:
     summary = summarize_rows(rows)
@@ -417,6 +431,11 @@ def render_markdown(
             require_alias_recall=require_alias_recall,
         )
     )
+    lines.extend(
+        _case_expectation_markdown_lines(
+            () if case_checks is None else case_checks,
+        )
+    )
     return "\n".join(lines)
 
 
@@ -424,6 +443,7 @@ def render_text(
     rows: list[BenchmarkRow],
     *,
     alias_checks: tuple[AliasRecallCheck, ...] | None = None,
+    case_checks: tuple[CaseExpectationCheck, ...] | None = None,
     require_alias_recall: bool = False,
 ) -> str:
     lines: list[str] = []
@@ -468,12 +488,74 @@ def render_text(
             require_alias_recall=require_alias_recall,
         )
     )
+    lines.extend(
+        _case_expectation_text_lines(
+            () if case_checks is None else case_checks,
+        )
+    )
     summary = summarize_rows(rows)
     lines.append(
         "SUMMARY "
         + " ".join(f"{key}={value}" for key, value in sorted(summary.items()))
     )
     return "\n".join(lines)
+
+
+def evaluate_case_expectations(rows: list[BenchmarkRow]) -> tuple[CaseExpectationCheck, ...]:
+    checks: list[CaseExpectationCheck] = []
+
+    for row in rows:
+        if not row.failure_mode:
+            continue
+
+        reasons: list[str] = []
+
+        if row.expected_min_total_count is not None:
+            if row.total_count is None:
+                reasons.append(
+                    f"missing_total_count (expected >= {row.expected_min_total_count})"
+                )
+            elif row.total_count < row.expected_min_total_count:
+                reasons.append(
+                    f"total_count_low {row.total_count} < {row.expected_min_total_count}"
+                )
+
+        if row.expected_top_result_fragments:
+            matched = _top_results_containing(
+                row.top_results,
+                row.expected_top_result_fragments,
+            )
+            if len(matched) < len(row.expected_top_result_fragments):
+                reasons.append(
+                    "missing_expected_top_result_fragments="
+                    + ",".join(
+                        sorted(
+                            set(row.expected_top_result_fragments) - set(matched),
+                        )
+                    )
+                )
+
+        if row.expected_min_total_count is None and not row.expected_top_result_fragments:
+            continue
+
+        checks.append(
+            CaseExpectationCheck(
+                query=row.query,
+                run_number=row.run_number,
+                failure_mode=row.failure_mode,
+                ok=not reasons,
+                observed_total_count=row.total_count,
+                expected_min_total_count=row.expected_min_total_count,
+                expected_top_result_fragments=row.expected_top_result_fragments,
+                matched_top_result_fragments=_top_results_containing(
+                    row.top_results,
+                    row.expected_top_result_fragments,
+                ),
+                reasons=tuple(reasons),
+            )
+        )
+
+    return tuple(checks)
 
 
 def render_jsonl(rows: list[BenchmarkRow]) -> str:
@@ -840,6 +922,64 @@ def _alias_recall_markdown_lines(
     return lines
 
 
+def _case_expectation_text_lines(
+    checks: tuple[CaseExpectationCheck, ...],
+) -> list[str]:
+    if not checks:
+        return []
+    return [
+        (
+            "CASE_EXPECTATION "
+            f"query={check.query!r} "
+            f"run={check.run_number} "
+            f"failure_mode={check.failure_mode} "
+            f"ok={str(check.ok).lower()} "
+            f"expected_min_total={check.expected_min_total_count} "
+            f"observed_total={check.observed_total_count} "
+            f"expected_fragments={_quoted_csv(check.expected_top_result_fragments)} "
+            f"matched_fragments={_quoted_csv(check.matched_top_result_fragments)} "
+            f"reasons={_quoted_csv(check.reasons)}"
+        )
+        for check in checks
+    ]
+
+
+def _case_expectation_markdown_lines(
+    checks: tuple[CaseExpectationCheck, ...],
+) -> list[str]:
+    if not checks:
+        return []
+    lines = [
+        "",
+        "## Case Expectations",
+        "",
+        (
+            "| Query | Run | Mode | OK | min total | observed total | "
+            "expected fragments | matched fragments | reasons |"
+        ),
+        "| --- | ---: | --- | --- | ---: | ---: | --- | --- | --- |",
+    ]
+    for check in checks:
+        lines.append(
+            "| "
+            + " | ".join(
+                (
+                    _md(check.query),
+                    str(check.run_number),
+                    _md(check.failure_mode),
+                    "yes" if check.ok else "no",
+                    str(check.expected_min_total_count or "-"),
+                    str(check.observed_total_count or "-"),
+                    _md(_csv(check.expected_top_result_fragments)),
+                    _md(_csv(check.matched_top_result_fragments)),
+                    _md(_csv(check.reasons)),
+                )
+            )
+            + " |"
+        )
+    return lines
+
+
 def _descriptor_summary(row: BenchmarkRow) -> str:
     parts: list[str] = []
     if row.required_descriptors:
@@ -860,6 +1000,16 @@ def _snippet(value: str, *, limit: int = 100) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[: limit - 3].rstrip() + "..."
+
+
+def _top_results_containing(
+    top_results: tuple[str, ...],
+    fragments: tuple[str, ...],
+) -> tuple[str, ...]:
+    haystack = " \n ".join(top_results).casefold()
+    return tuple(
+        fragment for fragment in fragments if fragment.casefold() in haystack
+    )
 
 
 def _md(value: str) -> str:
@@ -1022,6 +1172,7 @@ def main() -> int:
         rows,
         max_delta_ratio=args.alias_total_delta_ratio,
     )
+    case_checks = evaluate_case_expectations(rows)
     require_alias_recall = (
         False
         if args.skip_alias_recall_check
@@ -1034,6 +1185,7 @@ def main() -> int:
             render_markdown(
                 rows,
                 alias_checks=alias_checks,
+                case_checks=case_checks,
                 require_alias_recall=require_alias_recall,
             )
         )
@@ -1042,6 +1194,7 @@ def main() -> int:
             render_text(
                 rows,
                 alias_checks=alias_checks,
+                case_checks=case_checks,
                 require_alias_recall=require_alias_recall,
             )
         )
@@ -1053,7 +1206,8 @@ def main() -> int:
             require_evaluation=require_alias_recall,
         )
     )
-    return 0 if all(row.ok for row in rows) and alias_ok else 1
+    case_ok = all(check.ok for check in case_checks)
+    return 0 if all(row.ok for row in rows) and alias_ok and case_ok else 1
 
 
 if __name__ == "__main__":
