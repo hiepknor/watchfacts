@@ -49,7 +49,7 @@ DEFAULT_BENCHMARK_QUERY_CASES: tuple[BenchmarkQueryCase, ...] = (
         "F.P. Journe Elegante Titanium",
         "brand_recognition",
         min_total_count=1,
-        expected_top_result_fragments=("FPJ Elegante Titanium",),
+        expected_top_result_fragments=("F.P. Journe Elegante Titanium",),
     ),
     BenchmarkQueryCase("126500ln white", "retrieval"),
     BenchmarkQueryCase("daytona panda", "retrieval"),

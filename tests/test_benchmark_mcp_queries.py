@@ -698,7 +698,7 @@ def test_default_query_cases_express_failure_modes() -> None:
     assert case is not None
     assert case.failure_mode == "brand_recognition"
     assert case.min_total_count == 1
-    assert case.expected_top_result_fragments == ("FPJ Elegante Titanium",)
+    assert case.expected_top_result_fragments == ("F.P. Journe Elegante Titanium",)
 
     assert get_default_case_for_query("rm07-01 rg").failure_mode == "recognition"
 
@@ -760,7 +760,7 @@ def test_evaluate_case_expectations_flags_total_and_top_result_regressions() -> 
                 total_count=1,
                 failure_mode="brand_recognition",
                 expected_min_total_count=2,
-                expected_top_result_fragments=("FPJ Elegante Titanium",),
+                expected_top_result_fragments=("F.P. Journe Elegante Titanium",),
                 top_results=("Some unrelated result",),
             ),
         ]
