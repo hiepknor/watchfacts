@@ -1954,7 +1954,8 @@ Acceptance:
   parser scoping, image ownership, or ranking.
 - [x] Each new case has expected `total_count` drift rules and top-result
   quality expectations.
-- [ ] Benchmark output remains concise enough for deploy review.
+- [x] Benchmark output remains concise enough for deploy review via a dedicated
+  machine-readable `case_expectation_check` JSONL record.
 - [ ] The expanded set does not make normal deploy prewarm the primary speed
   strategy.
 
@@ -1972,8 +1973,9 @@ Task 10.4 progress:
 - Added local diagnostic override `--skip-case-expectation-check` so manual debug
   runs can bypass case-expectation hard failures without changing dataset
   definitions.
-- Remaining acceptance criteria in this task are still tracked for future
-  enrichment by failure mode and explicit expected-count/top-result rules.
+- Added JSONL output for case-expectation diagnostics under `--format jsonl` as a
+  separate record type (`record_type: case_expectation_check`) to keep deploy
+  artifacts structured and reviewable.
 
 Verification:
 
