@@ -4,6 +4,7 @@ from argparse import Namespace
 import asyncio
 import json
 import sqlite3
+import sys
 
 import scripts.diagnostics.benchmark_mcp_queries as benchmark_module
 from scripts.diagnostics.benchmark_mcp_queries import (
@@ -535,6 +536,60 @@ def test_run_benchmark_can_clear_search_cache_before_each_query(
         ("Lange 1", 2),
     ]
     assert clear_calls == [db_path, db_path, db_path, db_path]
+
+
+def test_main_fails_on_case_expectation_regression_and_can_be_skipped(
+    monkeypatch,
+) -> None:
+    failing_row = BenchmarkRow(
+        query="RP Journe Elegante Titanium",
+        ok=True,
+        elapsed_ms=99,
+        run_number=1,
+        total_count=1,
+        failure_mode="brand_recognition",
+        expected_min_total_count=2,
+        expected_top_result_fragments=("F.P. Journe",),
+        top_results=("Some unrelated result",),
+    )
+
+    async def fake_run_benchmark(**kwargs):
+        return [failing_row]
+
+    monkeypatch.setattr(benchmark_module, "run_benchmark", fake_run_benchmark)
+    monkeypatch.setattr(
+        benchmark_module,
+        "evaluate_alias_recall",
+        lambda *_args, **_kwargs: (),
+    )
+    monkeypatch.setattr(benchmark_module, "render_text", lambda *args, **kwargs: "text")
+    monkeypatch.setattr(
+        benchmark_module,
+        "render_markdown",
+        lambda *args, **kwargs: "markdown",
+    )
+    monkeypatch.setattr(benchmark_module, "render_jsonl", lambda *args, **kwargs: "jsonl")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["prog", "--query", failing_row.query, "--format", "text"],
+    )
+    assert benchmark_module.main() == 1
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prog",
+            "--query",
+            failing_row.query,
+            "--format",
+            "text",
+            "--skip-case-expectation-check",
+        ],
+    )
+    assert benchmark_module.main() == 0
 
 
 def test_clear_search_cache_removes_search_and_reference_cache_rows(tmp_path) -> None:

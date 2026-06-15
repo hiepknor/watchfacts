@@ -1969,6 +1969,9 @@ Task 10.4 progress:
 - Implemented benchmark hard-fail checks for case metadata so recognized cases with
   `expected_min_total_count` / `expected_top_result_fragments` must pass before the
   benchmark exits successfully.
+- Added local diagnostic override `--skip-case-expectation-check` so manual debug
+  runs can bypass case-expectation hard failures without changing dataset
+  definitions.
 - Remaining acceptance criteria in this task are still tracked for future
   enrichment by failure mode and explicit expected-count/top-result rules.
 

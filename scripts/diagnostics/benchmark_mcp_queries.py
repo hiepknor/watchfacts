@@ -1140,6 +1140,11 @@ def main() -> int:
         action="store_true",
         help="Do not fail the benchmark on alias recall comparison.",
     )
+    parser.add_argument(
+        "--skip-case-expectation-check",
+        action="store_true",
+        help="Do not fail the benchmark on case expectation (failure mode) checks.",
+    )
     args = parser.parse_args()
     if args.limit <= 0:
         parser.error("--limit must be positive")
@@ -1172,7 +1177,9 @@ def main() -> int:
         rows,
         max_delta_ratio=args.alias_total_delta_ratio,
     )
-    case_checks = evaluate_case_expectations(rows)
+    case_checks = (
+        () if args.skip_case_expectation_check else evaluate_case_expectations(rows)
+    )
     require_alias_recall = (
         False
         if args.skip_alias_recall_check
@@ -1206,7 +1213,11 @@ def main() -> int:
             require_evaluation=require_alias_recall,
         )
     )
-    case_ok = all(check.ok for check in case_checks)
+    case_ok = (
+        True
+        if args.skip_case_expectation_check
+        else all(check.ok for check in case_checks)
+    )
     return 0 if all(row.ok for row in rows) and alias_ok and case_ok else 1
 
 
