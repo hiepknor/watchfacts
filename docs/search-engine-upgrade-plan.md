@@ -1546,6 +1546,22 @@ Local Task 9.3 validation from 2026-06-15 with `search-v32`:
   (`15500st blue`) and skipped the two fallback branches because the primary
   branch matched `8` candidates.
 
+Local Task 9.4 validation from 2026-06-15 with `search-v32`:
+
+- `make check` passed with `702 passed, 2 skipped`.
+- `make mcp-cold-budget` passed `4/4` with cold-cache average `13733ms`,
+  median `10299ms`, p95/max `29645ms`, and cache misses `4/4`.
+- `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache` passed
+  `13/13` with cold-cache average `10936ms`, median `10542ms`, p95/max
+  `27075ms`, and cache misses `13/13`.
+- `make mcp-prewarm-benchmark-defaults` passed `26/26` with cache hits
+  `26/26`, average `42ms`, and max `266ms`.
+- Hot `make mcp-benchmark` passed `13/13` with cache hits `13/13`, average
+  `51ms`, median `32ms`, p95/max `264ms`, and alias recall delta `0`.
+- Benchmark output now renders branch order explicitly, for example
+  `daytona panda:queue=1`, `daytona white:queue=2`,
+  `126500ln white:queue=3`, and `116500ln white:queue=4`.
+
 Non-negotiables:
 
 - Keep alias-equivalent recall delta at zero for canonical groups.
@@ -1670,25 +1686,42 @@ make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
 
 ### Task 9.4: Retrieval Branch Ordering Policy
 
+Status: complete locally.
+
 Description: Reorder retrieval branches by observed value and cost where it can
 reduce first-pass latency or make later pruning safer. Deterministic merge order
 must remain documented and stable.
 
 Acceptance:
 
-- [ ] Branch ordering is explicit in diagnostics and tests.
-- [ ] Reordering does not change final eligibility, dedupe behavior, or ranking
+- [x] Branch ordering is explicit in diagnostics and tests.
+- [x] Reordering does not change final eligibility, dedupe behavior, or ranking
   for the default benchmark.
-- [ ] At least two high-cost focused queries show measurable cold-path
+- [x] At least two high-cost focused queries show measurable cold-path
   improvement, or the task records why ordering is not the bottleneck.
-- [ ] Hot-cache latency remains within the current benchmark profile.
+- [x] Hot-cache latency remains within the current benchmark profile.
+
+Implementation notes:
+
+- Added `queue_index` to each retrieval timing row so branch order is explicit
+  in MCP diagnostics, benchmark text, benchmark markdown, and JSONL output.
+- Kept the current `daytona panda` branch order. With bounded parallelism and
+  all branches awaited before returning results, moving the slow
+  `daytona white` branch later does not reduce wall-clock latency and can make
+  the critical path worse.
+- Did not prune or defer `daytona white`: it was the dominant slow branch, but
+  the Phase 9 branch report showed it contributed roughly `82` unique final
+  results. That is recall-bearing work, not redundant work.
+- No `SEARCH_CACHE_VERSION` bump was needed for this task because the returned
+  result set, matcher eligibility, ranking, and cache keys did not change.
 
 Verification:
 
 ```bash
-python -m pytest tests/test_search.py tests/test_benchmark_mcp_queries.py -q
+make check
 make mcp-cold-budget
-make search-engine-postdeploy-check
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+make mcp-benchmark
 ```
 
 ### Task 9.5: Deploy Gate For Retrieval Budget Regressions
@@ -1912,8 +1945,8 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Phase 9 Tasks 9.1 through 9.3 are complete locally. Continue with Task 9.4:
-evaluate whether retrieval branch ordering can safely reduce the remaining
-`daytona panda` cold-path cost without changing eligibility, dedupe behavior,
-or ranking. Do not start Phase 10 recognition/parser work until Phase 9 is
-deployed or explicitly deferred with evidence.
+Phase 9 Tasks 9.1 through 9.4 are complete locally. Continue with Task 9.5:
+turn the retrieval-budget evidence into a deploy gate, then deploy Phase 9 and
+record server-side cold and hot benchmark evidence. Do not start Phase 10
+recognition/parser work until Phase 9 is deployed or explicitly deferred with
+evidence.

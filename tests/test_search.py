@@ -1502,6 +1502,7 @@ def test_search_workflow_expands_daytona_panda_retrieval_with_local_filters(
         "126500ln white",
         "116500ln white",
     ]
+    assert [row["queue_index"] for row in retrieval_timings] == [1, 2, 3, 4]
     assert [row["cache_status"] for row in retrieval_timings] == [
         "miss",
         "miss",
@@ -1616,6 +1617,12 @@ def test_search_workflow_fetches_retrieval_branches_with_bounded_parallelism(
     assert workflow.last_search_diagnostics is not None
     diagnostics_payload = workflow.last_search_diagnostics.to_payload()
     assert diagnostics_payload["retrieval_queries"] == expected_queries
+    assert [row["queue_index"] for row in diagnostics_payload["retrieval_timings"]] == [
+        1,
+        2,
+        3,
+        4,
+    ]
     assert [row["query"] for row in diagnostics_payload["retrieval_timings"]] == (
         expected_queries
     )

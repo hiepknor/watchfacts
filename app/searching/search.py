@@ -74,6 +74,7 @@ class ImageAttribution:
 @dataclass(frozen=True)
 class RetrievalTiming:
     query: str
+    queue_index: int
     cache_status: str
     fetch_ms: int
     parse_ms: int
@@ -94,6 +95,7 @@ class RetrievalTiming:
     def to_payload(self) -> dict[str, object]:
         return {
             "query": self.query,
+            "queue_index": self.queue_index,
             "cache_status": self.cache_status,
             "fetch_ms": self.fetch_ms,
             "parse_ms": self.parse_ms,
@@ -514,6 +516,7 @@ class WatchFactsSearchWorkflow:
                     retrieval_timings.append(
                         RetrievalTiming(
                             query=retrieval_query,
+                            queue_index=retrieval_index,
                             cache_status="miss",
                             fetch_ms=fetch_result.fetch_ms,
                             parse_ms=0,
@@ -610,6 +613,7 @@ class WatchFactsSearchWorkflow:
                 retrieval_timings.append(
                     RetrievalTiming(
                         query=retrieval_query,
+                        queue_index=retrieval_index,
                         cache_status="miss",
                         fetch_ms=fetch_result.fetch_ms,
                         parse_ms=parse_ms,
@@ -681,6 +685,7 @@ class WatchFactsSearchWorkflow:
                 )
                 if expanded_query not in retrieval_queries:
                     retrieval_queries.append(expanded_query)
+                expanded_queue_index = retrieval_queries.index(expanded_query) + 1
                 retrieval_reason_codes.append("retrieval.expand_without_year_descriptor")
                 fetch_ms = _stage_elapsed_ms(fetch_started_at)
                 _add_stage_timing_value(stage_timings_ms, "watchfacts_fetch", fetch_ms)
@@ -745,6 +750,7 @@ class WatchFactsSearchWorkflow:
                 retrieval_timings.append(
                     RetrievalTiming(
                         query=expanded_query,
+                        queue_index=expanded_queue_index,
                         cache_status="miss",
                         fetch_ms=fetch_ms,
                         parse_ms=parse_ms,

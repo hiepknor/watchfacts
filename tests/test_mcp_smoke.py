@@ -198,6 +198,7 @@ def test_validate_search_diagnostics_reports_bad_retrieval_timing_shape() -> Non
             "retrieval_timings": [
                 {
                     "query": "",
+                    "queue_index": -1,
                     "cache_status": "warm",
                     "fetch_ms": -1,
                     "parse_ms": True,
@@ -224,6 +225,10 @@ def test_validate_search_diagnostics_reports_bad_retrieval_timing_shape() -> Non
     )
     assert (
         "search_diagnostics.retrieval_timings[0].fetch_ms must be a non-negative integer"
+        in errors
+    )
+    assert (
+        "search_diagnostics.retrieval_timings[0].queue_index must be a non-negative integer"
         in errors
     )
     assert (

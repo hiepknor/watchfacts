@@ -181,6 +181,7 @@ def _validate_retrieval_timings(value: Any, errors: list[str]) -> None:
         if cache_status not in {"hit", "miss"}:
             errors.append(f"{item_prefix}cache_status must be one of: hit, miss")
         for field in (
+            "queue_index",
             "fetch_ms",
             "parse_ms",
             "match_ms",

@@ -81,6 +81,7 @@ def test_row_from_payload_extracts_latency_quality_and_diagnostics() -> None:
             "retrieval_timings": [
                 {
                     "query": "5205r green",
+                    "queue_index": 1,
                     "cache_status": "miss",
                     "fetch_ms": 5100,
                     "parse_ms": 40,
@@ -167,6 +168,7 @@ def test_row_from_payload_extracts_latency_quality_and_diagnostics() -> None:
     assert row.retrieval_timings == (
         RetrievalTimingRow(
             query="5205r green",
+            queue_index=1,
             cache_status="miss",
             fetch_ms=5100,
             parse_ms=40,
@@ -222,6 +224,7 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
             retrieval_timings=(
                 RetrievalTimingRow(
                     query="5205r green",
+                    queue_index=1,
                     cache_status="hit",
                     fetch_ms=0,
                     parse_ms=0,
@@ -239,6 +242,7 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
                 ),
                 RetrievalTimingRow(
                     query="5205r",
+                    queue_index=2,
                     cache_status="miss",
                     fetch_ms=20,
                     parse_ms=0,
@@ -278,14 +282,14 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     assert "descriptors=required:green;optional:2026;conflict:blue" in text
     assert "retrieval_queries='5205r green','5205r'" in text
     assert "retrieval_reasons=retrieval.reference_with_descriptors,retrieval.expand_reference" in text
-    assert "retrieval_timings='5205r green:total=0,fetch=0,parse=0,match=0,parsed=0,matched=0,unique=0,top=1,cache=hit,dominant=yes'" in text
-    assert "5205r:total=20,fetch=20,parse=0,match=0,parsed=0,matched=0,unique=0,top=0,cache=miss,dominant=no,failed=yes,error=RuntimeError" in text
+    assert "retrieval_timings='5205r green:queue=1,total=0,fetch=0,parse=0,match=0,parsed=0,matched=0,unique=0,top=1,cache=hit,dominant=yes'" in text
+    assert "5205r:queue=2,total=20,fetch=20,parse=0,match=0,parsed=0,matched=0,unique=0,top=0,cache=miss,dominant=no,failed=yes,error=RuntimeError" in text
     assert "stages=cache_read:1,watchfacts_fetch:0,total:80" in text
     assert "SUMMARY" in text
     assert "| 5205r green | 2 | yes | 100 | 26 |" in markdown
     assert "patek_philippe:reference" in markdown
     assert "retrieval.reference_with_descriptors,retrieval.expand_reference" in markdown
-    assert "5205r green:total=0,fetch=0,parse=0,match=0,parsed=0,matched=0,unique=0,top=1,cache=hit,dominant=yes" in markdown
+    assert "5205r green:queue=1,total=0,fetch=0,parse=0,match=0,parsed=0,matched=0,unique=0,top=1,cache=hit,dominant=yes" in markdown
     assert "failed=yes,error=RuntimeError" in markdown
     assert "cache hits: 1" in markdown
     assert "cache_read:1,watchfacts_fetch:0,total:80" in markdown
@@ -299,6 +303,7 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     assert decoded[0]["retrieval_queries"] == ["5205r green", "5205r"]
     assert decoded[0]["stage_timings_ms"]["total"] == 80
     assert decoded[0]["retrieval_timings"][0]["query"] == "5205r green"
+    assert decoded[0]["retrieval_timings"][0]["queue_index"] == 1
     assert decoded[0]["retrieval_timings"][0]["cache_status"] == "hit"
     assert decoded[0]["retrieval_timings"][0]["top_result_count"] == 1
     assert decoded[0]["retrieval_timings"][1]["failed"] is True

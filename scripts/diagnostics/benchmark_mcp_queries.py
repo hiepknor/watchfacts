@@ -47,6 +47,7 @@ COLD_PATH_BUDGET_QUERIES = (
 @dataclass(frozen=True)
 class RetrievalTimingRow:
     query: str
+    queue_index: int | None = None
     cache_status: str | None = None
     fetch_ms: int | None = None
     parse_ms: int | None = None
@@ -584,6 +585,7 @@ def _retrieval_timings_value(value: object) -> tuple[RetrievalTimingRow, ...]:
         rows.append(
             RetrievalTimingRow(
                 query=query,
+                queue_index=_optional_int(item.get("queue_index")),
                 cache_status=_optional_str(item.get("cache_status")),
                 fetch_ms=_optional_int(item.get("fetch_ms")),
                 parse_ms=_optional_int(item.get("parse_ms")),
@@ -633,6 +635,7 @@ def _retrieval_timing_parts(
 
 def _retrieval_timing_part(timing: RetrievalTimingRow) -> str:
     parts = [
+        f"queue={_int_label(timing.queue_index)}",
         f"total={_int_label(timing.total_ms)}",
         f"fetch={_int_label(timing.fetch_ms)}",
         f"parse={_int_label(timing.parse_ms)}",
