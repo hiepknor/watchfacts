@@ -54,6 +54,8 @@ class RetrievalTimingRow:
     total_ms: int | None = None
     parsed_count: int | None = None
     matched_count: int | None = None
+    unique_result_count: int | None = None
+    top_result_count: int | None = None
     empty: bool | None = None
     server_filtered: bool | None = None
     playwright_fallback: bool | None = None
@@ -589,6 +591,8 @@ def _retrieval_timings_value(value: object) -> tuple[RetrievalTimingRow, ...]:
                 total_ms=_optional_int(item.get("total_ms")),
                 parsed_count=_optional_int(item.get("parsed_count")),
                 matched_count=_optional_int(item.get("matched_count")),
+                unique_result_count=_optional_int(item.get("unique_result_count")),
+                top_result_count=_optional_int(item.get("top_result_count")),
                 empty=item.get("empty") if isinstance(item.get("empty"), bool) else None,
                 server_filtered=(
                     item.get("server_filtered")
@@ -633,7 +637,10 @@ def _retrieval_timing_part(timing: RetrievalTimingRow) -> str:
         f"fetch={_int_label(timing.fetch_ms)}",
         f"parse={_int_label(timing.parse_ms)}",
         f"match={_int_label(timing.match_ms)}",
+        f"parsed={_int_label(timing.parsed_count)}",
         f"matched={_int_label(timing.matched_count)}",
+        f"unique={_int_label(timing.unique_result_count)}",
+        f"top={_int_label(timing.top_result_count)}",
         f"cache={timing.cache_status or '-'}",
         f"dominant={_bool_label(timing.dominant)}",
     ]

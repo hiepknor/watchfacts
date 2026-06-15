@@ -1510,6 +1510,8 @@ def test_search_workflow_expands_daytona_panda_retrieval_with_local_filters(
     ]
     assert [row["parsed_count"] for row in retrieval_timings] == [1, 2, 2, 1]
     assert [row["matched_count"] for row in retrieval_timings] == [1, 1, 1, 1]
+    assert [row["unique_result_count"] for row in retrieval_timings] == [1, 1, 1, 1]
+    assert sum(row["top_result_count"] for row in retrieval_timings) == 3
     assert [row["empty"] for row in retrieval_timings] == [
         False,
         False,
@@ -1678,6 +1680,8 @@ def test_search_workflow_isolates_partial_retrieval_fetch_failures(tmp_path) -> 
     failed_timing = diagnostics_payload["retrieval_timings"][1]
     assert failed_timing["query"] == "5711"
     assert failed_timing["failed"] is True
+    assert failed_timing["unique_result_count"] == 0
+    assert failed_timing["top_result_count"] == 0
     assert failed_timing["error_type"] == "RuntimeError"
     assert "retrieval.fetch_error:RuntimeError" in failed_timing["reason_codes"]
     assert diagnostics_payload["rejection_reasons"]["retrieval.fetch_error"] == 1

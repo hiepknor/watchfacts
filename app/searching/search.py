@@ -84,6 +84,8 @@ class RetrievalTiming:
     empty: bool
     server_filtered: bool
     playwright_fallback: bool
+    unique_result_count: int = 0
+    top_result_count: int = 0
     dominant: bool = False
     failed: bool = False
     error_type: str | None = None
@@ -99,6 +101,8 @@ class RetrievalTiming:
             "total_ms": self.total_ms,
             "parsed_count": self.parsed_count,
             "matched_count": self.matched_count,
+            "unique_result_count": self.unique_result_count,
+            "top_result_count": self.top_result_count,
             "empty": self.empty,
             "server_filtered": self.server_filtered,
             "playwright_fallback": self.playwright_fallback,
@@ -456,6 +460,7 @@ class WatchFactsSearchWorkflow:
         retrieval_fetch_success_count = 0
         first_fetch_exception: Exception | None = None
         retrieval_timings: list[RetrievalTiming] = []
+        candidate_branch_by_key: dict[tuple[str, str, str, str], str] = {}
         fetch_results = await self._fetch_retrieval_branches(
             retrieval_plan.fetch_queries
         )
@@ -567,6 +572,11 @@ class WatchFactsSearchWorkflow:
             match_ms = _stage_elapsed_ms(match_started_at)
             _add_stage_timing_value(stage_timings_ms, "match", match_ms)
             parsed_count += len(parsed)
+            _record_retrieval_contributions(
+                candidate_branch_by_key,
+                retrieval_matched,
+                branch_query=retrieval_query,
+            )
             matched = _merge_listing_candidates(matched, retrieval_matched)
             retrieval_timings.append(
                 RetrievalTiming(
@@ -658,6 +668,11 @@ class WatchFactsSearchWorkflow:
                 ambiguous_candidate_count += expanded_ambiguous_count
                 match_ms = _stage_elapsed_ms(match_started_at)
                 _add_stage_timing_value(stage_timings_ms, "match", match_ms)
+                _record_retrieval_contributions(
+                    candidate_branch_by_key,
+                    expanded_matched,
+                    branch_query=expanded_query,
+                )
                 retrieval_timings.append(
                     RetrievalTiming(
                         query=expanded_query,
@@ -677,7 +692,14 @@ class WatchFactsSearchWorkflow:
                     )
                 )
         result_pipeline_started_at = time.perf_counter()
-        results = [_to_search_result(query, listing) for listing in matched]
+        results: list[SearchResult] = []
+        result_branch_by_key: dict[tuple[str, str, str, str], str] = {}
+        for listing in matched:
+            result = _to_search_result(query, listing)
+            results.append(result)
+            branch_query = candidate_branch_by_key.get(_listing_candidate_key(listing))
+            if branch_query is not None:
+                result_branch_by_key[_search_result_branch_key(result)] = branch_query
         self._audit_search_results(
             audit_events,
             query=query,
@@ -736,6 +758,11 @@ class WatchFactsSearchWorkflow:
             query_intent=query_intent,
             stage="final",
             results=unique,
+        )
+        retrieval_timings = _add_retrieval_result_contribution_counts(
+            retrieval_timings,
+            unique,
+            result_branch_by_key,
         )
         deduped_drop_count = latest_drop_count + text_drop_count
         rejection_reasons = {
@@ -1944,6 +1971,17 @@ def _merge_listing_candidates(
     return merged
 
 
+def _record_retrieval_contributions(
+    branch_by_key: dict[tuple[str, str, str, str], str],
+    listings: list[ListingCandidate],
+    *,
+    branch_query: str,
+) -> None:
+    for listing in listings:
+        key = _listing_candidate_key(listing)
+        branch_by_key.setdefault(key, branch_query)
+
+
 def _listing_candidate_key(listing: ListingCandidate) -> tuple[str, str, str, str]:
     return (
         normalize_text(listing.listing_text),
@@ -1951,6 +1989,45 @@ def _listing_candidate_key(listing: ListingCandidate) -> tuple[str, str, str, st
         normalize_text(listing.posted_date or ""),
         listing.source_url or "",
     )
+
+
+def _search_result_branch_key(result: SearchResult) -> tuple[str, str, str, str]:
+    return (
+        normalize_text(result.raw_listing_text or result.listing_text),
+        normalize_text(result.seller or ""),
+        normalize_text(result.posted_date or ""),
+        result.source_url or "",
+    )
+
+
+def _add_retrieval_result_contribution_counts(
+    timings: list[RetrievalTiming],
+    results: list[SearchResult],
+    result_branch_by_key: dict[tuple[str, str, str, str], str],
+    *,
+    top_result_limit: int = 3,
+) -> list[RetrievalTiming]:
+    if not timings:
+        return []
+
+    unique_counts: dict[str, int] = {}
+    top_counts: dict[str, int] = {}
+    for index, result in enumerate(results):
+        branch_query = result_branch_by_key.get(_search_result_branch_key(result))
+        if branch_query is None:
+            continue
+        unique_counts[branch_query] = unique_counts.get(branch_query, 0) + 1
+        if index < top_result_limit:
+            top_counts[branch_query] = top_counts.get(branch_query, 0) + 1
+
+    return [
+        replace(
+            timing,
+            unique_result_count=unique_counts.get(timing.query, 0),
+            top_result_count=top_counts.get(timing.query, 0),
+        )
+        for timing in timings
+    ]
 
 
 def _search_cache_key(query: str, settings: Settings) -> str:

@@ -88,6 +88,8 @@ def test_row_from_payload_extracts_latency_quality_and_diagnostics() -> None:
                     "total_ms": 5155,
                     "parsed_count": 12,
                     "matched_count": 10,
+                    "unique_result_count": 8,
+                    "top_result_count": 2,
                     "empty": False,
                     "server_filtered": True,
                     "playwright_fallback": False,
@@ -172,6 +174,8 @@ def test_row_from_payload_extracts_latency_quality_and_diagnostics() -> None:
             total_ms=5155,
             parsed_count=12,
             matched_count=10,
+            unique_result_count=8,
+            top_result_count=2,
             empty=False,
             server_filtered=True,
             playwright_fallback=False,
@@ -225,6 +229,8 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
                     total_ms=0,
                     parsed_count=0,
                     matched_count=0,
+                    unique_result_count=0,
+                    top_result_count=1,
                     empty=True,
                     server_filtered=False,
                     playwright_fallback=False,
@@ -240,6 +246,8 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
                     total_ms=20,
                     parsed_count=0,
                     matched_count=0,
+                    unique_result_count=0,
+                    top_result_count=0,
                     empty=True,
                     server_filtered=False,
                     playwright_fallback=False,
@@ -270,14 +278,14 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     assert "descriptors=required:green;optional:2026;conflict:blue" in text
     assert "retrieval_queries='5205r green','5205r'" in text
     assert "retrieval_reasons=retrieval.reference_with_descriptors,retrieval.expand_reference" in text
-    assert "retrieval_timings='5205r green:total=0,fetch=0,parse=0,match=0,matched=0,cache=hit,dominant=yes'" in text
-    assert "5205r:total=20,fetch=20,parse=0,match=0,matched=0,cache=miss,dominant=no,failed=yes,error=RuntimeError" in text
+    assert "retrieval_timings='5205r green:total=0,fetch=0,parse=0,match=0,parsed=0,matched=0,unique=0,top=1,cache=hit,dominant=yes'" in text
+    assert "5205r:total=20,fetch=20,parse=0,match=0,parsed=0,matched=0,unique=0,top=0,cache=miss,dominant=no,failed=yes,error=RuntimeError" in text
     assert "stages=cache_read:1,watchfacts_fetch:0,total:80" in text
     assert "SUMMARY" in text
     assert "| 5205r green | 2 | yes | 100 | 26 |" in markdown
     assert "patek_philippe:reference" in markdown
     assert "retrieval.reference_with_descriptors,retrieval.expand_reference" in markdown
-    assert "5205r green:total=0,fetch=0,parse=0,match=0,matched=0,cache=hit,dominant=yes" in markdown
+    assert "5205r green:total=0,fetch=0,parse=0,match=0,parsed=0,matched=0,unique=0,top=1,cache=hit,dominant=yes" in markdown
     assert "failed=yes,error=RuntimeError" in markdown
     assert "cache hits: 1" in markdown
     assert "cache_read:1,watchfacts_fetch:0,total:80" in markdown
@@ -292,6 +300,7 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     assert decoded[0]["stage_timings_ms"]["total"] == 80
     assert decoded[0]["retrieval_timings"][0]["query"] == "5205r green"
     assert decoded[0]["retrieval_timings"][0]["cache_status"] == "hit"
+    assert decoded[0]["retrieval_timings"][0]["top_result_count"] == 1
     assert decoded[0]["retrieval_timings"][1]["failed"] is True
     assert decoded[0]["retrieval_timings"][1]["error_type"] == "RuntimeError"
     assert decoded[1]["error_type"] == "RuntimeError"
