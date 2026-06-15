@@ -1477,7 +1477,7 @@ Verification:
 
 ## Phase 9: Retrieval Budget Optimization
 
-Status: planned.
+Status: in progress.
 
 Goal: reduce cold expanded-search latency for the high-cost query families
 identified in Phase 8 without changing matcher eligibility, weakening ranking
@@ -1499,6 +1499,32 @@ Baseline from the Phase 8 deploy:
 | `5711 blue` | ~19.2s | 28 |
 | `15500st blue` | ~8.6s | 6 |
 
+Local Phase 9 baseline from 2026-06-15 after commit `f07915d`:
+
+- `make mcp-cold-budget` passed `4/4` with cold-cache average `22468ms`,
+  median `23060ms`, p95/max `33817ms`, and cache misses `4/4`.
+- `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache` passed
+  `13/13` with cold-cache average `13821ms`, median `11994ms`, p95/max
+  `27843ms`, and cache misses `13/13`.
+- Alias recall delta stayed zero for `rm07-01 mop`, `rm07-01 rg`,
+  `rm07-01 rg snow`, and `rm07-01 wg`.
+
+Branch contribution observations:
+
+| Query | Branch | Cold total | Unique final results | Top-3 results | Read |
+| --- | --- | ---: | ---: | ---: | --- |
+| `daytona panda` | `daytona panda` | ~2.5s to ~6.2s | 81 | 3 | Keep; primary top contributor. |
+| `daytona panda` | `daytona white` | ~15.1s to ~16.8s | 82 | 0 | Risky to prune: high recall contribution but no top-3 contribution in current run. |
+| `daytona panda` | `126500ln white` | ~3.6s to ~3.8s | 17 | 0 | Low-cost recall contributor. |
+| `daytona panda` | `116500ln white` | ~2.7s to ~2.9s | 30 | 0 | Low-cost recall contributor. |
+| `5711 blue` | `5711 blue` | ~9.5s to ~11.2s | 27 | 3 | Keep; all final results came from primary branch. |
+| `5711 blue` | `5711` | ~8.7s to ~11.4s | 0 | 0 | Candidate for pruning or conditional fallback. |
+| `5711 blue` | `nautilus 5711 blue` | ~9.1s to ~11.1s | 0 | 0 | Candidate for pruning or conditional fallback. |
+| `15500st blue` | `15500st blue` | ~4.1s to ~4.9s | 6 | 3 | Keep; all final results came from primary branch. |
+| `15500st blue` | `15500st` | ~4.3s to ~5.0s | 0 | 0 | Candidate for pruning or conditional fallback. |
+| `15500st blue` | `royal oak 15500st blue` | ~4.2s to ~4.3s | 0 | 0 | Candidate for pruning or conditional fallback. |
+| `rm07-01 rg snow` | `rm07-01` | ~9.9s to ~10.1s | 2 | 2 | Single branch; optimize fetch cost, not branch pruning. |
+
 Non-negotiables:
 
 - Keep alias-equivalent recall delta at zero for canonical groups.
@@ -1512,19 +1538,29 @@ Non-negotiables:
 
 ### Task 9.1: Cold Budget Baseline Snapshot
 
+Status: complete locally.
+
 Description: Capture a fresh Phase 8 baseline before changing retrieval policy.
 The snapshot must show per-query and per-branch timing, cache status, result
 counts, top snippets, and alias-group drift.
 
 Acceptance:
 
-- [ ] `make mcp-cold-budget` produces a focused cold-path artifact for the
+- [x] `make mcp-cold-budget` produces a focused cold-path artifact for the
   high-cost queries.
-- [ ] The default MCP benchmark is run with a cold cache and records
+- [x] The default MCP benchmark is run with a cold cache and records
   `total_count`, top snippets, and alias-equivalence checks.
-- [ ] The baseline explicitly identifies the top latency branches and whether
+- [x] The baseline explicitly identifies the top latency branches and whether
   each branch contributes unique eligible results.
-- [ ] No production behavior changes in this task.
+- [x] No production behavior changes in this task.
+
+Implementation notes:
+
+- Used the Phase 9 contribution diagnostics from commit `f07915d`.
+- Recorded branch-level `parsed`, `matched`, `unique`, and `top` counts from
+  local MCP benchmark output.
+- Did not commit generated benchmark artifacts because `logs/` is ignored
+  runtime output; the durable summary lives in this plan.
 
 Verification:
 
@@ -1536,18 +1572,30 @@ git diff --check
 
 ### Task 9.2: Retrieval Branch Contribution Report
 
+Status: complete locally.
+
 Description: Extend diagnostics or benchmark reporting so each retrieval branch
 can be evaluated by cost and contribution, not just elapsed time.
 
 Acceptance:
 
-- [ ] Each branch report includes elapsed time, cache hit/miss, parsed count,
+- [x] Each branch report includes elapsed time, cache hit/miss, parsed count,
   matched count, unique final-result contribution, and top-result contribution.
-- [ ] Reports identify branches that are expensive but add no unique eligible
+- [x] Reports identify branches that are expensive but add no unique eligible
   results for the focused budget set.
-- [ ] Reports do not expose cookies, browser state, raw HTML, full page bodies,
+- [x] Reports do not expose cookies, browser state, raw HTML, full page bodies,
   or secrets.
-- [ ] Existing MCP payload schema remains backward compatible.
+- [x] Existing MCP payload schema remains backward compatible.
+
+Implementation notes:
+
+- Added `unique_result_count` and `top_result_count` to retrieval timing
+  diagnostics.
+- Benchmark text, markdown, and JSONL output now include branch `parsed`,
+  `matched`, `unique`, and `top` counts.
+- No `SEARCH_CACHE_VERSION` bump was needed because result cache keys, cached
+  result payloads, matcher eligibility, ranking, and returned listing data did
+  not change; only diagnostics gained backward-compatible fields.
 
 Verification:
 
@@ -1824,8 +1872,9 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Phase 8 is implemented, pushed, and deployed at `6c8a894`. Start Phase 9 with
-Task 9.1: capture a fresh cold budget baseline for the high-latency retrieval
-families, then use Task 9.2 to identify branch cost versus contribution before
-changing retrieval policy. Do not start Phase 10 recognition/parser work until
-Phase 9 is deployed or explicitly deferred with evidence.
+Phase 9 Tasks 9.1 and 9.2 are complete locally. Continue with Task 9.3:
+prototype redundant expansion pruning or conditional fallback for the zero
+contribution branches in `5711 blue` and `15500st blue`, while proving no alias
+recall delta, `total_count` drift, or top-result regression. Do not start Phase
+10 recognition/parser work until Phase 9 is deployed or explicitly deferred
+with evidence.
