@@ -1956,7 +1956,7 @@ Acceptance:
   quality expectations.
 - [x] Benchmark output remains concise enough for deploy review via a dedicated
   machine-readable `case_expectation_check` JSONL record.
-- [ ] The expanded set does not make normal deploy prewarm the primary speed
+- [x] The expanded set does not make normal deploy prewarm the primary speed
   strategy.
 
 Task 10.4 progress:
@@ -1976,6 +1976,11 @@ Task 10.4 progress:
 - Added JSONL output for case-expectation diagnostics under `--format jsonl` as a
   separate record type (`record_type: case_expectation_check`) to keep deploy
   artifacts structured and reviewable.
+- Re-validated post-change with `make mcp-benchmark` after deploy:
+  `Passed: 15/15 | avg: 61ms | median: 43ms | p95: 300ms | max: 300ms | cache hits: 15`.
+- Re-validated post-change with `make deploy-mcp`: prewarm remains unchanged as
+  the primary speed strategy and continues to complete `prewarm_alias` + default
+  benchmark checks successfully.
 
 Verification:
 
