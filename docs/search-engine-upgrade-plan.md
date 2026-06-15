@@ -1950,9 +1950,9 @@ recognition/parser cases so future work protects the improved behavior.
 
 Acceptance:
 
-- [ ] New benchmark cases are grouped by failure mode: recognition, retrieval,
+- [x] New benchmark cases are grouped by failure mode: recognition, retrieval,
   parser scoping, image ownership, or ranking.
-- [ ] Each new case has expected `total_count` drift rules and top-result
+- [x] Each new case has expected `total_count` drift rules and top-result
   quality expectations.
 - [ ] Benchmark output remains concise enough for deploy review.
 - [ ] The expanded set does not make normal deploy prewarm the primary speed

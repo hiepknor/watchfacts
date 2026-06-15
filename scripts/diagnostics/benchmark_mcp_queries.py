@@ -21,29 +21,57 @@ from app.search_contracts import validate_search_payload
 
 DEFAULT_ALIAS_TOTAL_DELTA_RATIO = 0.10
 
-DEFAULT_BENCHMARK_QUERIES = (
-    "rm07-01 rg",
-    "rm07-01 rosegold",
-    "rm07-01 rose gold",
-    "rm07-01 wg",
-    "rm07-01 white gold",
-    "rm07-01 mop",
-    "rm07-01 mother of pearl",
-    "rm07-01 rg snow",
-    "rm07-01 rose gold snow",
-    "RP Journe Elegante Titanium",
-    "F.P. Journe Elegante Titanium",
-    "126500ln white",
-    "daytona panda",
-    "5711 blue",
-    "15500st blue",
+@dataclass(frozen=True)
+class BenchmarkQueryCase:
+    query: str
+    failure_mode: str
+    min_total_count: int | None = None
+    expected_top_result_fragments: tuple[str, ...] = ()
+
+
+DEFAULT_BENCHMARK_QUERY_CASES: tuple[BenchmarkQueryCase, ...] = (
+    BenchmarkQueryCase("rm07-01 rg", "recognition"),
+    BenchmarkQueryCase("rm07-01 rosegold", "recognition"),
+    BenchmarkQueryCase("rm07-01 rose gold", "recognition"),
+    BenchmarkQueryCase("rm07-01 wg", "recognition"),
+    BenchmarkQueryCase("rm07-01 white gold", "recognition"),
+    BenchmarkQueryCase("rm07-01 mop", "recognition"),
+    BenchmarkQueryCase("rm07-01 mother of pearl", "recognition"),
+    BenchmarkQueryCase("rm07-01 rg snow", "recognition"),
+    BenchmarkQueryCase("rm07-01 rose gold snow", "recognition"),
+    BenchmarkQueryCase(
+        "RP Journe Elegante Titanium",
+        "brand_recognition",
+        min_total_count=1,
+        expected_top_result_fragments=("F.P. Journe",),
+    ),
+    BenchmarkQueryCase(
+        "F.P. Journe Elegante Titanium",
+        "brand_recognition",
+        min_total_count=1,
+        expected_top_result_fragments=("FPJ Elegante Titanium",),
+    ),
+    BenchmarkQueryCase("126500ln white", "retrieval"),
+    BenchmarkQueryCase("daytona panda", "retrieval"),
+    BenchmarkQueryCase("5711 blue", "retrieval"),
+    BenchmarkQueryCase("15500st blue", "retrieval"),
 )
+DEFAULT_BENCHMARK_QUERIES = tuple(
+    case.query for case in DEFAULT_BENCHMARK_QUERY_CASES
+)
+DEFAULT_BENCHMARK_CASES_BY_QUERY: dict[str, BenchmarkQueryCase] = {
+    case.query.casefold(): case for case in DEFAULT_BENCHMARK_QUERY_CASES
+}
 COLD_PATH_BUDGET_QUERIES = (
     "daytona panda",
     "5711 blue",
     "15500st blue",
     "rm07-01 rg snow",
 )
+
+
+def get_default_case_for_query(query: str) -> BenchmarkQueryCase | None:
+    return DEFAULT_BENCHMARK_CASES_BY_QUERY.get(query.casefold())
 
 
 @dataclass(frozen=True)
@@ -76,6 +104,9 @@ class BenchmarkRow:
     run_number: int = 1
     result_count: int | None = None
     total_count: int | None = None
+    failure_mode: str | None = None
+    expected_min_total_count: int | None = None
+    expected_top_result_fragments: tuple[str, ...] = ()
     has_more: bool | None = None
     query_intent: str | None = None
     canonical_query: str | None = None
@@ -251,6 +282,7 @@ def _row_from_payload(
     diagnostics = _dict_value(payload.get("search_diagnostics"))
     query_plan = _dict_value(diagnostics.get("query_plan"))
     results = payload.get("results") if isinstance(payload.get("results"), list) else []
+    default_case = get_default_case_for_query(query)
     top_results = tuple(
         _snippet(str(result.get("listing_text") or ""))
         for result in results[:3]
@@ -272,6 +304,11 @@ def _row_from_payload(
         ok=not validation_errors,
         elapsed_ms=elapsed_ms,
         run_number=run_number,
+        failure_mode=default_case.failure_mode if default_case else None,
+        expected_min_total_count=default_case.min_total_count if default_case else None,
+        expected_top_result_fragments=(
+            default_case.expected_top_result_fragments if default_case else ()
+        ),
         result_count=_optional_int(payload.get("result_count")),
         total_count=_optional_int(payload.get("total_count")),
         has_more=payload.get("has_more") if isinstance(payload.get("has_more"), bool) else None,
@@ -401,6 +438,9 @@ def render_text(
             f"run={row.run_number}",
             f"ok={str(row.ok).lower()}",
             f"elapsed_ms={row.elapsed_ms}",
+            f"failure_mode={row.failure_mode}",
+            f"expected_min_total={row.expected_min_total_count}",
+            f"expected_top_results={_quoted_csv(row.expected_top_result_fragments)}",
             f"total_count={row.total_count}",
             f"result_count={row.result_count}",
             f"intent={row.query_intent}",

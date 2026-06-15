@@ -11,7 +11,9 @@ from scripts.diagnostics.benchmark_mcp_queries import (
     BenchmarkRow,
     COLD_PATH_BUDGET_QUERIES,
     DEFAULT_BENCHMARK_QUERIES,
+    DEFAULT_BENCHMARK_QUERY_CASES,
     RetrievalTimingRow,
+    get_default_case_for_query,
     _clear_search_cache,
     _dedupe_queries,
     _load_query_file,
@@ -575,6 +577,59 @@ def test_default_benchmark_queries_cover_alias_pairs_and_multi_brand_set() -> No
         "5711 blue",
         "15500st blue",
     )
+
+
+def test_default_query_cases_express_failure_modes() -> None:
+    case = get_default_case_for_query("RP Journe Elegante Titanium")
+    assert case is not None
+    assert case.query == "RP Journe Elegante Titanium"
+    assert case.failure_mode == "brand_recognition"
+    assert case.min_total_count == 1
+    assert case.expected_top_result_fragments == ("F.P. Journe",)
+
+    case = get_default_case_for_query("F.P. Journe Elegante Titanium")
+    assert case is not None
+    assert case.failure_mode == "brand_recognition"
+    assert case.min_total_count == 1
+    assert case.expected_top_result_fragments == ("FPJ Elegante Titanium",)
+
+    assert get_default_case_for_query("rm07-01 rg").failure_mode == "recognition"
+
+
+def test_case_aware_payload_row_populates_case_expectations() -> None:
+    row = _row_from_payload(
+        query="RP Journe Elegante Titanium",
+        payload={
+            "total_count": 1,
+            "search_diagnostics": {
+                "query_plan": {
+                    "canonical_query": "RP Journe Elegante Titanium",
+                }
+            },
+            "results": [
+                {
+                    "listing_text": "F.P. Journe Elegante Titanium - titanium watch",
+                    "image_url": "/img.jpg",
+                    "source_url": "/source",
+                }
+            ],
+        },
+        elapsed_ms=77,
+        validation_errors=(),
+    )
+
+    assert row.failure_mode == "brand_recognition"
+    assert row.expected_min_total_count == 1
+    assert row.expected_top_result_fragments == ("F.P. Journe",)
+    assert row.top_results == ("F.P. Journe Elegante Titanium - titanium watch",)
+
+
+def test_default_query_cases_can_be_materialized_from_registry() -> None:
+    assert len(DEFAULT_BENCHMARK_QUERY_CASES) == len(DEFAULT_BENCHMARK_QUERIES)
+    assert len({case.query.casefold() for case in DEFAULT_BENCHMARK_QUERY_CASES}) == len(
+        DEFAULT_BENCHMARK_QUERIES
+    )
+
 
 
 def test_cold_path_budget_queries_cover_slow_representatives_only() -> None:
