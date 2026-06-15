@@ -28,6 +28,23 @@ def test_load_queries_uses_default_query_set_when_no_input() -> None:
     assert load_queries(args) == list(DEFAULT_AUDIT_QUERIES)
 
 
+def test_default_audit_queries_cover_phase10_recognition_case() -> None:
+    assert DEFAULT_AUDIT_QUERIES == (
+        "5205r 2026",
+        "126500ln white 2026",
+        "7118/1200a grey",
+        "Fpj Elegante Titanium",
+        "228235a choco",
+        "5712r",
+        "5205r green",
+        "5726/1a",
+        "RM65-01 Lebron",
+        "RP Journe Elegante Titanium",
+        "F.P. Journe Elegante Titanium",
+        "116500 panda",
+    )
+
+
 def test_load_queries_dedupes_and_normalizes_cli_queries() -> None:
     args = Namespace(
         queries=["  5712r  ", "5712R", "5205r   green"],
