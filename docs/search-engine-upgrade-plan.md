@@ -1499,7 +1499,8 @@ Verification:
 
 ## Phase 9: Retrieval Budget Optimization
 
-Status: in progress.
+Status: complete for MCP/search; Telegram bot runtime remains blocked by
+placeholder operator secret.
 
 Goal: reduce cold expanded-search latency for the high-cost query families
 identified in Phase 8 without changing matcher eligibility, weakening ranking
