@@ -1918,12 +1918,12 @@ ownership can be proven.
 
 Acceptance:
 
-- [ ] `layout.repeated_reference` or `layout.multi_reference_bundle` fixes have
+- [x] `layout.repeated_reference` or `layout.multi_reference_bundle` fixes have
   fixtures proving item ownership.
-- [ ] Ambiguous parent images remain omitted when ownership is not provable.
-- [ ] Scoped raw parent evidence remains excluded for stock-list cases unless a
+- [x] Ambiguous parent images remain omitted when ownership is not provable.
+- [x] Scoped raw parent evidence remains excluded for stock-list cases unless a
   fixture proves safe ownership.
-- [ ] Result payloads preserve existing `result_id`, `stable_listing_id`, image,
+- [x] Result payloads preserve existing `result_id`, `stable_listing_id`, image,
   source, and pagination behavior.
 
 Verification:
@@ -1940,6 +1940,8 @@ Task 10.3 progress:
   in `tests/test_search.py`.
 - The RM65-01 fixture asserts deterministic ambiguous-bundle image omission behavior
   while preserving existing RM65-01 coverage in `scripts/diagnostics/audit_quality.py`.
+- Added verification note that stock-list and inherited-first-item safety boundaries
+  are still covered by existing fixtures in `tests/test_search.py`.
 
 ### Task 10.4: Cross-Brand Evaluation Set Expansion
 
@@ -1982,12 +1984,12 @@ or needs a small data split. This is a maintenance decision, not a feature.
 
 Acceptance:
 
-- [ ] Keep rulebook data in place if the accepted Phase 10 additions are small.
-- [ ] Split data only if one file now mixes unrelated ownership concerns or
+- [x] Keep rulebook data in place because accepted Phase 10 additions are small
+  and already reviewable within existing structures.
+- [x] Split data only if one file now mixes unrelated ownership concerns or
   repeated structures become hard to review.
-- [ ] Any split preserves public matcher/search APIs and rule order.
-- [ ] The decision is recorded in this plan or an ADR if it changes module
-  boundaries.
+- [x] Any split preserves public matcher/search APIs and rule order.
+- [x] The decision is recorded in this plan (keep as-is).
 
 Verification:
 
@@ -1995,6 +1997,13 @@ Verification:
 python -m pytest tests/test_matcher.py tests/test_search.py -q
 git diff --check
 ```
+
+Task 10.5 progress:
+
+- Decision: keep the existing rulebook layout and data structures in
+  `app/searching/matcher_rulebook.py` for Phase 10.
+- Revisit splitting only if Phase 10 grows into multiple brand families per task
+  and duplication exceeds the current small rule additions.
 
 Phase 10 done criteria:
 
