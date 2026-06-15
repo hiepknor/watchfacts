@@ -9,6 +9,10 @@ deployed to the production `watchfacts-bot` and `watchfacts-mcp` services. The
 Phase 8 search changes are active on the server with
 `SEARCH_CACHE_VERSION=search-v31`.
 
+Phase 9 is in local implementation. Task 9.3 changes use
+`SEARCH_CACHE_VERSION=search-v32` locally and are not deployed until the Phase 9
+deploy gate is run.
+
 ## Date
 
 2026-06-13
@@ -1525,6 +1529,23 @@ Branch contribution observations:
 | `15500st blue` | `royal oak 15500st blue` | ~4.2s to ~4.3s | 0 | 0 | Candidate for pruning or conditional fallback. |
 | `rm07-01 rg snow` | `rm07-01` | ~9.9s to ~10.1s | 2 | 2 | Single branch; optimize fetch cost, not branch pruning. |
 
+Local Task 9.3 validation from 2026-06-15 with `search-v32`:
+
+- `make check` passed with `702 passed, 2 skipped`.
+- `make mcp-cold-budget` passed `4/4` with cold-cache average `14365ms`,
+  median `10592ms`, p95/max `31697ms`, and cache misses `4/4`.
+- `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache` passed
+  `13/13` with cold-cache average `11949ms`, median `11349ms`, p95/max
+  `32928ms`, and cache misses `13/13`.
+- Alias recall delta stayed zero for `rm07-01 mop`, `rm07-01 rg`,
+  `rm07-01 rg snow`, and `rm07-01 wg`.
+- `5711 blue` returned `27` results from one fetched branch
+  (`5711 blue`) and skipped the two fallback branches because the primary
+  branch matched `49` candidates.
+- `15500st blue` returned `6` results from one fetched branch
+  (`15500st blue`) and skipped the two fallback branches because the primary
+  branch matched `8` candidates.
+
 Non-negotiables:
 
 - Keep alias-equivalent recall delta at zero for canonical groups.
@@ -1605,25 +1626,44 @@ make mcp-cold-budget
 git diff --check
 ```
 
-### Task 9.3: Redundant Expansion Pruning
+### Task 9.3: Redundant Expansion Conditional Fallback
+
+Status: complete locally.
 
 Description: Remove, merge, or narrow retrieval branches only when branch
 contribution evidence shows they do not add recall for the focused and default
-benchmark sets.
+benchmark sets. For `5711 blue` and `15500st blue`, use conditional fallback
+instead of hard pruning: fetch the primary branch first, then fetch collection
+expansion branches only when the primary branch returns fewer than five matched
+candidates.
 
 Acceptance:
 
-- [ ] Any pruned branch has documented before/after contribution evidence.
-- [ ] Alias recall delta remains zero for `rm07-01 rg`, `rm07-01 wg`,
+- [x] Any pruned or skipped branch has documented before/after contribution
+  evidence.
+- [x] Alias recall delta remains zero for `rm07-01 rg`, `rm07-01 wg`,
   `rm07-01 mop`, and `rm07-01 rg snow` canonical groups.
-- [ ] Default benchmark `total_count` and top-result snippets do not drift.
-- [ ] If retrieval semantics or cache payloads change, bump
+- [x] Default benchmark `total_count` and top-result snippets do not drift.
+- [x] If retrieval semantics or cache payloads change, bump
   `SEARCH_CACHE_VERSION`.
+
+Implementation notes:
+
+- Added `fallback_min_matched_count=5` to the `nautilus` and `royal_oak`
+  retrieval expansion rules.
+- Search now executes primary retrieval first for those rules and records
+  `retrieval.conditional_fallback_skipped` or
+  `retrieval.conditional_fallback_fetched` in diagnostics.
+- Sparse-result fixtures still fetch fallback branches, preserving the recall
+  safety net when a primary WatchFacts query under-recovers.
+- `daytona panda` still expands immediately because its expansion branches add
+  many unique final results in the Phase 9 branch report.
+- Bumped `SEARCH_CACHE_VERSION` from `search-v31` to `search-v32`.
 
 Verification:
 
 ```bash
-python -m pytest tests/test_search.py tests/test_benchmark_mcp_queries.py -q
+make check
 make mcp-cold-budget
 make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
 ```
@@ -1872,9 +1912,8 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Phase 9 Tasks 9.1 and 9.2 are complete locally. Continue with Task 9.3:
-prototype redundant expansion pruning or conditional fallback for the zero
-contribution branches in `5711 blue` and `15500st blue`, while proving no alias
-recall delta, `total_count` drift, or top-result regression. Do not start Phase
-10 recognition/parser work until Phase 9 is deployed or explicitly deferred
-with evidence.
+Phase 9 Tasks 9.1 through 9.3 are complete locally. Continue with Task 9.4:
+evaluate whether retrieval branch ordering can safely reduce the remaining
+`daytona panda` cold-path cost without changing eligibility, dedupe behavior,
+or ranking. Do not start Phase 10 recognition/parser work until Phase 9 is
+deployed or explicitly deferred with evidence.

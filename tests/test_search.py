@@ -1897,6 +1897,79 @@ def test_search_workflow_expands_5711_blue_retrieval_with_reference_scoped_filte
     ]
 
 
+def test_search_workflow_skips_5711_blue_fallback_when_primary_is_sufficient(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        if query != "5711 blue":
+            raise AssertionError(f"unexpected fallback fetch: {query}")
+        html = """
+        {
+          "listings": [
+            {
+              "title": "5711 Blue Dial 2026 Full Set HKD 990000",
+              "companyName": "Dealer 1",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 101,
+              "frontImage": "https://watchfacts.example/5711-blue-1.jpg"
+            },
+            {
+              "title": "5711 Blue Dial 2025 Full Set HKD 980000",
+              "companyName": "Dealer 2",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 102,
+              "frontImage": "https://watchfacts.example/5711-blue-2.jpg"
+            },
+            {
+              "title": "5711 Blue Dial 2024 Full Set HKD 970000",
+              "companyName": "Dealer 3",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 103,
+              "frontImage": "https://watchfacts.example/5711-blue-3.jpg"
+            },
+            {
+              "title": "5711 Blue Dial 2023 Full Set HKD 960000",
+              "companyName": "Dealer 4",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 104,
+              "frontImage": "https://watchfacts.example/5711-blue-4.jpg"
+            },
+            {
+              "title": "5711 Blue Dial 2022 Full Set HKD 950000",
+              "companyName": "Dealer 5",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 105,
+              "frontImage": "https://watchfacts.example/5711-blue-5.jpg"
+            }
+          ]
+        }
+        """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("5711 blue"))
+
+    assert fetch_queries == ["5711 blue"]
+    assert len(results) == 5
+    assert workflow.last_search_diagnostics is not None
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["retrieval_query_count"] == 1
+    assert diagnostics_payload["retrieval_queries"] == ["5711 blue"]
+    assert diagnostics_payload["retrieval_timings"][0]["matched_count"] == 5
+    assert "retrieval.conditional_fallback_skipped" in diagnostics_payload[
+        "retrieval_reason_codes"
+    ]
+
+
 @pytest.mark.parametrize("query", ["rolex 5711 blue", "5711 blue leather"])
 def test_search_workflow_does_not_expand_5711_blue_when_extra_descriptors_change_intent(
     tmp_path,
@@ -1955,7 +2028,9 @@ def test_retrieval_plan_allows_safe_5711_blue_context_descriptors(
     query_plan = search_module.build_query_plan(query)
     retrieval_plan = search_module._build_retrieval_plan(query, query_plan)
 
-    assert retrieval_plan.fetch_queries == expected_fetch_queries
+    assert retrieval_plan.fetch_queries == (query,)
+    assert retrieval_plan.fallback_fetch_queries == expected_fetch_queries[1:]
+    assert retrieval_plan.fallback_min_matched_count == 5
     assert retrieval_plan.local_filter_queries == (query, "5711 blue")
     assert retrieval_plan.strict_local_filter is True
 
@@ -2060,6 +2135,79 @@ def test_search_workflow_expands_15500st_blue_retrieval_with_reference_scoped_fi
     ]
 
 
+def test_search_workflow_skips_15500st_blue_fallback_when_primary_is_sufficient(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        if query != "15500st blue":
+            raise AssertionError(f"unexpected fallback fetch: {query}")
+        html = """
+        {
+          "listings": [
+            {
+              "title": "15500ST Blue Dial 2026 Full Set HKD 550000",
+              "companyName": "Dealer 1",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 201,
+              "frontImage": "https://watchfacts.example/15500st-blue-1.jpg"
+            },
+            {
+              "title": "15500ST Blue Dial 2025 Full Set HKD 540000",
+              "companyName": "Dealer 2",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 202,
+              "frontImage": "https://watchfacts.example/15500st-blue-2.jpg"
+            },
+            {
+              "title": "15500ST Blue Dial 2024 Full Set HKD 530000",
+              "companyName": "Dealer 3",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 203,
+              "frontImage": "https://watchfacts.example/15500st-blue-3.jpg"
+            },
+            {
+              "title": "15500ST Blue Dial 2023 Full Set HKD 520000",
+              "companyName": "Dealer 4",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 204,
+              "frontImage": "https://watchfacts.example/15500st-blue-4.jpg"
+            },
+            {
+              "title": "15500ST Blue Dial 2022 Full Set HKD 510000",
+              "companyName": "Dealer 5",
+              "repostedAt": "2026-06-13 10:00:00",
+              "number": 205,
+              "frontImage": "https://watchfacts.example/15500st-blue-5.jpg"
+            }
+          ]
+        }
+        """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+
+    results = asyncio.run(workflow.search("15500st blue"))
+
+    assert fetch_queries == ["15500st blue"]
+    assert len(results) == 5
+    assert workflow.last_search_diagnostics is not None
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["retrieval_query_count"] == 1
+    assert diagnostics_payload["retrieval_queries"] == ["15500st blue"]
+    assert diagnostics_payload["retrieval_timings"][0]["matched_count"] == 5
+    assert "retrieval.conditional_fallback_skipped" in diagnostics_payload[
+        "retrieval_reason_codes"
+    ]
+
+
 @pytest.mark.parametrize("query", ["rolex 15500st blue", "15500st blue leather"])
 def test_search_workflow_does_not_expand_15500st_blue_when_extra_descriptors_change_intent(
     tmp_path,
@@ -2126,7 +2274,9 @@ def test_retrieval_plan_allows_safe_15500st_blue_context_descriptors(
     query_plan = search_module.build_query_plan(query)
     retrieval_plan = search_module._build_retrieval_plan(query, query_plan)
 
-    assert retrieval_plan.fetch_queries == expected_fetch_queries
+    assert retrieval_plan.fetch_queries == (query,)
+    assert retrieval_plan.fallback_fetch_queries == expected_fetch_queries[1:]
+    assert retrieval_plan.fallback_min_matched_count == 5
     assert retrieval_plan.local_filter_queries == (query, "15500st blue")
     assert retrieval_plan.strict_local_filter is True
 

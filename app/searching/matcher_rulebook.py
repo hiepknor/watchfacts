@@ -59,6 +59,7 @@ class RetrievalExpansionRule:
     retrieval_queries: tuple[str, ...]
     local_filter_queries: tuple[str, ...]
     reason_code: str
+    fallback_min_matched_count: int | None = None
     nickname: str | None = None
     reference_terms: tuple[str, ...] = ()
     required_descriptors: tuple[str, ...] = ()
@@ -205,6 +206,7 @@ RETRIEVAL_EXPANSION_RULES: tuple[RetrievalExpansionRule, ...] = (
         ),
         local_filter_queries=("5711 blue",),
         reason_code="retrieval.collection_expansion:nautilus",
+        fallback_min_matched_count=5,
         reference_terms=("5711",),
         required_descriptors=("blue",),
         allowed_extra_descriptors=("nautilus", "patek", "philippe", "pp"),
@@ -217,6 +219,7 @@ RETRIEVAL_EXPANSION_RULES: tuple[RetrievalExpansionRule, ...] = (
         ),
         local_filter_queries=("15500st blue",),
         reason_code="retrieval.collection_expansion:royal_oak",
+        fallback_min_matched_count=5,
         reference_terms=("15500st",),
         required_descriptors=("blue",),
         allowed_extra_descriptors=("ap", "audemars", "piguet", "royal", "oak"),
