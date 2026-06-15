@@ -1475,6 +1475,313 @@ Verification:
 
 - Documentation-only change verified with `git diff --check`.
 
+## Phase 9: Retrieval Budget Optimization
+
+Status: planned.
+
+Goal: reduce cold expanded-search latency for the high-cost query families
+identified in Phase 8 without changing matcher eligibility, weakening ranking
+guardrails, or hiding latency through larger prewarm lists.
+
+Phase 9 owns the Retrieval boundary. It should not expand brand taxonomy,
+rewrite parser segmentation, or change ranking unless a retrieval change exposes
+a concrete regression that must be fixed to preserve existing behavior.
+
+Baseline from the Phase 8 deploy:
+
+| Query | Phase 8 cold first-pass latency | Result count |
+| --- | ---: | ---: |
+| `rm07-01 rg` | ~15.8s | 30 |
+| `rm07-01 wg` | ~11.7s | 16 |
+| `rm07-01 mop` | ~10.5s | 6 |
+| `rm07-01 rg snow` | ~11.0s | 2 |
+| `daytona panda` | ~22.2s | 210 |
+| `5711 blue` | ~19.2s | 28 |
+| `15500st blue` | ~8.6s | 6 |
+
+Non-negotiables:
+
+- Keep alias-equivalent recall delta at zero for canonical groups.
+- Keep `total_count` stable for the default benchmark unless an audited
+  WatchFacts data change explains the difference.
+- Keep top-result snippets stable for affected benchmark queries.
+- Do not use prewarm expansion as the optimization.
+- Do not add an `engine` package or a broad retrieval abstraction before a
+  duplicated ownership problem exists in the code.
+- Keep local deterministic matcher eligibility as the final quality gate.
+
+### Task 9.1: Cold Budget Baseline Snapshot
+
+Description: Capture a fresh Phase 8 baseline before changing retrieval policy.
+The snapshot must show per-query and per-branch timing, cache status, result
+counts, top snippets, and alias-group drift.
+
+Acceptance:
+
+- [ ] `make mcp-cold-budget` produces a focused cold-path artifact for the
+  high-cost queries.
+- [ ] The default MCP benchmark is run with a cold cache and records
+  `total_count`, top snippets, and alias-equivalence checks.
+- [ ] The baseline explicitly identifies the top latency branches and whether
+  each branch contributes unique eligible results.
+- [ ] No production behavior changes in this task.
+
+Verification:
+
+```bash
+make mcp-cold-budget
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+git diff --check
+```
+
+### Task 9.2: Retrieval Branch Contribution Report
+
+Description: Extend diagnostics or benchmark reporting so each retrieval branch
+can be evaluated by cost and contribution, not just elapsed time.
+
+Acceptance:
+
+- [ ] Each branch report includes elapsed time, cache hit/miss, parsed count,
+  matched count, unique final-result contribution, and top-result contribution.
+- [ ] Reports identify branches that are expensive but add no unique eligible
+  results for the focused budget set.
+- [ ] Reports do not expose cookies, browser state, raw HTML, full page bodies,
+  or secrets.
+- [ ] Existing MCP payload schema remains backward compatible.
+
+Verification:
+
+```bash
+python -m pytest tests/test_benchmark_mcp_queries.py tests/test_search.py -q
+make mcp-cold-budget
+git diff --check
+```
+
+### Task 9.3: Redundant Expansion Pruning
+
+Description: Remove, merge, or narrow retrieval branches only when branch
+contribution evidence shows they do not add recall for the focused and default
+benchmark sets.
+
+Acceptance:
+
+- [ ] Any pruned branch has documented before/after contribution evidence.
+- [ ] Alias recall delta remains zero for `rm07-01 rg`, `rm07-01 wg`,
+  `rm07-01 mop`, and `rm07-01 rg snow` canonical groups.
+- [ ] Default benchmark `total_count` and top-result snippets do not drift.
+- [ ] If retrieval semantics or cache payloads change, bump
+  `SEARCH_CACHE_VERSION`.
+
+Verification:
+
+```bash
+python -m pytest tests/test_search.py tests/test_benchmark_mcp_queries.py -q
+make mcp-cold-budget
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+```
+
+### Task 9.4: Retrieval Branch Ordering Policy
+
+Description: Reorder retrieval branches by observed value and cost where it can
+reduce first-pass latency or make later pruning safer. Deterministic merge order
+must remain documented and stable.
+
+Acceptance:
+
+- [ ] Branch ordering is explicit in diagnostics and tests.
+- [ ] Reordering does not change final eligibility, dedupe behavior, or ranking
+  for the default benchmark.
+- [ ] At least two high-cost focused queries show measurable cold-path
+  improvement, or the task records why ordering is not the bottleneck.
+- [ ] Hot-cache latency remains within the current benchmark profile.
+
+Verification:
+
+```bash
+python -m pytest tests/test_search.py tests/test_benchmark_mcp_queries.py -q
+make mcp-cold-budget
+make search-engine-postdeploy-check
+```
+
+### Task 9.5: Deploy Gate For Retrieval Budget Regressions
+
+Description: Turn the Phase 9 benchmark evidence into a repeatable deploy gate
+that protects recall and quality first, then tracks latency budget regressions.
+
+Acceptance:
+
+- [ ] Deploy docs explain which retrieval-budget checks are hard failures and
+  which are warning-only latency observations.
+- [ ] Hard failures include alias recall drift, unexpected `total_count` drift,
+  top-result quality regression, and benchmark validation errors.
+- [ ] Latency budgets are reported with the Phase 8 baseline and latest run, but
+  do not fail deploy until enough runs establish a stable threshold.
+- [ ] Server deploy notes record the cold-path result after Phase 9 deployment.
+
+Verification:
+
+```bash
+make search-engine-predeploy-check
+make search-engine-postdeploy-check
+git diff --check
+```
+
+Phase 9 done criteria:
+
+- Cold first-pass latency improves for at least two high-cost focused queries,
+  or the plan documents why no safe retrieval reduction exists.
+- Alias recall delta remains zero.
+- Default benchmark result counts and top snippets remain stable.
+- No parser, matcher, or ranking expansion is introduced without a separate
+  audited finding.
+- Phase 9 is deployed and the docs record the server commit, cache version, and
+  postdeploy benchmark evidence.
+
+## Phase 10: Audit-Gated Recognition And Parser Coverage
+
+Status: proposed after Phase 9.
+
+Goal: improve query recognition and parser coverage only for production gaps
+that have audit evidence. Phase 10 should convert the backlog and Phase 9
+reports into small, testable recognition/parser changes, not a broad product
+catalog or parser rewrite.
+
+Phase 10 starts only after Phase 9 has either reduced cold retrieval cost or
+documented that retrieval pruning is unsafe. This ordering matters: if retrieval
+is still wasteful, adding more aliases or parser branches can make latency worse
+without improving result quality.
+
+Activation criteria:
+
+- Phase 9 is deployed or explicitly deferred with evidence.
+- At least one production query shows a real recognition or parser failure:
+  missed retrieval, false positive, wrong ranking, wrong scoped text, or unsafe
+  image ownership.
+- The failure can be reproduced through `audit_quality.py`, MCP benchmark
+  output, or a regression fixture.
+
+### Task 10.1: Promote Backlog Items From Evidence
+
+Description: Review `docs/brand-recognition-backlog.md`, Phase 9 branch reports,
+and recent production audits to select only gaps with a concrete user-visible
+failure.
+
+Acceptance:
+
+- [ ] Each promoted item has before/after query evidence and a named failure
+  mode.
+- [ ] Deferred items explain why they are not safe or valuable enough yet.
+- [ ] No brand is added only because the brand name is absent from metadata.
+- [ ] The promoted set is small enough to verify in one focused benchmark run.
+
+Verification:
+
+```bash
+python scripts/diagnostics/audit_quality.py "<accepted query>" --limit 5
+git diff --check
+```
+
+### Task 10.2: Minimal Brand And Collection Rulebook Additions
+
+Description: Add accepted aliases, collections, nicknames, or reference grammar
+to the existing rulebook data only when they fix an audited retrieval or ranking
+gap.
+
+Acceptance:
+
+- [ ] New brand or collection logic lives in existing rulebook data such as
+  `BRAND_ALIAS_RULES`, `COLLECTION_RULES`, `NICKNAME_RULES`, or
+  `REFERENCE_GRAMMAR_RULES`.
+- [ ] Each addition has a focused regression test and audit evidence.
+- [ ] The default benchmark and affected focused queries show no false-positive
+  increase.
+- [ ] Rulebook growth is reviewed for duplication before adding a new module.
+
+Verification:
+
+```bash
+python -m pytest tests/test_matcher.py tests/test_search.py -q
+python scripts/diagnostics/audit_quality.py "<accepted query>" --limit 5
+make mcp-benchmark
+```
+
+### Task 10.3: Parser Ownership Fixtures For Ambiguous Bundles
+
+Description: Use Phase 8 image-layout and raw-context diagnostics to improve
+parser ownership only where deterministic item-to-text or item-to-image
+ownership can be proven.
+
+Acceptance:
+
+- [ ] `layout.repeated_reference` or `layout.multi_reference_bundle` fixes have
+  fixtures proving item ownership.
+- [ ] Ambiguous parent images remain omitted when ownership is not provable.
+- [ ] Scoped raw parent evidence remains excluded for stock-list cases unless a
+  fixture proves safe ownership.
+- [ ] Result payloads preserve existing `result_id`, `stable_listing_id`, image,
+  source, and pagination behavior.
+
+Verification:
+
+```bash
+python -m pytest tests/test_parser.py tests/test_search.py tests/test_audit_quality.py -q
+python scripts/diagnostics/audit_quality.py "FPJ Elegante Titanium" "RM65-01 Lebron" --limit 5
+```
+
+### Task 10.4: Cross-Brand Evaluation Set Expansion
+
+Description: Expand the benchmark and audit set with only the accepted Phase 10
+recognition/parser cases so future work protects the improved behavior.
+
+Acceptance:
+
+- [ ] New benchmark cases are grouped by failure mode: recognition, retrieval,
+  parser scoping, image ownership, or ranking.
+- [ ] Each new case has expected `total_count` drift rules and top-result
+  quality expectations.
+- [ ] Benchmark output remains concise enough for deploy review.
+- [ ] The expanded set does not make normal deploy prewarm the primary speed
+  strategy.
+
+Verification:
+
+```bash
+python -m pytest tests/test_benchmark_mcp_queries.py tests/test_audit_quality.py -q
+make mcp-benchmark
+git diff --check
+```
+
+### Task 10.5: Rulebook Maintenance Threshold
+
+Description: Decide whether rulebook data still belongs in the current modules
+or needs a small data split. This is a maintenance decision, not a feature.
+
+Acceptance:
+
+- [ ] Keep rulebook data in place if the accepted Phase 10 additions are small.
+- [ ] Split data only if one file now mixes unrelated ownership concerns or
+  repeated structures become hard to review.
+- [ ] Any split preserves public matcher/search APIs and rule order.
+- [ ] The decision is recorded in this plan or an ADR if it changes module
+  boundaries.
+
+Verification:
+
+```bash
+python -m pytest tests/test_matcher.py tests/test_search.py -q
+git diff --check
+```
+
+Phase 10 done criteria:
+
+- Every accepted recognition/parser gap has before/after audit evidence.
+- No broad brand catalog is introduced.
+- No ambiguous image is shown just to lower missing-image rate.
+- Default benchmark and focused Phase 10 cases pass without recall or top-result
+  regressions.
+- If no backlog item meets the evidence threshold, Phase 10 is explicitly
+  deferred rather than filled with speculative taxonomy work.
+
 ## Metrics
 
 Track these before and after each phase:
@@ -1517,9 +1824,8 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Phase 8 is implemented, pushed, and deployed at `6c8a894`. The next useful work
-is a narrow retrieval-budget optimization phase: reduce cold expanded-search
-cost for the high-latency representatives while proving no alias recall delta,
-result-count drift, or top-result quality regression. Do not start another broad
-matcher/parser/ranking expansion until fresh audit data shows a real quality or
-latency gap and the benchmark can prove no false-positive or recall regression.
+Phase 8 is implemented, pushed, and deployed at `6c8a894`. Start Phase 9 with
+Task 9.1: capture a fresh cold budget baseline for the high-latency retrieval
+families, then use Task 9.2 to identify branch cost versus contribution before
+changing retrieval policy. Do not start Phase 10 recognition/parser work until
+Phase 9 is deployed or explicitly deferred with evidence.
