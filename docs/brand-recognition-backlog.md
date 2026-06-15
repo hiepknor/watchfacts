@@ -47,7 +47,8 @@ make mcp-cold-budget
 
 | Candidate | Observed query | Current evidence | Status |
 | --- | --- | --- | --- |
-| FP Journe / FPJ | `FPJ Elegante Titanium` | Query plan has no brand candidate, but audited top rows still match the FPJ/Elegante/Titanium text, result quality stays clean, and the main active issue is ambiguous parent-image ownership. | Deferred until missing brand recognition causes false positives, missed retrieval, ranking drift, or repeated user reports. |
+| FP Journe / FPJ | `FPJ Elegante Titanium` | Query plan now has `fp_journe` brand candidate and focused audits remain clean; no confirmed missed-retrieval or ranking regression. | Deferred until repeated issues show user-visible impact. |
+| F.P. / RP Journe | `RP Journe Elegante Titanium` | Server query `RP Journe Elegante Titanium` returned no rows while `FPJ Elegante Titanium` was populated. | Brand alias + retrieval fallback added (`query plan -> fp_journe`, fallback query `fpj elegante titanium`), with targeted unit tests + focused search workflow assertion. |
 
 ## Accepted Change Template
 

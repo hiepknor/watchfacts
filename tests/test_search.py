@@ -2288,6 +2288,85 @@ def test_retrieval_plan_allows_safe_15500st_blue_context_descriptors(
     assert retrieval_plan.strict_local_filter is True
 
 
+@pytest.mark.parametrize(
+    ("query", "expected_fallback_query"),
+    [
+        ("rp journe elegante titanium", "fpj elegante titanium"),
+        ("f.p. journe elegante titanium", "fpj elegante titanium"),
+        ("f.p.journe elegante titanium", "fpj elegante titanium"),
+    ],
+)
+def test_retrieval_plan_uses_brand_alias_fallback_for_fp_journe(
+    query: str,
+    expected_fallback_query: str,
+) -> None:
+    query_plan = search_module.build_query_plan(query)
+    retrieval_plan = search_module._build_retrieval_plan(query, query_plan)
+
+    assert retrieval_plan.fetch_queries == (query,)
+    assert retrieval_plan.fallback_fetch_queries == (expected_fallback_query,)
+    assert retrieval_plan.fallback_min_matched_count == 1
+    assert retrieval_plan.local_filter_queries == (
+        query,
+        expected_fallback_query,
+    )
+    assert retrieval_plan.strict_local_filter is True
+    assert "retrieval.conditional_fallback:fp_journe" in retrieval_plan.reason_codes
+
+
+def test_search_workflow_uses_fp_journe_brand_alias_retrieval_fallback(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        fetch_queries.append(query)
+        if query == "rp journe elegante titanium":
+            html = """
+            {
+              "listings": []
+            }
+            """
+        else:
+            html = """
+        {
+          "listings": [
+            {
+              "title": "FPJ Elegante Titanium 48mm 2026 Full Set HKD 520000",
+              "companyName": "Dealer FPJ",
+              "repostedAt": "2026-06-14 10:00:00",
+              "number": 404,
+              "frontImage": "https://watchfacts.example/fpj-elegante.jpg"
+            }
+          ]
+        }
+        """
+        return ScrapeResult(
+            html=html,
+            final_url="https://watchfacts.example/simon-search-matches",
+            server_filtered=True,
+        )
+
+    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    results = asyncio.run(workflow.search("rp journe elegante titanium"))
+    result_texts = {result.listing_text for result in results}
+
+    assert fetch_queries == ["rp journe elegante titanium", "fpj elegante titanium"]
+    assert result_texts == {"FPJ Elegante Titanium 48mm 2026 Full Set HKD 520000"}
+    assert workflow.last_search_diagnostics is not None
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["retrieval_query_count"] == 2
+    assert diagnostics_payload["retrieval_queries"] == [
+        "rp journe elegante titanium",
+        "fpj elegante titanium",
+    ]
+    assert "retrieval.conditional_fallback_fetched" in diagnostics_payload[
+        "retrieval_reason_codes"
+    ]
+    assert "retrieval.brand_alias_expansion:fp_journe" in diagnostics_payload[
+        "retrieval_reason_codes"
+    ]
+
+
 def test_search_workflow_does_not_use_reference_only_fallback_for_multi_descriptor_query(
     tmp_path,
 ) -> None:

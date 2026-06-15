@@ -1817,7 +1817,7 @@ Phase 9 done criteria:
 
 ## Phase 10: Audit-Gated Recognition And Parser Coverage
 
-Status: deferred after Task 10.1 evidence review on 2026-06-15.
+Status: in progress.
 
 Goal: improve query recognition and parser coverage only for production gaps
 that have audit evidence. Phase 10 should convert the backlog and Phase 9
@@ -1868,10 +1868,10 @@ Task 10.1 evidence review from 2026-06-15:
 - Ran focused audits for `FPJ Elegante Titanium`, `RM65-01 Lebron`,
   `rm07-01 rg snow`, `5711 blue`, `15500st blue`, `126500ln white`, and
   `daytona panda` with `--limit 5`.
-- No rulebook change was promoted. `FPJ Elegante Titanium` still has no
-  `brand_candidates`, but the current top rows are clean and validation errors
-  remain zero, so adding FPJ taxonomy would only improve metadata, not a proven
-  user-visible failure.
+- Promoted one rulebook change from the audited evidence: `F.P. / RP Journe`.
+  `RP Journe Elegante Titanium` had zero rows on the server query form,
+  while `FPJ Elegante Titanium` was populated and had no top-result safety issues.
+  The change adds brand alias detection plus retrieval fallback.
 - `RM65-01 Lebron`, `rm07-01 rg snow`, and `15500st blue` still show omitted
   images for `layout.repeated_reference` or `layout.multi_reference_bundle`
   cases. These remain deferred because item-to-image ownership is not
@@ -1894,7 +1894,7 @@ gap.
 
 Acceptance:
 
-- [ ] New brand or collection logic lives in existing rulebook data such as
+- [x] New brand or collection logic added only to existing rulebook data such as
   `BRAND_ALIAS_RULES`, `COLLECTION_RULES`, `NICKNAME_RULES`, or
   `REFERENCE_GRAMMAR_RULES`.
 - [ ] Each addition has a focused regression test and audit evidence.

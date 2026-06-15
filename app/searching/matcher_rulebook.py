@@ -69,6 +69,17 @@ class RetrievalExpansionRule:
 
 
 @dataclass(frozen=True)
+class BrandRetrievalRule:
+    brand: str
+    replacement_token: str
+    replacement_token_groups: tuple[tuple[str, ...], ...]
+    reason_code: str
+    requires_reference_absent: bool = True
+    requires_optional_descriptor_absent: bool = False
+    min_matched_count: int = 1
+
+
+@dataclass(frozen=True)
 class QueryIntent:
     reference_terms: tuple[tuple[str, ...], ...]
     descriptor_tokens: tuple[str, ...]
@@ -154,6 +165,11 @@ BRAND_ALIAS_RULES: tuple[BrandAliasRule, ...] = (
     BrandAliasRule(("audemars", "piguet"), "audemars_piguet"),
     BrandAliasRule(("rm",), "richard_mille"),
     BrandAliasRule(("richard", "mille"), "richard_mille"),
+    BrandAliasRule(("fpj",), "fp_journe"),
+    BrandAliasRule(("f.p",), "fp_journe"),
+    BrandAliasRule(("f.p.journe",), "fp_journe"),
+    BrandAliasRule(("f", "p", "journe"), "fp_journe"),
+    BrandAliasRule(("rp", "journe"), "fp_journe"),
 )
 
 
@@ -223,6 +239,22 @@ RETRIEVAL_EXPANSION_RULES: tuple[RetrievalExpansionRule, ...] = (
         reference_terms=("15500st",),
         required_descriptors=("blue",),
         allowed_extra_descriptors=("ap", "audemars", "piguet", "royal", "oak"),
+    ),
+)
+
+BRAND_RETRIEVAL_RULES: tuple[BrandRetrievalRule, ...] = (
+    BrandRetrievalRule(
+        brand="fp_journe",
+        replacement_token="fpj",
+        replacement_token_groups=(
+            ("f.p", "journe"),
+            ("f.p",),
+            ("f.p.journe",),
+            ("fpj",),
+            ("rp", "journe"),
+        ),
+        reason_code="retrieval.brand_alias_expansion:fp_journe",
+        min_matched_count=1,
     ),
 )
 

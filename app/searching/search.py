@@ -37,6 +37,8 @@ from app.searching.query_intent import (
     classify_query_intent,
 )
 from app.searching.matcher_rulebook import (
+    BRAND_RETRIEVAL_RULES,
+    BrandRetrievalRule,
     RETRIEVAL_EXPANSION_RULES,
     RetrievalExpansionRule,
 )
@@ -54,7 +56,7 @@ from app.searching.similarity import group_similar_results
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
 logger = logging.getLogger("app.search")
-SEARCH_CACHE_VERSION = "search-v32"
+SEARCH_CACHE_VERSION = "search-v33"
 PRODUCT_REFERENCE_RE = re.compile(
     r"\b(?=[A-Za-z0-9/.-]*\d)[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\b",
     re.IGNORECASE,
@@ -1723,6 +1725,32 @@ def _build_retrieval_plan(query: str, query_plan: QueryPlan) -> RetrievalPlan:
             strict_local_filter=True,
         )
 
+    brand_retrieval_rule = _brand_retrieval_rule(query_plan)
+    if brand_retrieval_rule is not None:
+        fallback_fetch_queries = _brand_retrieval_queries(
+            query_plan,
+            brand_retrieval_rule,
+        )
+        if fallback_fetch_queries:
+            local_filter_queries = _dedupe_strings(
+                [
+                    query,
+                    *fallback_fetch_queries,
+                ]
+            )
+            return RetrievalPlan(
+                fetch_queries=(query,),
+                local_filter_queries=local_filter_queries,
+                reason_codes=(
+                    "retrieval.raw_query",
+                    f"retrieval.conditional_fallback:{brand_retrieval_rule.brand}",
+                ),
+                fallback_fetch_queries=fallback_fetch_queries,
+                fallback_min_matched_count=brand_retrieval_rule.min_matched_count,
+                fallback_reason_code=brand_retrieval_rule.reason_code,
+                strict_local_filter=True,
+            )
+
     reference_query = _reference_retrieval_query(query_plan)
     if (
         reference_query
@@ -1785,6 +1813,60 @@ def _query_plan_has_reference_terms(
 ) -> bool:
     query_references = {"".join(reference) for reference in query_plan.references}
     return set(reference_terms).issubset(query_references)
+
+
+def _brand_retrieval_rule(
+    query_plan: QueryPlan,
+) -> BrandRetrievalRule | None:
+    candidate_brands = {
+        candidate["brand"] for candidate in query_plan.brand_candidates
+    }
+    for rule in BRAND_RETRIEVAL_RULES:
+        if rule.requires_reference_absent and query_plan.references:
+            continue
+        if rule.requires_optional_descriptor_absent and query_plan.optional_descriptors:
+            continue
+        if rule.brand not in candidate_brands:
+            continue
+        return rule
+    return None
+
+
+def _brand_retrieval_queries(
+    query_plan: QueryPlan,
+    rule: BrandRetrievalRule,
+) -> tuple[str, ...]:
+    canonical_query = query_plan.canonical_query or query_plan.original_query
+    canonical_tokens = tuple(canonical_query.split())
+    for token_group in rule.replacement_token_groups:
+        replacement_query = _replace_token_group(
+            tokens=canonical_tokens,
+            replacement_group=token_group,
+            replacement_token=rule.replacement_token,
+        )
+        if replacement_query is not None and replacement_query != canonical_query:
+            return (replacement_query,)
+    return ()
+
+
+def _replace_token_group(
+    tokens: tuple[str, ...],
+    replacement_group: tuple[str, ...],
+    replacement_token: str,
+) -> str | None:
+    if len(replacement_group) > len(tokens):
+        return None
+    group_length = len(replacement_group)
+    for index in range(len(tokens) - group_length + 1):
+        if tuple(tokens[index : index + group_length]) != replacement_group:
+            continue
+        replacement_tokens = (
+            tokens[:index]
+            + (replacement_token,)
+            + tokens[index + group_length :]
+        )
+        return " ".join(replacement_tokens)
+    return None
 
 
 def _filter_retrieved_listings(

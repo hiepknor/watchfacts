@@ -172,6 +172,41 @@ def test_build_query_plan_infers_brand_collection_and_nickname() -> None:
     assert plan.required_descriptors == ("daytona", "panda")
 
 
+def test_build_query_plan_recognizes_fpj_alias_as_brand_candidate() -> None:
+    plan = build_query_plan("FPJ Elegante Titanium")
+
+    assert plan.brand_candidates == (
+        {
+            "brand": "fp_journe",
+            "confidence": "explicit",
+            "source_terms": ("fpj",),
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("query", "source_terms"),
+    [
+        ("RP Journe Elegante Titanium", ("rp", "journe")),
+        ("F.P. Journe Elegante Titanium", ("f.p",)),
+        ("F.P.Journe Elegante Titanium", ("f.p.journe",)),
+    ],
+)
+def test_build_query_plan_recognizes_fp_journe_alias_variants(
+    query: str,
+    source_terms: tuple[str, ...],
+) -> None:
+    plan = build_query_plan(query)
+
+    assert plan.brand_candidates == (
+        {
+            "brand": "fp_journe",
+            "confidence": "explicit",
+            "source_terms": source_terms,
+        },
+    )
+
+
 def test_build_query_plan_preserves_unknown_brand_reference_descriptor_query() -> None:
     plan = build_query_plan("indiebrand abc123 green")
 
