@@ -40,7 +40,7 @@ export IMAGE
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-cold-budget mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy search-engine-predeploy-check search-engine-postdeploy-check search-engine-deploy-check search-engine-baseline-snapshot quality-audit ai-audit-triage predeploy-quality-check
+.PHONY: help init verify-env verify-bot-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-cold-budget mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy search-engine-predeploy-check search-engine-postdeploy-check search-engine-deploy-check search-engine-baseline-snapshot quality-audit ai-audit-triage predeploy-quality-check
 
 help:
 	@printf "%s\n" "watchfacts commands"
@@ -97,6 +97,9 @@ verify-env: init
 	@test -s .env || { printf "%s\n" "Missing .env. Run make init and edit .env."; exit 1; }
 	@test -s data/watchfacts_state.json || { printf "%s\n" "Missing data/watchfacts_state.json. Run make login on a machine with browser access."; exit 1; }
 
+verify-bot-env: verify-env
+	@awk -F= '/^TELEGRAM_BOT_TOKEN=/{ token=$$2 } END { if (token == "" || token == "your_telegram_token") { printf "%s\n", "TELEGRAM_BOT_TOKEN is missing or still set to the placeholder. Edit .env before deploying watchfacts-bot."; exit 1 } }' .env
+
 pull:
 	@if [ "$(SKIP_PULL)" = "1" ]; then \
 		printf "%s\n" "Skipping git pull because SKIP_PULL=1"; \
@@ -114,7 +117,7 @@ predeploy-check:
 
 deploy: deploy-bot-mcp
 
-deploy-bot: verify-env pull build predeploy-check
+deploy-bot: verify-bot-env pull build predeploy-check
 	@docker rm -f $(LEGACY_BOT_CONTAINER) 2>/dev/null || true
 	$(COMPOSE) up -d --force-recreate --remove-orphans $(BOT_SERVICE)
 	$(COMPOSE) ps

@@ -117,7 +117,9 @@ def test_makefile_deploy_targets_are_scoped() -> None:
     assert "SERVICE ?= bot" not in makefile
     assert "export IMAGE" in makefile
     assert "\ndeploy: deploy-bot-mcp\n" in makefile
-    assert "\ndeploy-bot: verify-env pull build predeploy-check\n" in makefile
+    assert "verify-bot-env: verify-env" in makefile
+    assert "TELEGRAM_BOT_TOKEN is missing or still set to the placeholder" in makefile
+    assert "\ndeploy-bot: verify-bot-env pull build predeploy-check\n" in makefile
     assert "\ndeploy-mcp: verify-env pull mcp-build mcp-predeploy-check\n" in makefile
     assert "\ndeploy-bot-mcp: deploy-bot deploy-mcp\n" in makefile
     assert "docker rm -f $(LEGACY_BOT_CONTAINER)" in makefile

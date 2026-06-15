@@ -36,6 +36,10 @@
 
 The bot expects `data/watchfacts_state.json` to exist before the first real search.
 Deploy targets also check for `.env` and browser state before they pull/build.
+`make deploy-bot` additionally rejects an empty or placeholder
+`TELEGRAM_BOT_TOKEN` before recreating the Telegram container. `make deploy-mcp`
+does not require a Telegram token because MCP/search can run without Telegram
+polling.
 
 ## Production Server Standard
 
