@@ -2,16 +2,14 @@
 
 ## Status
 
-Bot and MCP deployed and production-validated through Phase 8.
+Phase 9 search runtime is deployed and validated on `watchfacts-mcp`.
 
-As of 2026-06-15, commit `6c8a894` is pushed to `origin/master` and
-deployed to the production `watchfacts-bot` and `watchfacts-mcp` services. The
-Phase 8 search changes are active on the server with
-`SEARCH_CACHE_VERSION=search-v31`.
-
-Phase 9 is in local implementation. Task 9.3 changes use
-`SEARCH_CACHE_VERSION=search-v32` locally and are not deployed until the Phase 9
-deploy gate is run.
+As of 2026-06-15, commit `7c588d6` is pushed to `origin/master` and deployed to
+the production `watchfacts-mcp` service with `SEARCH_CACHE_VERSION=search-v32`.
+The `watchfacts-bot` container was recreated during deploy but is not healthy
+because `.env` currently provides the placeholder
+`TELEGRAM_BOT_TOKEN=your_telegram_token`; restore the operator secret and run
+`make deploy-bot` to bring Telegram polling back.
 
 ## Date
 
@@ -84,11 +82,31 @@ reference grammar.
 
 Latest validated deployment:
 
-- Commit: `6c8a894`
-- Services: `watchfacts-bot`, `watchfacts-mcp`
+- Commit: `7c588d6`
+- Services: `watchfacts-mcp`
 - Date: 2026-06-15
-- Runtime cache version: `search-v31`
+- Runtime cache version: `search-v32`
 - Worktree state after deploy: clean and synced with `origin/master`
+- Status: Phase 9 MCP/search deployed and postdeploy-validated. Bot runtime
+  deploy is blocked by placeholder Telegram token config, not by Phase 9 code.
+
+Phase 9 deploy and postdeploy gate:
+
+- Pushed `master` to `origin` through commit `7c588d6`.
+- `make deploy` rebuilt and recreated services.
+- Container test gates passed with `704 passed` for both bot and MCP images.
+- Container `python -m compileall app scripts` passed for both bot and MCP
+  images.
+- MCP quality audit passed during deploy.
+- `watchfacts-mcp` became healthy and reports `SEARCH_CACHE_VERSION=search-v32`.
+- Server `make search-engine-postdeploy-check` passed.
+- MCP smoke passed `4/4`.
+- Server cold-budget passed `4/4` with cold-cache average `13040ms`, median
+  `10557ms`, p95/max `26883ms`, and cache misses `4/4`.
+- Server benchmark-default prewarm passed `26/26`; verify pass showed hot cache
+  for all benchmark defaults and alias recall delta `0`.
+- Server hot benchmark passed `13/13` with cache hits `13/13`, average `53ms`,
+  median `33ms`, p95/max `279ms`, and alias recall delta `0`.
 
 Phase 8 predeploy gate:
 
@@ -1740,7 +1758,7 @@ make mcp-benchmark
 
 ### Task 9.5: Deploy Gate For Retrieval Budget Regressions
 
-Status: gate complete locally; server deploy evidence pending.
+Status: complete for MCP/search; bot runtime secret repair pending.
 
 Description: Turn the Phase 9 benchmark evidence into a repeatable deploy gate
 that protects recall and quality first, then tracks latency budget regressions.
@@ -1753,7 +1771,7 @@ Acceptance:
   top-result quality regression, and benchmark validation errors.
 - [x] Latency budgets are reported with the Phase 8 baseline and latest run, but
   do not fail deploy until enough runs establish a stable threshold.
-- [ ] Server deploy notes record the cold-path result after Phase 9 deployment.
+- [x] Server deploy notes record the cold-path result after Phase 9 deployment.
 
 Implementation notes:
 
@@ -1767,6 +1785,9 @@ Implementation notes:
   warning-only.
 - The final hot benchmark runs after prewarm because cold-budget intentionally
   clears search cache rows to measure uncached retrieval.
+- Server deploy evidence is recorded in the Deployment Validation Evidence
+  section. Telegram bot health remains blocked until the placeholder
+  `TELEGRAM_BOT_TOKEN` in `.env` is replaced with the real operator secret.
 
 Verification:
 
@@ -1974,8 +1995,7 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Phase 9 Tasks 9.1 through 9.4 are complete locally, and the Task 9.5 deploy
-gate is implemented locally. Run `make search-engine-predeploy-check`, deploy
-Phase 9 to the server, run `make search-engine-postdeploy-check` against the
-server, then record the server cold and hot benchmark evidence before starting
-Phase 10 recognition/parser work.
+Phase 9 MCP/search is deployed and postdeploy-validated. Restore the real
+`TELEGRAM_BOT_TOKEN` in `.env` and run `make deploy-bot` to bring Telegram
+polling back, then begin Phase 10 recognition/parser work from the audited
+brand backlog.
