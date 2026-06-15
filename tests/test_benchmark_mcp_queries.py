@@ -342,6 +342,30 @@ def test_renderers_emit_case_expectation_sections() -> None:
     assert "brand_recognition" in markdown
 
 
+def test_render_case_expectation_jsonl_output() -> None:
+    rows = [
+        BenchmarkRow(
+            query="RP Journe Elegante Titanium",
+            ok=True,
+            elapsed_ms=99,
+            run_number=1,
+            total_count=2,
+            failure_mode="brand_recognition",
+            expected_min_total_count=1,
+            expected_top_result_fragments=("F.P. Journe",),
+            top_results=("F.P. Journe",),
+        )
+    ]
+    checks = evaluate_case_expectations(rows)
+    case_jsonl = benchmark_module.render_case_expectation_jsonl(checks)
+    data = json.loads(case_jsonl)
+
+    assert data["record_type"] == "case_expectation_check"
+    assert len(data["checks"]) == 1
+    assert data["checks"][0]["query"] == "RP Journe Elegante Titanium"
+    assert data["checks"][0]["ok"] is True
+
+
 def test_summarize_rows_uses_successful_queries_only() -> None:
     summary = summarize_rows(
         [

@@ -562,6 +562,16 @@ def render_jsonl(rows: list[BenchmarkRow]) -> str:
     return "\n".join(json.dumps(asdict(row), ensure_ascii=False) for row in rows)
 
 
+def render_case_expectation_jsonl(
+    checks: tuple[CaseExpectationCheck, ...],
+) -> str:
+    payload = {
+        "record_type": "case_expectation_check",
+        "checks": [asdict(check) for check in checks],
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
 def evaluate_alias_recall(
     rows: list[BenchmarkRow],
     *,
@@ -1187,6 +1197,8 @@ def main() -> int:
     )
     if args.format == "jsonl":
         print(render_jsonl(rows))
+        if case_checks:
+            print(render_case_expectation_jsonl(case_checks))
     elif args.format == "markdown":
         print(
             render_markdown(
