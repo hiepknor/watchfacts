@@ -31,6 +31,8 @@ DEFAULT_BENCHMARK_QUERIES = (
     "rm07-01 mother of pearl",
     "rm07-01 rg snow",
     "rm07-01 rose gold snow",
+    "RP Journe Elegante Titanium",
+    "F.P. Journe Elegante Titanium",
     "126500ln white",
     "daytona panda",
     "5711 blue",

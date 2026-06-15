@@ -40,6 +40,8 @@ DEFAULT_AUDIT_QUERIES = (
     "5205r green",
     "5726/1a",
     "RM65-01 Lebron",
+    "RP Journe Elegante Titanium",
+    "F.P. Journe Elegante Titanium",
     "116500 panda",
 )
 DEFAULT_LIMIT = 5

@@ -1948,6 +1948,17 @@ Acceptance:
 - [ ] The expanded set does not make normal deploy prewarm the primary speed
   strategy.
 
+Task 10.4 progress:
+
+- Added accepted Phase 10 recognition case coverage to both benchmark and audit
+  defaults:
+  - `RP Journe Elegante Titanium`
+  - `F.P. Journe Elegante Titanium`
+- This expands the regression surface for brand-alias recognition and retrieval
+  fallback behavior.
+- Remaining acceptance criteria in this task are still tracked for future
+  enrichment by failure mode and explicit expected-count/top-result rules.
+
 Verification:
 
 ```bash
