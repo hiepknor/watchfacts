@@ -1933,6 +1933,14 @@ python -m pytest tests/test_parser.py tests/test_search.py tests/test_audit_qual
 python scripts/diagnostics/audit_quality.py "FPJ Elegante Titanium" "RM65-01 Lebron" --limit 5
 ```
 
+Task 10.3 progress:
+
+- Added fixture-level regression coverage for RM65-01 Lebron repeated-reference bundles:
+  `test_attribute_product_image_omits_ambiguous_repeated_reference_bundle_for_rm65`
+  in `tests/test_search.py`.
+- The RM65-01 fixture asserts deterministic ambiguous-bundle image omission behavior
+  while preserving existing RM65-01 coverage in `scripts/diagnostics/audit_quality.py`.
+
 ### Task 10.4: Cross-Brand Evaluation Set Expansion
 
 Description: Expand the benchmark and audit set with only the accepted Phase 10

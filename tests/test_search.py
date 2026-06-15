@@ -612,6 +612,25 @@ def test_attribute_product_image_omits_ambiguous_bundle_image() -> None:
     assert attribution.reason == "image.omitted_bundle_ambiguous"
 
 
+def test_attribute_product_image_omits_ambiguous_repeated_reference_bundle_for_rm65() -> None:
+    attribution = search_module.attribute_product_image(
+        ListingCandidate(
+            listing_text=(
+                "💯RM037ce white 2/26 male HKD2.18m usdt280k "
+                "💯RM65-01 Lebron Jamew 12/25 usdt485k "
+                "💯RM65-01 Mclaren 12/25 usdt475k "
+                "💯RM30-01 white ceramic 2/26 usdt369k "
+            ),
+            image_url="https://watchfacts.example/rm65-bundle.jpg",
+        ),
+        listing_text="💯RM65-01 Lebron Jamew 12/25 usdt485k",
+        query="RM65-01 Lebron",
+    )
+
+    assert attribution.image_url is None
+    assert attribution.reason == "image.omitted_bundle_ambiguous"
+
+
 def test_search_workflow_coalesces_concurrent_same_query_fetches(tmp_path) -> None:
     settings = make_settings(tmp_path)
     html = FIXTURE.read_text()
