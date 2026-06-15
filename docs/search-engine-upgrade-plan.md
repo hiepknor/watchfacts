@@ -1562,6 +1562,20 @@ Local Task 9.4 validation from 2026-06-15 with `search-v32`:
   `daytona panda:queue=1`, `daytona white:queue=2`,
   `126500ln white:queue=3`, and `116500ln white:queue=4`.
 
+Local Task 9.5 gate validation from 2026-06-15 with `search-v32`:
+
+- `make search-engine-predeploy-check` passed with `702 passed, 2 skipped`,
+  compile checks, and the focused quality audit set.
+- `make search-engine-postdeploy-check` passed locally against
+  `watchfacts-mcp`.
+- The postdeploy smoke set passed `4/4`.
+- The postdeploy cold-budget leg passed `4/4` with cold-cache average
+  `13260ms`, median `10618ms`, p95/max `27539ms`, and cache misses `4/4`.
+- The postdeploy prewarm leg passed `26/26`; the verify pass showed benchmark
+  defaults were hot.
+- The final hot benchmark passed `13/13` with cache hits `13/13`, average
+  `52ms`, median `33ms`, p95/max `267ms`, and alias recall delta `0`.
+
 Non-negotiables:
 
 - Keep alias-equivalent recall delta at zero for canonical groups.
@@ -1726,18 +1740,33 @@ make mcp-benchmark
 
 ### Task 9.5: Deploy Gate For Retrieval Budget Regressions
 
+Status: gate complete locally; server deploy evidence pending.
+
 Description: Turn the Phase 9 benchmark evidence into a repeatable deploy gate
 that protects recall and quality first, then tracks latency budget regressions.
 
 Acceptance:
 
-- [ ] Deploy docs explain which retrieval-budget checks are hard failures and
+- [x] Deploy docs explain which retrieval-budget checks are hard failures and
   which are warning-only latency observations.
-- [ ] Hard failures include alias recall drift, unexpected `total_count` drift,
+- [x] Hard failures include alias recall drift, unexpected `total_count` drift,
   top-result quality regression, and benchmark validation errors.
-- [ ] Latency budgets are reported with the Phase 8 baseline and latest run, but
+- [x] Latency budgets are reported with the Phase 8 baseline and latest run, but
   do not fail deploy until enough runs establish a stable threshold.
 - [ ] Server deploy notes record the cold-path result after Phase 9 deployment.
+
+Implementation notes:
+
+- `make search-engine-postdeploy-check` now runs MCP smoke, focused cold-budget,
+  benchmark-default prewarm, and hot MCP benchmark in that order.
+- Cold-budget is a reporting gate for latency and a hard gate only for command
+  failure, MCP/schema validation failure, alias recall drift, or benchmark
+  validation failure.
+- Unexpected `total_count` drift or top-result quality regression visible in
+  benchmark/audit output remains a deploy blocker even when latency itself is
+  warning-only.
+- The final hot benchmark runs after prewarm because cold-budget intentionally
+  clears search cache rows to measure uncached retrieval.
 
 Verification:
 
@@ -1945,8 +1974,8 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Phase 9 Tasks 9.1 through 9.4 are complete locally. Continue with Task 9.5:
-turn the retrieval-budget evidence into a deploy gate, then deploy Phase 9 and
-record server-side cold and hot benchmark evidence. Do not start Phase 10
-recognition/parser work until Phase 9 is deployed or explicitly deferred with
-evidence.
+Phase 9 Tasks 9.1 through 9.4 are complete locally, and the Task 9.5 deploy
+gate is implemented locally. Run `make search-engine-predeploy-check`, deploy
+Phase 9 to the server, run `make search-engine-postdeploy-check` against the
+server, then record the server cold and hot benchmark evidence before starting
+Phase 10 recognition/parser work.

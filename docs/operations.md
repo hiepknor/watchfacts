@@ -512,9 +512,26 @@ make deploy-mcp
 make search-engine-postdeploy-check
 ```
 
-`make search-engine-postdeploy-check` runs `make mcp-smoke-set` and
-`make mcp-benchmark`, so MCP search response shape, alias recall, cache status,
-stage timings, and top-result snippets are checked against the running service.
+`make search-engine-postdeploy-check` runs:
+
+```text
+make mcp-smoke-set
+make mcp-cold-budget
+make mcp-prewarm-benchmark-defaults
+make mcp-benchmark
+```
+
+Automated hard failures are MCP smoke failures, MCP response schema validation
+errors, benchmark validation errors, and alias recall drift. Treat unexpected
+`total_count` drift or top-result quality regressions visible in benchmark or
+audit output as deploy blockers even when the command itself exits cleanly.
+Cold latency from `make mcp-cold-budget` is reported as deploy evidence and
+should be compared with the Phase 8/Phase 9 baseline, but it is warning-only
+until enough production runs establish a stable threshold. The gate prewarms
+the benchmark defaults after cold-budget because cold-budget deliberately
+clears search cache rows to measure the uncached path; the final
+`make mcp-benchmark` should therefore verify the hot-cache profile against the
+running service.
 For changes that affect Telegram presentation or bot-owned code paths, deploy
 the bot after the MCP gate passes:
 

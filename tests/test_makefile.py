@@ -216,7 +216,16 @@ def test_makefile_has_mcp_prewarm_target() -> None:
         in postdeploy_prewarm_target
     )
     assert "deploy remains active" in postdeploy_prewarm_target
-    assert "mcp-prewarm" not in search_engine_postdeploy_target
+    assert "$(MAKE) mcp-smoke-set" in search_engine_postdeploy_target
+    assert "$(MAKE) mcp-cold-budget" in search_engine_postdeploy_target
+    assert "$(MAKE) mcp-prewarm-benchmark-defaults" in search_engine_postdeploy_target
+    assert "$(MAKE) mcp-benchmark" in search_engine_postdeploy_target
+    assert search_engine_postdeploy_target.index("mcp-cold-budget") < (
+        search_engine_postdeploy_target.index("mcp-prewarm-benchmark-defaults")
+    )
+    assert search_engine_postdeploy_target.index("mcp-prewarm-benchmark-defaults") < (
+        search_engine_postdeploy_target.index("mcp-benchmark")
+    )
 
 
 def test_makefile_has_mcp_runtime_config_target() -> None:

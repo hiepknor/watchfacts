@@ -241,6 +241,8 @@ search-engine-predeploy-check:
 
 search-engine-postdeploy-check:
 	$(MAKE) mcp-smoke-set
+	$(MAKE) mcp-cold-budget
+	$(MAKE) mcp-prewarm-benchmark-defaults
 	$(MAKE) mcp-benchmark
 
 search-engine-deploy-check: search-engine-predeploy-check search-engine-postdeploy-check
