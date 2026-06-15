@@ -1810,7 +1810,7 @@ Phase 9 done criteria:
 
 ## Phase 10: Audit-Gated Recognition And Parser Coverage
 
-Status: proposed after Phase 9.
+Status: deferred after Task 10.1 evidence review on 2026-06-15.
 
 Goal: improve query recognition and parser coverage only for production gaps
 that have audit evidence. Phase 10 should convert the backlog and Phase 9
@@ -1839,11 +1839,12 @@ failure.
 
 Acceptance:
 
-- [ ] Each promoted item has before/after query evidence and a named failure
-  mode.
-- [ ] Deferred items explain why they are not safe or valuable enough yet.
-- [ ] No brand is added only because the brand name is absent from metadata.
-- [ ] The promoted set is small enough to verify in one focused benchmark run.
+- [x] Each promoted item has before/after query evidence and a named failure
+  mode. No item was promoted because no current recognition/parser failure met
+  the activation gate.
+- [x] Deferred items explain why they are not safe or valuable enough yet.
+- [x] No brand is added only because the brand name is absent from metadata.
+- [x] The promoted set is small enough to verify in one focused benchmark run.
 
 Verification:
 
@@ -1851,6 +1852,32 @@ Verification:
 python scripts/diagnostics/audit_quality.py "<accepted query>" --limit 5
 git diff --check
 ```
+
+Task 10.1 evidence review from 2026-06-15:
+
+- Reviewed `docs/brand-recognition-backlog.md`, the Phase 7 production gap
+  audit, Phase 8 image-layout evidence, and Phase 9 branch contribution
+  reports.
+- Ran focused audits for `FPJ Elegante Titanium`, `RM65-01 Lebron`,
+  `rm07-01 rg snow`, `5711 blue`, `15500st blue`, `126500ln white`, and
+  `daytona panda` with `--limit 5`.
+- No rulebook change was promoted. `FPJ Elegante Titanium` still has no
+  `brand_candidates`, but the current top rows are clean and validation errors
+  remain zero, so adding FPJ taxonomy would only improve metadata, not a proven
+  user-visible failure.
+- `RM65-01 Lebron`, `rm07-01 rg snow`, and `15500st blue` still show omitted
+  images for `layout.repeated_reference` or `layout.multi_reference_bundle`
+  cases. These remain deferred because item-to-image ownership is not
+  deterministic enough to show ambiguous parent images safely.
+- `5711 blue` remains clean after Phase 9 conditional fallback work: top rows
+  are relevant, images are direct in the focused audit, and no parser or
+  retrieval coverage failure was observed.
+- The previous ranking failures for `126500ln white` and `daytona panda` are
+  clean in the current audit: top rows show product-color or exact panda
+  evidence first. No Phase 10 recognition/parser work is needed for those
+  queries.
+- Phase 10 is therefore deferred until a future production audit reproduces a
+  recognition or parser failure with before evidence.
 
 ### Task 10.2: Minimal Brand And Collection Rulebook Additions
 
