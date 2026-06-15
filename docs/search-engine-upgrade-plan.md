@@ -4,8 +4,9 @@
 
 Phase 9 search runtime is deployed and validated on `watchfacts-mcp`.
 
-As of 2026-06-15, commit `7c588d6` is pushed to `origin/master` and deployed to
-the production `watchfacts-mcp` service with `SEARCH_CACHE_VERSION=search-v32`.
+As of 2026-06-15, commit `c9412e0` is pushed to `origin/master` and validated
+against the production `watchfacts-mcp` service with
+`SEARCH_CACHE_VERSION=search-v32`.
 The `watchfacts-bot` container was recreated during deploy but is not healthy
 because `.env` currently provides the placeholder
 `TELEGRAM_BOT_TOKEN=your_telegram_token`; restore the operator secret and run
@@ -80,12 +81,12 @@ reference grammar.
 
 ## Deployment Validation Evidence
 
-Latest validated deployment:
+Latest validated deployment/check:
 
-- Commit: `7c588d6`
+- Repository commit: `c9412e0`
+- Runtime search cache version: `search-v32`
 - Services: `watchfacts-mcp`
 - Date: 2026-06-15
-- Runtime cache version: `search-v32`
 - Worktree state after deploy: clean and synced with `origin/master`
 - Status: Phase 9 MCP/search deployed and postdeploy-validated. Bot runtime
   deploy is blocked by placeholder Telegram token config, not by Phase 9 code.
@@ -107,6 +108,11 @@ Phase 9 deploy and postdeploy gate:
   for all benchmark defaults and alias recall delta `0`.
 - Server hot benchmark passed `13/13` with cache hits `13/13`, average `53ms`,
   median `33ms`, p95/max `279ms`, and alias recall delta `0`.
+- Post-push validation at repository commit `c9412e0` also passed
+  `make search-engine-postdeploy-check`: MCP smoke `4/4`, cold-budget `4/4`
+  with average `12918ms`, median `10317ms`, p95/max `26614ms`, benchmark
+  prewarm `26/26`, hot benchmark `13/13` with cache hits `13/13`, average
+  `54ms`, median `34ms`, p95/max `287ms`, and alias recall delta `0`.
 
 Phase 8 predeploy gate:
 
