@@ -31,6 +31,8 @@ MCP_SERVICE ?= watchfacts-mcp
 AI_AUDIT_ARTIFACT ?= audit-report.jsonl
 AI_AUDIT_TRIAGE_FORMAT ?= markdown
 AI_AUDIT_TRIAGE_OPENAI ?= 0
+PRODUCTION_HOST ?=
+PRODUCTION_REPO_PATH ?= /opt/watchfacts
 
 ifeq ($(OPENWA_COMPOSE),1)
 COMPOSE := $(COMPOSE) -f docker-compose.yml -f docker-compose.openwa.yml
@@ -40,7 +42,7 @@ export IMAGE
 
 .DEFAULT_GOAL := help
 
-.PHONY: help init verify-env verify-bot-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-cold-budget mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy search-engine-predeploy-check search-engine-postdeploy-check search-engine-deploy-check search-engine-baseline-snapshot quality-audit ai-audit-triage predeploy-quality-check
+.PHONY: help init verify-env verify-bot-env pull build predeploy-check deploy deploy-bot deploy-mcp deploy-bot-mcp update up down restart logs ps shell run login check clean mcp-build mcp-predeploy-check mcp-up mcp-down mcp-restart mcp-logs mcp-ps mcp-smoke mcp-smoke-set mcp-benchmark mcp-cold-budget mcp-prewarm mcp-prewarm-benchmark-defaults mcp-postdeploy-prewarm mcp-runtime-config mcp-wait-healthy search-engine-predeploy-check search-engine-postdeploy-check search-engine-deploy-check search-engine-baseline-snapshot production-postdeploy-check production-head-print quality-audit ai-audit-triage predeploy-quality-check
 
 help:
 	@printf "%s\n" "watchfacts commands"
@@ -80,8 +82,10 @@ help:
 	@printf "%s\n" "  make mcp-postdeploy-prewarm Best-effort cache prewarm after MCP deploy"
 	@printf "%s\n" "  make mcp-runtime-config Print safe effective MCP runtime config values"
 	@printf "%s\n" "  make search-engine-predeploy-check Run local search-engine deploy gate"
-	@printf "%s\n" "  make search-engine-postdeploy-check Run MCP smoke and benchmark after deploy"
+	@printf "%s\n" "  make search-engine-postdeploy-check Verify health, production checkout HEAD, smoke, and benchmark"
 	@printf "%s\n" "  make search-engine-deploy-check Run both search-engine deploy gates"
+	@printf "%s\n" "  make production-postdeploy-check Health + HEAD verification + focused audit after deploy"
+	@printf "%s\n" "  make production-head-print Print local/remote production git HEAD"
 	@printf "%s\n" "  make search-engine-baseline-snapshot Capture runtime config plus hot/cold MCP benchmark artifacts"
 	@printf "%s\n" "  make quality-audit  Run the default production quality audit query set"
 	@printf "%s\n" "  make ai-audit-triage Summarize an audit artifact, optionally with OpenAI"
@@ -243,10 +247,24 @@ search-engine-predeploy-check:
 	$(PYTHON) scripts/diagnostics/audit_quality.py $(SEARCH_ENGINE_AUDIT_QUERIES) --limit $(SEARCH_ENGINE_AUDIT_LIMIT)
 
 search-engine-postdeploy-check:
+	$(MAKE) mcp-wait-healthy
+	$(MAKE) production-head-print
 	$(MAKE) mcp-smoke-set
 	$(MAKE) mcp-cold-budget
 	$(MAKE) mcp-prewarm-benchmark-defaults
 	$(MAKE) mcp-benchmark
+	$(MAKE) quality-audit
+
+production-postdeploy-check: search-engine-postdeploy-check
+
+production-head-print:
+	@local_head="$$(git rev-parse --short HEAD)"; \
+	echo "Local checkout HEAD: $$local_head"; \
+	if [ -n "$(PRODUCTION_HOST)" ]; then \
+		echo "Remote production HEAD: $$(ssh $(PRODUCTION_HOST) \"cd $(PRODUCTION_REPO_PATH) && git rev-parse --short HEAD\")"; \
+	else \
+		echo "PRODUCTION_HOST not set; remote HEAD check skipped."; \
+	fi
 
 search-engine-deploy-check: search-engine-predeploy-check search-engine-postdeploy-check
 

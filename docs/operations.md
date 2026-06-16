@@ -586,8 +586,13 @@ Checklist:
   scoped service deploys.
 - Verify the container is healthy and the production git HEAD matches the
   deployed commit.
-- Rerun the focused production audit after deploy and keep `make mcp-smoke-set`
-  passing.
+  - set `PRODUCTION_HOST` (for example `ubuntu@your-host`) and
+    optionally `PRODUCTION_REPO_PATH` (default `/opt/watchfacts`) then run:
+    `PRODUCTION_HOST=ubuntu@your-host make production-head-print`.
+- Rerun the focused production audit after deploy:
+  - `make production-postdeploy-check` (includes health + HEAD + smoke + benchmark + focused quality audit)
+  - `make quality-audit` (explicit focused quality pass)
+- Keep `make mcp-smoke-set` passing.
 - Capture unresolved findings to PMO or docs before ending the work.
 
 Audit reports must not print `.env`, API keys, Telegram tokens, WatchFacts

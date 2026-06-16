@@ -1044,6 +1044,7 @@ Verify:
 .venv/bin/python -m pytest -q
 git diff --check
 make deploy
+PRODUCTION_HOST=... make production-postdeploy-check
 ```
 
 Likely files:
