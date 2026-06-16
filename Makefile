@@ -221,7 +221,15 @@ mcp-runtime-config:
 	$(MCP_COMPOSE_CMD) exec -T $(MCP_SERVICE) python scripts/diagnostics/runtime_config.py
 
 mcp-wait-healthy:
-	@elapsed=0; \
+	@if ! command -v docker >/dev/null 2>&1; then \
+		echo "Docker CLI not found; install Docker before running production health checks."; \
+		exit 1; \
+	fi; \
+	if ! docker info >/dev/null 2>&1; then \
+		echo "Docker daemon unavailable. Start Docker and retry."; \
+		exit 1; \
+	fi; \
+	elapsed=0; \
 	while :; do \
 		status=$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' $(MCP_SERVICE) 2>/dev/null || true); \
 		if [ "$$status" = "healthy" ] || [ "$$status" = "none" ]; then \
