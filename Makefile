@@ -269,7 +269,7 @@ production-head-print:
 	@local_head="$$(git rev-parse --short HEAD)"; \
 	echo "Local checkout HEAD: $$local_head"; \
 	if [ -n "$(PRODUCTION_HOST)" ]; then \
-		echo "Remote production HEAD: $$(ssh $(PRODUCTION_HOST) \"cd $(PRODUCTION_REPO_PATH) && git rev-parse --short HEAD\")"; \
+		echo "Remote production HEAD: $$(ssh $(PRODUCTION_HOST) 'cd $(PRODUCTION_REPO_PATH) && git rev-parse --short HEAD')"; \
 	else \
 		echo "PRODUCTION_HOST not set; remote HEAD check skipped."; \
 	fi
