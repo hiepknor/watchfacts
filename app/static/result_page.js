@@ -193,10 +193,11 @@
         candidate = candidate.slice(0, -1);
       }
 
-      if (!/^\d/.test(candidate) || !/^\d+[.,\d]*$/.test(candidate)) {
+      const trimmed = candidate.replace(/\s/g, "");
+      if (!/^\d/.test(trimmed) || !/^\d+[.,\d]*$/.test(trimmed)) {
         return null;
       }
-      let numeric = candidate;
+      let numeric = trimmed;
       if (/^\d{1,3}(?:[.,]\d{3})+$/.test(numeric)) {
         numeric = numeric.replace(/[.,]/g, "");
       } else {
@@ -217,16 +218,20 @@
         /([0-9][0-9.,\s]*[km]?)\s*(?:hkd|usd|usdt|eur|aed|chf)\b/giu,
       ];
 
+      let best = null;
       for (const pattern of patterns) {
         pattern.lastIndex = 0;
-        const match = pattern.exec(raw);
-        if (match) {
+        let match = pattern.exec(raw);
+        while (match) {
           const token = match[1];
           const parsed = parsePriceToken(token);
-          if (parsed !== null) return parsed;
+          if (parsed !== null && (best === null || parsed > best)) {
+            best = parsed;
+          }
+          match = pattern.exec(raw);
         }
       }
-      return null;
+      return best;
     }
 
     function priceValue(item) {

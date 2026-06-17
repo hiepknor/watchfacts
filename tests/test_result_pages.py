@@ -550,6 +550,119 @@ def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
     }
 
 
+def test_render_result_page_template_price_sort_handles_multi_price_and_space_formatted_values(tmp_path) -> None:
+    chrome = chrome_executable()
+    if chrome is None:
+        pytest.skip("Chrome or Chromium is not installed")
+
+    payload = {
+        "query": "price sort edge",
+        "created_at": "2026-06-08T04:00:00Z",
+        "expires_at": "2026-06-08T05:00:00Z",
+        "total_count": 3,
+        "offset": 0,
+        "limit": 60,
+        "next_offset": None,
+        "result_count": 3,
+        "results": [
+            {
+                "rank": 1,
+                "result_id": "watchfacts-result-001",
+                "source_result_id": "watchfacts-result-001",
+                "listing_text": "Range listing 12,000 - 220,000 USD",
+                "price_reason": "price.visible",
+                "seller": "Seller 1",
+                "posted_date": "June 1, 2026",
+                "image_url": None,
+                "source_url": "https://watchfacts.example/listing/1",
+                "seller_phone": None,
+                "similar_results": [],
+            },
+            {
+                "rank": 2,
+                "result_id": "watchfacts-result-002",
+                "source_result_id": "watchfacts-result-002",
+                "listing_text": "Simple listing 80 000 USD",
+                "price_reason": "price.visible",
+                "seller": "Seller 2",
+                "posted_date": "June 2, 2026",
+                "image_url": None,
+                "source_url": "https://watchfacts.example/listing/2",
+                "seller_phone": None,
+                "similar_results": [],
+            },
+            {
+                "rank": 3,
+                "result_id": "watchfacts-result-003",
+                "source_result_id": "watchfacts-result-003",
+                "listing_text": "No price visible",
+                "seller": "Seller 3",
+                "posted_date": "May 2, 2026",
+                "image_url": None,
+                "source_url": None,
+                "seller_phone": None,
+                "similar_results": [],
+            },
+        ],
+    }
+    audit_script = """
+    <script>
+      setTimeout(() => {
+        const output = {};
+        try {
+          const sort = document.querySelector("#sortSelect");
+          sort.value = "price_desc";
+          sort.dispatchEvent(new Event("change", { bubbles: true }));
+          output.priceDescFirstRank = document.querySelector(".rank-badge").textContent;
+
+          sort.value = "price_asc";
+          sort.dispatchEvent(new Event("change", { bubbles: true }));
+          output.priceAscFirstRank = document.querySelector(".rank-badge").textContent;
+
+          const node = document.createElement("pre");
+          node.id = "behaviorAudit";
+          node.textContent = JSON.stringify(output);
+          document.body.appendChild(node);
+        } catch (error) {
+          const node = document.createElement("pre");
+          node.id = "behaviorAudit";
+          node.textContent = JSON.stringify({ error: String(error && error.stack || error) });
+          document.body.appendChild(node);
+        }
+      }, 0);
+    </script>
+    """
+    page_path = tmp_path / "result-price-sort-parse.html"
+    page_path.write_text(
+        render_result_page_template(payload).replace("</body>", f"{audit_script}</body>"),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            chrome,
+            "--headless=new",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            f"--virtual-time-budget={os.getenv('RESULT_TEMPLATE_VIRTUAL_TIME_BUDGET', '8000')}",
+            "--dump-dom",
+            page_path.as_uri(),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=int(os.getenv("RESULT_TEMPLATE_BROWSER_TIMEOUT", "60")),
+    )
+    match = re.search(r'<pre id="behaviorAudit">([^<]+)</pre>', result.stdout)
+    assert match is not None, result.stdout
+    behavior = json.loads(html.unescape(match.group(1)))
+
+    assert behavior == {
+        "priceDescFirstRank": "#1",
+        "priceAscFirstRank": "#2",
+    }
+
+
 def test_result_page_template_keeps_in_app_browser_header_compact(tmp_path) -> None:
     chrome = chrome_executable()
     if chrome is None:
