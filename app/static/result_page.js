@@ -177,6 +177,75 @@
       return Number.isNaN(parsed) ? 0 : parsed;
     }
 
+    function parsePriceToken(raw) {
+      const normalized = text(raw).trim().toLowerCase();
+      if (!normalized) return null;
+
+      let candidate = normalized;
+      let multiplier = 1;
+      const suffixMatch = candidate.match(/([km])$/i);
+      if (suffixMatch) {
+        if (suffixMatch[1].toLowerCase() === "k") {
+          multiplier = 1000;
+        } else if (suffixMatch[1].toLowerCase() === "m") {
+          multiplier = 1000000;
+        }
+        candidate = candidate.slice(0, -1);
+      }
+
+      if (!/^\d/.test(candidate) || !/^\d+[.,\d]*$/.test(candidate)) {
+        return null;
+      }
+      let numeric = candidate;
+      if (/^\d{1,3}(?:[.,]\d{3})+$/.test(numeric)) {
+        numeric = numeric.replace(/[.,]/g, "");
+      } else {
+        numeric = numeric.replace(/,/g, ".");
+      }
+      const parsed = Number(numeric);
+      if (!Number.isFinite(parsed)) return null;
+      return parsed * multiplier;
+    }
+
+    function parsePriceFromText(value) {
+      const raw = text(value);
+      if (!raw) return null;
+
+      const patterns = [
+        /[$\u20ac\u00a3\u00a5]\s*([0-9][0-9.,\s]*[km]?)/giu,
+        /\b(?:hkd|usd|usdt|eur|aed|chf)\s*([0-9][0-9.,\s]*[km]?)/giu,
+        /([0-9][0-9.,\s]*[km]?)\s*(?:hkd|usd|usdt|eur|aed|chf)\b/giu,
+      ];
+
+      for (const pattern of patterns) {
+        pattern.lastIndex = 0;
+        const match = pattern.exec(raw);
+        if (match) {
+          const token = match[1];
+          const parsed = parsePriceToken(token);
+          if (parsed !== null) return parsed;
+        }
+      }
+      return null;
+    }
+
+    function priceValue(item) {
+      const cached = item && item.__priceValueCache;
+      if (item && Object.prototype.hasOwnProperty.call(item, "__priceValueCache")) {
+        return cached;
+      }
+
+      const directValue = parsePriceToken(item && item.price_amount);
+      if (directValue !== null) {
+        item.__priceValueCache = directValue;
+        return directValue;
+      }
+
+      const parsed = parsePriceFromText(item && item.listing_text);
+      item.__priceValueCache = parsed;
+      return parsed;
+    }
+
     function currentResults() {
       const filter = state.filter.trim().toLowerCase();
       let items = allResults().filter(item => !filter || resultText(item).includes(filter));
@@ -184,6 +253,24 @@
         items = items.slice().sort((a, b) => postedTime(b.posted_date) - postedTime(a.posted_date) || numberValue(a.rank) - numberValue(b.rank));
       } else if (state.sort === "seller") {
         items = items.slice().sort((a, b) => text(a.seller).localeCompare(text(b.seller)) || numberValue(a.rank) - numberValue(b.rank));
+      } else if (state.sort === "price_desc") {
+        items = items.slice().sort((a, b) => {
+          const aPrice = priceValue(a);
+          const bPrice = priceValue(b);
+          if (aPrice === null && bPrice === null) return numberValue(a.rank) - numberValue(b.rank);
+          if (aPrice === null) return 1;
+          if (bPrice === null) return -1;
+          return bPrice - aPrice || numberValue(a.rank) - numberValue(b.rank);
+        });
+      } else if (state.sort === "price_asc") {
+        items = items.slice().sort((a, b) => {
+          const aPrice = priceValue(a);
+          const bPrice = priceValue(b);
+          if (aPrice === null && bPrice === null) return numberValue(a.rank) - numberValue(b.rank);
+          if (aPrice === null) return 1;
+          if (bPrice === null) return -1;
+          return aPrice - bPrice || numberValue(a.rank) - numberValue(b.rank);
+        });
       } else {
         items = items.slice().sort((a, b) => numberValue(a.rank) - numberValue(b.rank));
       }

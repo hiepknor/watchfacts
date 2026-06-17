@@ -145,6 +145,8 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "function formattedListingFields(item)" in html
     assert 'function createFormattedListingDisplay(item, className = "", titleTag = "h2")' in html
     assert "function formatListingCopy(item)" in html
+    assert 'option value="price_desc"' in html
+    assert 'option value="price_asc"' in html
     assert "formattedListingFields(item).map" in html
     assert "function formatCopyDate(value)" in html
     assert "raw.split(\"·\", 1)[0].split(\" - \", 1)[0].trim()" in html
@@ -385,6 +387,7 @@ def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
                 "result_id": "watchfacts-result-001",
                 "source_result_id": "watchfacts-result-001",
                 "listing_text": "5980/1R Like New. Full set NEW BUCKLE 2022 $210.000",
+                "price_reason": "price.visible",
                 "seller": "Richie",
                 "posted_date": "June 2, 2026",
                 "image_url": None,
@@ -397,6 +400,7 @@ def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
                 "result_id": "watchfacts-result-002",
                 "source_result_id": "watchfacts-result-002",
                 "listing_text": "116500 panda full set, excellent condition, boxed papers",
+                "price_reason": "price.missing_visible",
                 "seller": "Seller 2",
                 "posted_date": "June 3, 2026 - reposted",
                 "image_url": None,
@@ -417,7 +421,8 @@ def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
                 "rank": 3,
                 "result_id": "watchfacts-result-003",
                 "source_result_id": "watchfacts-result-003",
-                "listing_text": "5712g should be filterable but older",
+                "listing_text": "5712g should be filterable but older $150,000",
+                "price_reason": "price.visible",
                 "seller": "Seller 3",
                 "posted_date": "May 10, 2026",
                 "image_url": None,
@@ -455,6 +460,14 @@ def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
             sort.value = "posted_desc";
             sort.dispatchEvent(new Event("change", { bubbles: true }));
             output.sortedFirstRank = document.querySelector(".rank-badge").textContent;
+
+            sort.value = "price_desc";
+            sort.dispatchEvent(new Event("change", { bubbles: true }));
+            output.priceDescFirstRank = document.querySelector(".rank-badge").textContent;
+
+            sort.value = "price_asc";
+            sort.dispatchEvent(new Event("change", { bubbles: true }));
+            output.priceAscFirstRank = document.querySelector(".rank-badge").textContent;
 
             const filter = document.querySelector("#filterInput");
             filter.value = "richie";
@@ -528,6 +541,8 @@ def test_render_result_page_template_browser_behaviors(tmp_path) -> None:
             "Source: watchfacts.example"
         ),
         "sortedFirstRank": "#2",
+        "priceDescFirstRank": "#1",
+        "priceAscFirstRank": "#3",
         "filteredCount": 1,
         "filteredRank": "#1",
         "denseClass": "results density-dense",
