@@ -663,6 +663,133 @@ def test_render_result_page_template_price_sort_handles_multi_price_and_space_fo
     }
 
 
+def test_render_result_page_template_price_sort_prefers_backend_price_amount(tmp_path) -> None:
+    chrome = chrome_executable()
+    if chrome is None:
+        pytest.skip("Chrome or Chromium is not installed")
+
+    payload = {
+        "query": "backend price field sort",
+        "created_at": "2026-06-08T04:00:00Z",
+        "expires_at": "2026-06-08T05:00:00Z",
+        "total_count": 3,
+        "offset": 0,
+        "limit": 60,
+        "next_offset": None,
+        "result_count": 3,
+        "results": [
+            {
+                "rank": 1,
+                "result_id": "watchfacts-result-001",
+                "source_result_id": "watchfacts-result-001",
+                "price_amount": 45000,
+                "listing_text": "No price visible",
+                "price_reason": "price.missing_visible",
+                "seller": "Seller 1",
+                "posted_date": "June 1, 2026",
+                "image_url": None,
+                "source_url": "https://watchfacts.example/listing/1",
+                "seller_phone": None,
+                "similar_results": [],
+            },
+            {
+                "rank": 2,
+                "result_id": "watchfacts-result-002",
+                "source_result_id": "watchfacts-result-002",
+                "price_amount": 52000,
+                "listing_text": "No price visible",
+                "price_reason": "price.missing_visible",
+                "seller": "Seller 2",
+                "posted_date": "June 2, 2026",
+                "image_url": None,
+                "source_url": "https://watchfacts.example/listing/2",
+                "seller_phone": None,
+                "similar_results": [],
+            },
+            {
+                "rank": 3,
+                "source_result_id": "watchfacts-result-003",
+                "result_id": "watchfacts-result-003",
+                "price_amount": 51000,
+                "listing_text": "No price visible",
+                "price_reason": "price.missing_visible",
+                "seller": "Seller 3",
+                "posted_date": "June 3, 2026",
+                "image_url": None,
+                "source_url": "https://watchfacts.example/listing/3",
+                "seller_phone": None,
+                "similar_results": [],
+            },
+        ],
+    }
+    audit_script = """
+    <script>
+      setTimeout(() => {
+        const output = {};
+        try {
+          const sort = document.querySelector("#sortSelect");
+          sort.value = "price_desc";
+          sort.dispatchEvent(new Event("change", { bubbles: true }));
+          output.priceDescFirstRank = document.querySelector(".rank-badge").textContent;
+
+          sort.value = "price_asc";
+          sort.dispatchEvent(new Event("change", { bubbles: true }));
+          output.priceAscFirstRank = document.querySelector(".rank-badge").textContent;
+
+          const node = document.createElement("pre");
+          node.id = "behaviorAudit";
+          node.textContent = JSON.stringify(output);
+          document.body.appendChild(node);
+        } catch (error) {
+          const node = document.createElement("pre");
+          node.id = "behaviorAudit";
+          node.textContent = JSON.stringify({ error: String(error && error.stack || error) });
+          document.body.appendChild(node);
+        }
+      }, 0);
+    </script>
+    """
+    page_path = tmp_path / "result-price-sort-backend-field.html"
+    page_path.write_text(
+        render_result_page_template(payload).replace("</body>", f"{audit_script}</body>"),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            chrome,
+            "--headless=new",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            f"--virtual-time-budget={os.getenv('RESULT_TEMPLATE_VIRTUAL_TIME_BUDGET', '8000')}",
+            "--dump-dom",
+            page_path.as_uri(),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=int(os.getenv("RESULT_TEMPLATE_BROWSER_TIMEOUT", "60")),
+    )
+    match = re.search(r'<pre id="behaviorAudit">([^<]+)</pre>', result.stdout)
+    assert match is not None, result.stdout
+    behavior = json.loads(html.unescape(match.group(1)))
+
+    assert behavior == {
+        "priceDescFirstRank": "#2",
+        "priceAscFirstRank": "#1",
+    }
+
+
+def test_extract_price_amount_parses_currency_and_suffixes() -> None:
+    assert result_pages._extract_price_amount(
+        "HK$11,200 and USD 1.5m"
+    ) == 1500000.0
+    assert result_pages._extract_price_amount(
+        "Range: 12,000 - 220,000 USD"
+    ) == 220000.0
+    assert result_pages._extract_price_amount("Seller says 20k is gold purity") is None
+
+
 def test_result_page_template_keeps_in_app_browser_header_compact(tmp_path) -> None:
     chrome = chrome_executable()
     if chrome is None:
@@ -785,7 +912,7 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
         query="5712g </script><script>alert(1)</script>",
         results=[
             SearchResult(
-                listing_text="5712G </script><script>alert(1)</script>",
+                listing_text="5712G </script><script>alert(1)</script> HK$12,500",
                 seller="cookie=secret",
                 posted_date="April 9, 2026",
                 image_url="/images/5712g.jpg",
@@ -841,6 +968,7 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
         sidecar["payload"]["results"][0]["source_url"]
         == "https://watchfacts.example/listing/5712g"
     )
+    assert sidecar["payload"]["results"][0]["price_amount"] == 12500.0
     assert sidecar["payload"]["results"][0]["result_id"].startswith("watchfacts:")
     assert sidecar["payload"]["results"][0]["stable_listing_id"].startswith(
         "watchfacts-listing:"

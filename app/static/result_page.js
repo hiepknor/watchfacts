@@ -37,6 +37,7 @@
 
     let lastModalTrigger = null;
     const openWaDraftStateByResultId = new Map();
+    const priceValueCache = new WeakMap();
 
     function text(value, fallback = "") {
       if (value === null || value === undefined || value === "") return fallback;
@@ -183,14 +184,17 @@
 
       let candidate = normalized;
       let multiplier = 1;
-      const suffixMatch = candidate.match(/([km])$/i);
+      const suffixMatch = candidate.match(/(k|m|mil|million|u)$/i);
       if (suffixMatch) {
-        if (suffixMatch[1].toLowerCase() === "k") {
+        const suffix = suffixMatch[1].toLowerCase();
+        if (suffix === "k") {
           multiplier = 1000;
-        } else if (suffixMatch[1].toLowerCase() === "m") {
+        } else if (suffix === "m") {
+          multiplier = 1000000;
+        } else if (suffix === "mil" || suffix === "million" || suffix === "u") {
           multiplier = 1000000;
         }
-        candidate = candidate.slice(0, -1);
+        candidate = candidate.slice(0, -suffix.length);
       }
 
       const trimmed = candidate.replace(/\s/g, "");
@@ -208,14 +212,22 @@
       return parsed * multiplier;
     }
 
+    function parsePriceFromData(item) {
+      if (!item) return null;
+      const candidate = item.price_amount_numeric ?? item.price_amount;
+      const amount = Number(candidate);
+      if (Number.isFinite(amount)) return amount;
+      return parsePriceFromText(item.listing_text);
+    }
+
     function parsePriceFromText(value) {
       const raw = text(value);
       if (!raw) return null;
 
       const patterns = [
-        /[$\u20ac\u00a3\u00a5]\s*([0-9][0-9.,\s]*[km]?)/giu,
-        /\b(?:hkd|usd|usdt|eur|aed|chf)\s*([0-9][0-9.,\s]*[km]?)/giu,
-        /([0-9][0-9.,\s]*[km]?)\s*(?:hkd|usd|usdt|eur|aed|chf)\b/giu,
+        /[$\u20ac\u00a3\u00a5]\s*([0-9][0-9.,\s]*(?:k|m|mil|million|u)?)/giu,
+        /\b(?:hkd|usd|usdt|eur|aed|chf)\s*([0-9][0-9.,\s]*(?:k|m|mil|million|u)?)/giu,
+        /([0-9][0-9.,\s]*(?:k|m|mil|million|u)?)\s*(?:hkd|usd|usdt|eur|aed|chf)\b/giu,
       ];
 
       let best = null;
@@ -235,19 +247,13 @@
     }
 
     function priceValue(item) {
-      const cached = item && item.__priceValueCache;
-      if (item && Object.prototype.hasOwnProperty.call(item, "__priceValueCache")) {
-        return cached;
+      if (!item || typeof item !== "object") return null;
+      if (priceValueCache.has(item)) {
+        return priceValueCache.get(item);
       }
 
-      const directValue = parsePriceToken(item && item.price_amount);
-      if (directValue !== null) {
-        item.__priceValueCache = directValue;
-        return directValue;
-      }
-
-      const parsed = parsePriceFromText(item && item.listing_text);
-      item.__priceValueCache = parsed;
+      const parsed = parsePriceFromData(item);
+      priceValueCache.set(item, parsed);
       return parsed;
     }
 

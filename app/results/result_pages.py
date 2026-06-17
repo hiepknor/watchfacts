@@ -22,6 +22,18 @@ MAX_LISTING_PREVIEW_CHARS = {
     "comfortable": 220,
     "dense": 150,
 }
+PRICE_TEXT_CURRENCIES = r"hk\$|us\$|[$€£¥💰💲]"
+PRICE_WORD_CURRENCIES = "hkd|usd|usdt|eur|aed|chf"
+PRICE_TOKEN_RE = re.compile(r"\d{1,3}(?:[.,\s]\d{3})+|\d+(?:[.,]\d+)?")
+PRICE_SUFFIX_RE = re.compile(r"(k|m|mil|million|u)?", re.IGNORECASE)
+PRICE_WITH_PREFIX_RE = re.compile(
+    rf"(?:{PRICE_TEXT_CURRENCIES}|\b(?:{PRICE_WORD_CURRENCIES})\b)\s*(?P<amount>{PRICE_TOKEN_RE.pattern})(?P<suffix>{PRICE_SUFFIX_RE.pattern})",
+    re.IGNORECASE,
+)
+PRICE_WITH_SUFFIX_RE = re.compile(
+    rf"(?P<amount>{PRICE_TOKEN_RE.pattern})(?P<suffix>{PRICE_SUFFIX_RE.pattern})\s*(?:{PRICE_TEXT_CURRENCIES}|\b(?:{PRICE_WORD_CURRENCIES})\b)",
+    re.IGNORECASE,
+)
 SENSITIVE_TEXT_RE = re.compile(
     r"\b(?:cookie|authorization|bearer|api[_-]?key|token|password|secret)\b\s*[:=]\s*\S+",
     re.IGNORECASE,
@@ -326,6 +338,8 @@ def _result_payload(
         "stable_listing_id": stable_listing_id(result),
         "source_result_id": result_id,
         "listing_text": listing_text,
+        "price_amount": _extract_price_amount(result.raw_listing_text)
+        or _extract_price_amount(result.listing_text),
         "listing_text_preview": {
             density: _listing_preview_text(listing_text, density)
             for density in ("comfortable", "dense")
@@ -342,6 +356,68 @@ def _result_payload(
     }
     _attach_evidence_payload(payload, result)
     return payload
+
+
+def _extract_price_amount(listing_text: str | None) -> float | None:
+    best = None
+    if not listing_text:
+        return None
+
+    for amount in PRICE_WITH_PREFIX_RE.finditer(listing_text):
+        parsed = _parse_price_token(amount.group("amount"), amount.group("suffix") or "")
+        if parsed is not None and (best is None or parsed > best):
+            best = parsed
+
+    for amount in PRICE_WITH_SUFFIX_RE.finditer(listing_text):
+        parsed = _parse_price_token(amount.group("amount"), amount.group("suffix") or "")
+        if parsed is not None and (best is None or parsed > best):
+            best = parsed
+
+    return best
+
+
+def _parse_price_token(raw: str, suffix: str) -> float | None:
+    normalized = "".join(ch for ch in raw if ch not in {" ", "\t", "\n", "\r", "\u00a0"})
+    if not normalized:
+        return None
+
+    normalized = normalized.strip()
+    if not normalized:
+        return None
+
+    multiplier = {
+        "k": 1_000,
+        "m": 1_000_000,
+        "mil": 1_000_000,
+        "million": 1_000_000,
+        "u": 1_000_000,
+        "": 1,
+    }.get(suffix.lower(), 1)
+
+    if "," in normalized and "." in normalized:
+        if normalized.rfind(",") > normalized.rfind("."):
+            normalized = normalized.replace(".", "").replace(",", ".")
+        else:
+            normalized = normalized.replace(",", "")
+    elif "," in normalized:
+        if re.fullmatch(r"\d{1,3}(?:,\d{3})+", normalized):
+            normalized = normalized.replace(",", "")
+        else:
+            normalized = normalized.replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(?:\.\d{3})+", normalized):
+        normalized = normalized.replace(".", "")
+
+    if not normalized:
+        return None
+
+    try:
+        value = float(normalized)
+    except ValueError:
+        return None
+
+    if not (value > 0):
+        return None
+    return value * multiplier
 
 
 def _similar_result_payload(
