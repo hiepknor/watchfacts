@@ -65,7 +65,14 @@ MULTI_LIST_REFERENCE_THRESHOLD = 1
 WATCHFACTS_SOURCE_TRUNCATION_THRESHOLD = 200
 _IN_FLIGHT_SEARCHES: dict[str, asyncio.Task[list[SearchResult]]] = {}
 _IN_FLIGHT_RETRIEVAL_BRANCHES: dict[str, asyncio.Task[ScrapeResult]] = {}
+_RETRIEVAL_BRANCH_CACHE: dict[str, "_RetrievalBranchCacheEntry"] = {}
 _SEARCH_SEMAPHORES: dict[str, asyncio.Semaphore] = {}
+
+
+@dataclass(frozen=True)
+class _RetrievalBranchCacheEntry:
+    scrape_result: ScrapeResult
+    cached_at: float
 
 
 @dataclass(frozen=True)
@@ -125,6 +132,7 @@ class RetrievalFetchResult:
     fetch_ms: int
     scrape_result: ScrapeResult | None = None
     coalesced: bool = False
+    branch_cache_status: str = "miss"
     error_type: str | None = None
     exception: Exception | None = None
 
@@ -521,7 +529,7 @@ class WatchFactsSearchWorkflow:
                         RetrievalTiming(
                             query=retrieval_query,
                             queue_index=retrieval_index,
-                            cache_status="miss",
+                            cache_status=fetch_result.branch_cache_status,
                             fetch_ms=fetch_result.fetch_ms,
                             parse_ms=0,
                             match_ms=0,
@@ -535,6 +543,7 @@ class WatchFactsSearchWorkflow:
                             error_type=error_type,
                             reason_codes=(
                                 *reason_codes,
+                                *_retrieval_branch_cache_reason_codes(fetch_result),
                                 *(
                                     ("retrieval.branch_coalesced",)
                                     if fetch_result.coalesced
@@ -623,7 +632,7 @@ class WatchFactsSearchWorkflow:
                     RetrievalTiming(
                         query=retrieval_query,
                         queue_index=retrieval_index,
-                        cache_status="miss",
+                        cache_status=fetch_result.branch_cache_status,
                         fetch_ms=fetch_result.fetch_ms,
                         parse_ms=parse_ms,
                         match_ms=match_ms,
@@ -635,6 +644,7 @@ class WatchFactsSearchWorkflow:
                         playwright_fallback=scrape_result.used_playwright_fallback,
                         reason_codes=(
                             *reason_codes,
+                            *_retrieval_branch_cache_reason_codes(fetch_result),
                             *(
                                 ("retrieval.branch_coalesced",)
                                 if fetch_result.coalesced
@@ -993,6 +1003,19 @@ class WatchFactsSearchWorkflow:
             retrieval_query,
             fetch_html=self.fetch_html,
         )
+        cached_result, branch_cache_status = _get_retrieval_branch_cache_result(
+            in_flight_key,
+            ttl_seconds=self.settings.search_retrieval_branch_cache_ttl_seconds,
+            max_entries=self.settings.search_retrieval_branch_cache_max_entries,
+        )
+        if cached_result is not None:
+            return RetrievalFetchResult(
+                index=index,
+                query=retrieval_query,
+                fetch_ms=_stage_elapsed_ms(fetch_started_at),
+                scrape_result=cached_result,
+                branch_cache_status=branch_cache_status,
+            )
         task = _IN_FLIGHT_RETRIEVAL_BRANCHES.get(in_flight_key)
         owner = task is None
         if owner:
@@ -1013,18 +1036,27 @@ class WatchFactsSearchWorkflow:
                 query=retrieval_query,
                 fetch_ms=_stage_elapsed_ms(fetch_started_at),
                 coalesced=not owner,
+                branch_cache_status=branch_cache_status,
                 error_type=exc.__class__.__name__,
                 exception=exc,
             )
         finally:
             if owner:
                 _IN_FLIGHT_RETRIEVAL_BRANCHES.pop(in_flight_key, None)
+        if owner:
+            _record_retrieval_branch_cache_result(
+                in_flight_key,
+                scrape_result,
+                ttl_seconds=self.settings.search_retrieval_branch_cache_ttl_seconds,
+                max_entries=self.settings.search_retrieval_branch_cache_max_entries,
+            )
         return RetrievalFetchResult(
             index=index,
             query=retrieval_query,
             fetch_ms=_stage_elapsed_ms(fetch_started_at),
             scrape_result=scrape_result,
             coalesced=not owner,
+            branch_cache_status=branch_cache_status,
         )
 
     @staticmethod
@@ -1970,6 +2002,75 @@ def _retrieval_branch_in_flight_key(
         "query": _retrieval_query_key(retrieval_query),
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _get_retrieval_branch_cache_result(
+    key: str,
+    *,
+    ttl_seconds: int,
+    max_entries: int,
+) -> tuple[ScrapeResult | None, str]:
+    if ttl_seconds <= 0 or max_entries <= 0:
+        return None, "disabled"
+    entry = _RETRIEVAL_BRANCH_CACHE.get(key)
+    if entry is None:
+        return None, "miss"
+    if time.perf_counter() - entry.cached_at > ttl_seconds:
+        _RETRIEVAL_BRANCH_CACHE.pop(key, None)
+        return None, "stale"
+    return entry.scrape_result, "hit"
+
+
+def _record_retrieval_branch_cache_result(
+    key: str,
+    scrape_result: ScrapeResult,
+    *,
+    ttl_seconds: int,
+    max_entries: int,
+) -> None:
+    if ttl_seconds <= 0 or max_entries <= 0:
+        return
+    _prune_stale_retrieval_branch_cache_entries(ttl_seconds=ttl_seconds)
+    _RETRIEVAL_BRANCH_CACHE[key] = _RetrievalBranchCacheEntry(
+        scrape_result=scrape_result,
+        cached_at=time.perf_counter(),
+    )
+    _limit_retrieval_branch_cache_entries(max_entries=max_entries)
+
+
+def _prune_stale_retrieval_branch_cache_entries(*, ttl_seconds: int) -> None:
+    now = time.perf_counter()
+    stale_keys = [
+        cache_key
+        for cache_key, entry in _RETRIEVAL_BRANCH_CACHE.items()
+        if now - entry.cached_at > ttl_seconds
+    ]
+    for cache_key in stale_keys:
+        _RETRIEVAL_BRANCH_CACHE.pop(cache_key, None)
+
+
+def _limit_retrieval_branch_cache_entries(*, max_entries: int) -> None:
+    overflow = len(_RETRIEVAL_BRANCH_CACHE) - max_entries
+    if overflow <= 0:
+        return
+    oldest_keys = sorted(
+        _RETRIEVAL_BRANCH_CACHE,
+        key=lambda cache_key: _RETRIEVAL_BRANCH_CACHE[cache_key].cached_at,
+    )[:overflow]
+    for cache_key in oldest_keys:
+        _RETRIEVAL_BRANCH_CACHE.pop(cache_key, None)
+
+
+def _retrieval_branch_cache_reason_codes(
+    fetch_result: RetrievalFetchResult,
+) -> tuple[str, ...]:
+    if fetch_result.branch_cache_status == "hit":
+        return ("retrieval.branch_cache_hit",)
+    if fetch_result.branch_cache_status == "miss":
+        return ("retrieval.branch_cache_miss",)
+    if fetch_result.branch_cache_status == "stale":
+        return ("retrieval.branch_cache_stale",)
+    return ()
 
 
 COLOR_DESCRIPTOR_GROUP = {

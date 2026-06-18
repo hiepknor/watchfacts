@@ -424,7 +424,7 @@ def test_search_workflow_serves_descriptor_alias_query_from_cache(tmp_path) -> N
 
 
 def test_search_workflow_refetches_after_cache_expiry(tmp_path) -> None:
-    settings = make_settings(tmp_path)
+    settings = replace(make_settings(tmp_path), search_retrieval_branch_cache_ttl_seconds=0)
     html = FIXTURE.read_text()
     fetch_count = 0
 
@@ -832,6 +832,202 @@ def test_search_workflow_coalesces_in_flight_retrieval_branch_across_queries(
         for reason in timing.reason_codes
     ]
     assert "retrieval.branch_coalesced" in reason_codes
+
+
+def test_search_workflow_reuses_fresh_retrieval_branch_cache_across_queries(
+    tmp_path,
+) -> None:
+    search_module._RETRIEVAL_BRANCH_CACHE.clear()
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "RM07-01 RG Snow used fullset",
+          "companyName": "Dealer RG",
+          "number": 701
+        },
+        {
+          "title": "RM07-01 WG Snow used fullset",
+          "companyName": "Dealer WG",
+          "number": 702
+        }
+      ]
+    }
+    """
+    fetch_count = 0
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal fetch_count
+        fetch_count += 1
+        fetch_queries.append(query)
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    rg_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+    wg_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    rg_results = asyncio.run(rg_workflow.search("rm07-01 rg"))
+    wg_results = asyncio.run(wg_workflow.search("rm07-01 wg"))
+
+    assert fetch_count == 1
+    assert fetch_queries == ["rm07-01"]
+    assert [result.listing_text for result in rg_results] == [
+        "RM07-01 RG Snow used fullset"
+    ]
+    assert [result.listing_text for result in wg_results] == [
+        "RM07-01 WG Snow used fullset"
+    ]
+    assert rg_workflow.last_search_diagnostics is not None
+    assert wg_workflow.last_search_diagnostics is not None
+    assert (
+        rg_workflow.last_search_diagnostics.retrieval_timings[0].cache_status
+        == "miss"
+    )
+    assert (
+        wg_workflow.last_search_diagnostics.retrieval_timings[0].cache_status
+        == "hit"
+    )
+    assert "retrieval.branch_cache_miss" in (
+        rg_workflow.last_search_diagnostics.retrieval_timings[0].reason_codes
+    )
+    assert "retrieval.branch_cache_hit" in (
+        wg_workflow.last_search_diagnostics.retrieval_timings[0].reason_codes
+    )
+
+
+def test_search_workflow_refreshes_stale_retrieval_branch_cache(tmp_path) -> None:
+    search_module._RETRIEVAL_BRANCH_CACHE.clear()
+    settings = replace(make_settings(tmp_path), search_retrieval_branch_cache_ttl_seconds=1)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "RM07-01 RG Snow used fullset",
+          "companyName": "Dealer RG",
+          "number": 701
+        },
+        {
+          "title": "RM07-01 WG Snow used fullset",
+          "companyName": "Dealer WG",
+          "number": 702
+        }
+      ]
+    }
+    """
+    fetch_count = 0
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal fetch_count
+        fetch_count += 1
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    rg_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+    wg_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    asyncio.run(rg_workflow.search("rm07-01 rg"))
+    assert len(search_module._RETRIEVAL_BRANCH_CACHE) == 1
+    cache_key, entry = next(iter(search_module._RETRIEVAL_BRANCH_CACHE.items()))
+    search_module._RETRIEVAL_BRANCH_CACHE[cache_key] = replace(
+        entry,
+        cached_at=entry.cached_at - 2,
+    )
+
+    asyncio.run(wg_workflow.search("rm07-01 wg"))
+
+    assert fetch_count == 2
+    assert wg_workflow.last_search_diagnostics is not None
+    assert (
+        wg_workflow.last_search_diagnostics.retrieval_timings[0].cache_status
+        == "stale"
+    )
+    assert "retrieval.branch_cache_stale" in (
+        wg_workflow.last_search_diagnostics.retrieval_timings[0].reason_codes
+    )
+
+
+def test_search_workflow_limits_retrieval_branch_cache_entries(tmp_path) -> None:
+    search_module._RETRIEVAL_BRANCH_CACHE.clear()
+    first = ScrapeResult(
+        html='{"listings":[{"title":"first","number":701}]}',
+        final_url="https://watchfacts.example/first",
+    )
+    second = ScrapeResult(
+        html='{"listings":[{"title":"second","number":702}]}',
+        final_url="https://watchfacts.example/second",
+    )
+
+    search_module._record_retrieval_branch_cache_result(
+        "first",
+        first,
+        ttl_seconds=90,
+        max_entries=1,
+    )
+    search_module._record_retrieval_branch_cache_result(
+        "second",
+        second,
+        ttl_seconds=90,
+        max_entries=1,
+    )
+
+    assert len(search_module._RETRIEVAL_BRANCH_CACHE) == 1
+    assert "second" in search_module._RETRIEVAL_BRANCH_CACHE
+    assert "first" not in search_module._RETRIEVAL_BRANCH_CACHE
+
+
+def test_search_workflow_does_not_cache_failed_retrieval_branch(tmp_path) -> None:
+    search_module._RETRIEVAL_BRANCH_CACHE.clear()
+    settings = make_settings(tmp_path)
+    fetch_count = 0
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal fetch_count
+        fetch_count += 1
+        if fetch_count == 1:
+            raise RuntimeError("temporary failure")
+        return ScrapeResult(
+            html='{"listings":[{"title":"RM07-01 RG Snow","number":701}]}',
+            final_url=settings.watchfacts_url,
+        )
+
+    failing_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+    successful_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    with pytest.raises(RuntimeError, match="temporary failure"):
+        asyncio.run(failing_workflow.search("rm07-01 rg"))
+    results = asyncio.run(successful_workflow.search("rm07-01 rg"))
+
+    assert fetch_count == 2
+    assert [result.listing_text for result in results] == ["RM07-01 RG Snow"]
+    assert successful_workflow.last_search_diagnostics is not None
+    assert (
+        successful_workflow.last_search_diagnostics.retrieval_timings[0].cache_status
+        == "miss"
+    )
 
 
 def test_search_workflow_limits_search_runtime_concurrent_distinct_queries(tmp_path) -> None:
@@ -1421,7 +1617,7 @@ def test_search_workflow_matches_server_filtered_rg_snow_material_aliases(tmp_pa
 def test_search_workflow_uses_same_uncached_retrieval_for_compound_material_aliases(
     tmp_path,
 ) -> None:
-    settings = make_settings(tmp_path)
+    settings = replace(make_settings(tmp_path), search_retrieval_branch_cache_ttl_seconds=0)
     fetch_queries: list[str | None] = []
     html = """
     {
@@ -1619,6 +1815,7 @@ def test_search_workflow_expands_daytona_panda_retrieval_with_local_filters(
         row["reason_codes"] == [
             "retrieval.raw_query",
             "retrieval.nickname_expansion:panda",
+            "retrieval.branch_cache_miss",
         ]
         for row in retrieval_timings
     )
@@ -1789,7 +1986,7 @@ def test_search_workflow_isolates_partial_retrieval_fetch_failures(tmp_path) -> 
     fetch_queries.clear()
     recovered = asyncio.run(workflow.search("5711 blue"))
 
-    assert fetch_queries == ["5711 blue", "5711", "nautilus 5711 blue"]
+    assert fetch_queries == ["5711"]
     assert {result.listing_text for result in recovered} == {
         "5711 Blue Dial 2022 Full Set HKD 980000",
         "Patek Philippe 5711/1A Blue Dial 2020 HKD 920000",

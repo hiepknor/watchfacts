@@ -17,6 +17,8 @@ DEFAULT_OPENAI_MAX_REFINES = 3
 DEFAULT_SEARCH_CACHE_TTL_SECONDS = 30 * 60
 DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES = 1
 DEFAULT_SEARCH_RETRIEVAL_CONCURRENCY = 1
+DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_TTL_SECONDS = 90
+DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_MAX_ENTRIES = 64
 MAX_SEARCH_RETRIEVAL_CONCURRENCY = 4
 DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED = True
 DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS = 15 * 60
@@ -67,6 +69,12 @@ class Settings:
     search_cache_ttl_seconds: int = DEFAULT_SEARCH_CACHE_TTL_SECONDS
     search_max_concurrent_searches: int = DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES
     search_retrieval_concurrency: int = DEFAULT_SEARCH_RETRIEVAL_CONCURRENCY
+    search_retrieval_branch_cache_ttl_seconds: int = (
+        DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_TTL_SECONDS
+    )
+    search_retrieval_branch_cache_max_entries: int = (
+        DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_MAX_ENTRIES
+    )
     openwa_base_url: str = ""
     openwa_api_key: str = ""
     openwa_dashboard_url: str = ""
@@ -147,6 +155,16 @@ def parse_positive_int(value: str, *, name: str) -> int:
         raise ConfigError(f"{name} must be a positive integer") from exc
     if parsed <= 0:
         raise ConfigError(f"{name} must be a positive integer")
+    return parsed
+
+
+def parse_non_negative_int(value: str, *, name: str) -> int:
+    try:
+        parsed = int(value.strip())
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be a non-negative integer") from exc
+    if parsed < 0:
+        raise ConfigError(f"{name} must be a non-negative integer")
     return parsed
 
 
@@ -245,6 +263,20 @@ def load_settings(
         ),
         name="SEARCH_RETRIEVAL_CONCURRENCY",
         max_value=MAX_SEARCH_RETRIEVAL_CONCURRENCY,
+    )
+    search_retrieval_branch_cache_ttl_seconds = parse_non_negative_int(
+        source.get(
+            "SEARCH_RETRIEVAL_BRANCH_CACHE_TTL_SECONDS",
+            str(DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_TTL_SECONDS),
+        ),
+        name="SEARCH_RETRIEVAL_BRANCH_CACHE_TTL_SECONDS",
+    )
+    search_retrieval_branch_cache_max_entries = parse_non_negative_int(
+        source.get(
+            "SEARCH_RETRIEVAL_BRANCH_CACHE_MAX_ENTRIES",
+            str(DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_MAX_ENTRIES),
+        ),
+        name="SEARCH_RETRIEVAL_BRANCH_CACHE_MAX_ENTRIES",
     )
     watchfacts_http_client_enabled = parse_bool(
         source.get(
@@ -400,6 +432,12 @@ def load_settings(
         search_cache_ttl_seconds=search_cache_ttl_seconds,
         search_max_concurrent_searches=search_max_concurrent_searches,
         search_retrieval_concurrency=search_retrieval_concurrency,
+        search_retrieval_branch_cache_ttl_seconds=(
+            search_retrieval_branch_cache_ttl_seconds
+        ),
+        search_retrieval_branch_cache_max_entries=(
+            search_retrieval_branch_cache_max_entries
+        ),
         watchfacts_http_client_enabled=watchfacts_http_client_enabled,
         watchfacts_form_cache_ttl_seconds=watchfacts_form_cache_ttl_seconds,
         watchfacts_http_connect_timeout_seconds=watchfacts_http_connect_timeout_seconds,

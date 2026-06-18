@@ -2,9 +2,10 @@
 
 ## Status
 
-Phase 11 search runtime is deployed and validated on `watchfacts-mcp`.
+Phase 12 search runtime optimization is in progress after Phase 11 deployment.
 
-As of 2026-06-18, commit `3478866` is pushed to `origin/master` and validated
+As of 2026-06-18, commit `6aff68b` is pushed to `origin/master`; Phase 11 was
+validated
 against the production `watchfacts-mcp` service with
 `SEARCH_CACHE_VERSION=search-v33`.
 The `watchfacts-bot` container was recreated during deploy but is not healthy
@@ -2395,6 +2396,152 @@ Phase 11 done criteria:
 - [x] Result Delivery cleanup, if performed, reduces ownership drift without
   changing search semantics.
 
+## Phase 12: Freshness-Safe Retrieval Branch Cache
+
+Status: in progress.
+
+Goal: reduce repeated cold WatchFacts fetch latency without pruning
+recall-bearing retrieval branches, changing parser/matcher/ranking semantics,
+or broadening prewarm as a substitute for fixing the cold path.
+
+The cache is deliberately below final search results:
+
+```text
+normalized retrieval branch -> short-lived raw HTML cache -> parser/matcher/rank per user query
+```
+
+This means `rm07-01 rg`, `rm07-01 wg`, and `rm07-01 rg snow` may reuse a recent
+`rm07-01` server response, but each query still runs its own descriptor
+filtering, dedupe, and ranking. The cache must not store user-query-specific
+ranked output under a shared branch key.
+
+Non-negotiables:
+
+- Keep final search cache semantics unchanged unless explicitly documented.
+- Keep branch-cache TTL and max size short and configurable.
+- Do not cache failed fetches.
+- Do not suppress parser, matcher, dedupe, scoring, or ranking for any query.
+- Expose branch cache hit, miss, and stale evidence in retrieval diagnostics.
+- Preserve alias recall delta `0` for benchmark canonical groups.
+- Bump `SEARCH_CACHE_VERSION` only if final cached output, result ordering,
+  eligibility, serialized payload, or cache-affecting diagnostics change.
+
+### Task 12.1: Plan Hygiene
+
+Status: complete.
+
+Description: Replace stale Phase 11 next-step notes and record the Phase 12
+scope before code changes.
+
+Acceptance:
+
+- [x] The recommended next step no longer points to Phase 11.
+- [x] Phase 12 explicitly states that branch caching sits below query-specific
+  parser/matcher/ranking.
+- [x] Phase 12 avoids speculative matcher/parser/ranking changes.
+
+### Task 12.2: Short-Lived Branch HTML Cache
+
+Status: complete locally.
+
+Description: Add a conservative in-process cache for successful retrieval
+branch HTML responses. The key is the same normalized branch identity already
+used for in-flight coalescing. Cached HTML may be reused across different user
+queries only before candidate processing.
+
+Acceptance:
+
+- [x] Branch cache can be disabled or TTL-adjusted through configuration.
+- [x] Successful branch fetches populate the cache.
+- [x] A fresh cached branch bypasses WatchFacts fetch and still runs
+  parser/matcher/ranking for the current query.
+- [x] Stale entries are ignored and refreshed.
+- [x] Failed fetches are not cached.
+
+Task 12.2 notes:
+
+- Added `SEARCH_RETRIEVAL_BRANCH_CACHE_TTL_SECONDS`, defaulting to `90`
+  seconds. Set it to `0` to disable branch HTML caching.
+- Added `SEARCH_RETRIEVAL_BRANCH_CACHE_MAX_ENTRIES`, defaulting to `64`.
+  Set it to `0` to disable branch HTML caching. Stale entries are pruned before
+  writes, and oldest entries are evicted when the cache exceeds this cap.
+- The branch cache is in-process and keyed by the existing retrieval branch
+  identity used for in-flight coalescing: database path, WatchFacts URL,
+  normalized retrieval query, and fetcher identity.
+- Only successful branch `ScrapeResult` values are cached. Exceptions are never
+  cached.
+- Cached branch HTML is reused before parser/matcher/ranking, so each user
+  query still runs current descriptor filtering, dedupe, scoring, and ranking.
+- No `SEARCH_CACHE_VERSION` bump is required because final result cache keys,
+  final result ordering, eligibility, and serialized output are unchanged.
+
+### Task 12.3: Branch Cache Diagnostics
+
+Status: complete locally.
+
+Description: Make branch-cache behavior visible in existing retrieval reasons
+and timing output so benchmarks can separate final search cache hits from branch
+HTML cache hits.
+
+Acceptance:
+
+- [x] Retrieval timing records `retrieval.branch_cache_hit` for reused branch
+  HTML.
+- [x] Retrieval timing records `retrieval.branch_cache_miss` for uncached
+  branches.
+- [x] Retrieval timing records `retrieval.branch_cache_stale` when an expired
+  branch is ignored.
+- [x] Existing diagnostics for duplicate and coalesced branches remain intact.
+
+Task 12.3 notes:
+
+- `RetrievalTiming.cache_status` now reports the branch-cache status for
+  retrieval branches: `hit`, `miss`, `stale`, or `disabled`.
+- Retrieval timing reason codes include branch-cache evidence alongside
+  existing retrieval plan and coalescing reason codes.
+
+### Task 12.4: Quality And Speed Guard
+
+Status: in progress.
+
+Description: Prove the branch cache improves repeated cold-path work without
+changing result quality. Clear the final search cache when measuring branch
+cache behavior so the benchmark exercises parser/matcher/ranking again.
+
+Acceptance:
+
+- [x] Focused tests cover miss, hit, stale, and query-specific filtering after
+  branch reuse.
+- [ ] `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache`
+  preserves alias recall delta and benchmark expectations.
+- [ ] Any speed result is reported as branch-cache evidence, not as final search
+  cache evidence.
+
+Task 12.4 local evidence:
+
+- `python -m pytest tests/test_config.py tests/test_search.py -q` passed with
+  `138 passed`.
+- `python -m pytest -q` passed with `739 passed`.
+- `python -m compileall app scripts` passed.
+- `git diff --check` passed.
+- MCP benchmark evidence is pending a local MCP restart or production deploy of
+  this branch-cache code.
+
+### Task 12.5: Deploy Gate
+
+Status: planned.
+
+Description: Deploy only after local predeploy and focused branch-cache evidence
+show no recall or quality drift.
+
+Acceptance:
+
+- [ ] `make search-engine-predeploy-check` passes locally.
+- [ ] Production `make deploy-mcp` uses the documented server flow.
+- [ ] Production `make search-engine-postdeploy-check` passes.
+- [ ] Docs record deployed commit, cache version, branch-cache behavior,
+  hot benchmark, cold budget, and alias recall.
+
 ## Metrics
 
 Track these before and after each phase:
@@ -2437,12 +2584,13 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Begin Phase 11 with Task 11.1 before implementation. Capture a fresh cold/hot
-baseline and confirm the first code change belongs to Retrieval, not Query
-Recognition or Candidate Processing. Keep Phase 10 recognition/parser work
+Continue Phase 12 with Task 12.4 and Task 12.5. Run the broader MCP benchmark
+with final search cache clearing after the MCP runtime uses this branch-cache
+code, then deploy through the documented production MCP gate if alias recall,
+counts, and top snippets stay stable. Keep Phase 10 recognition/parser work
 audit-gated; do not expand brand taxonomy unless a new production audit proves
 a user-visible miss.
 
-Operational note: Phase 9 MCP/search was deployed and postdeploy-validated.
+Operational note: Phase 11 MCP/search was deployed and postdeploy-validated.
 Telegram polling still depends on restoring the real `TELEGRAM_BOT_TOKEN` in
 `.env` and running `make deploy-bot`.

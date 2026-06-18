@@ -14,6 +14,8 @@ from app.config import (
     DEFAULT_RUNTIME_MODE,
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
     DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES,
+    DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_MAX_ENTRIES,
+    DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_TTL_SECONDS,
     DEFAULT_SEARCH_RETRIEVAL_CONCURRENCY,
     DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
@@ -32,6 +34,7 @@ from app.config import (
     load_search_settings,
     parse_bool,
     parse_hybrid_ai_mode,
+    parse_non_negative_int,
     parse_positive_int,
     parse_user_ids,
 )
@@ -103,6 +106,18 @@ def test_parse_positive_int_rejects_invalid_values() -> None:
         parse_positive_int("abc", name="TEST_LIMIT")
 
 
+def test_parse_non_negative_int_accepts_zero() -> None:
+    assert parse_non_negative_int("0", name="TEST_TTL") == 0
+    assert parse_non_negative_int("7", name="TEST_TTL") == 7
+
+
+def test_parse_non_negative_int_rejects_invalid_values() -> None:
+    with pytest.raises(ConfigError, match="TEST_TTL must be a non-negative integer"):
+        parse_non_negative_int("-1", name="TEST_TTL")
+    with pytest.raises(ConfigError, match="TEST_TTL must be a non-negative integer"):
+        parse_non_negative_int("abc", name="TEST_TTL")
+
+
 def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     settings = load_settings(
         env={"TELEGRAM_BOT_TOKEN": "token"},
@@ -125,6 +140,14 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.search_cache_ttl_seconds == DEFAULT_SEARCH_CACHE_TTL_SECONDS
     assert settings.search_max_concurrent_searches == DEFAULT_SEARCH_MAX_CONCURRENT_SEARCHES
     assert settings.search_retrieval_concurrency == DEFAULT_SEARCH_RETRIEVAL_CONCURRENCY
+    assert (
+        settings.search_retrieval_branch_cache_ttl_seconds
+        == DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_TTL_SECONDS
+    )
+    assert (
+        settings.search_retrieval_branch_cache_max_entries
+        == DEFAULT_SEARCH_RETRIEVAL_BRANCH_CACHE_MAX_ENTRIES
+    )
     assert settings.watchfacts_http_client_enabled == DEFAULT_WATCHFACTS_HTTP_CLIENT_ENABLED
     assert settings.watchfacts_form_cache_ttl_seconds == DEFAULT_WATCHFACTS_FORM_CACHE_TTL_SECONDS
     assert (
@@ -269,6 +292,30 @@ def test_load_settings_reads_search_retrieval_concurrency(tmp_path: Path) -> Non
     )
 
     assert settings.search_retrieval_concurrency == 2
+
+
+def test_load_settings_reads_search_retrieval_branch_cache_ttl(tmp_path: Path) -> None:
+    settings = load_search_settings(
+        env={
+            "SEARCH_RETRIEVAL_BRANCH_CACHE_TTL_SECONDS": "0",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.search_retrieval_branch_cache_ttl_seconds == 0
+
+
+def test_load_settings_reads_search_retrieval_branch_cache_max_entries(
+    tmp_path: Path,
+) -> None:
+    settings = load_search_settings(
+        env={
+            "SEARCH_RETRIEVAL_BRANCH_CACHE_MAX_ENTRIES": "0",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.search_retrieval_branch_cache_max_entries == 0
 
 
 def test_load_settings_rejects_unbounded_search_retrieval_concurrency(
