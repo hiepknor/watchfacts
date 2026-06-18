@@ -1689,38 +1689,35 @@ def _build_retrieval_plan(query: str, query_plan: QueryPlan) -> RetrievalPlan:
             ]
         )
         if expansion_rule.fallback_min_matched_count is not None:
+            raw_fallback_queries = list(expansion_rule.retrieval_queries)
             fallback_fetch_queries = _dedupe_retrieval_queries(
-                [
-                    retrieval_query
-                    for retrieval_query in expansion_rule.retrieval_queries
-                ],
+                raw_fallback_queries,
                 existing=(query,),
             )
+            reason_codes = [
+                "retrieval.raw_query",
+                f"retrieval.conditional_fallback:{expansion_rule.collection}",
+            ]
+            if len(fallback_fetch_queries) < len(raw_fallback_queries):
+                reason_codes.append("retrieval.duplicate_branch_skipped")
             return RetrievalPlan(
                 fetch_queries=(query,),
                 local_filter_queries=local_filter_queries,
-                reason_codes=(
-                    "retrieval.raw_query",
-                    f"retrieval.conditional_fallback:{expansion_rule.collection}",
-                ),
+                reason_codes=tuple(reason_codes),
                 fallback_fetch_queries=fallback_fetch_queries,
                 fallback_min_matched_count=expansion_rule.fallback_min_matched_count,
                 fallback_reason_code=expansion_rule.reason_code,
                 strict_local_filter=True,
             )
-        retrieval_queries = _dedupe_retrieval_queries(
-            [
-                query,
-                *expansion_rule.retrieval_queries,
-            ]
-        )
+        raw_retrieval_queries = [query, *expansion_rule.retrieval_queries]
+        retrieval_queries = _dedupe_retrieval_queries(raw_retrieval_queries)
+        reason_codes = ["retrieval.raw_query", expansion_rule.reason_code]
+        if len(retrieval_queries) < len(raw_retrieval_queries):
+            reason_codes.append("retrieval.duplicate_branch_skipped")
         return RetrievalPlan(
             fetch_queries=retrieval_queries,
             local_filter_queries=local_filter_queries,
-            reason_codes=(
-                "retrieval.raw_query",
-                expansion_rule.reason_code,
-            ),
+            reason_codes=tuple(reason_codes),
             strict_local_filter=True,
         )
 

@@ -2062,6 +2062,18 @@ def test_retrieval_plan_allows_safe_5711_blue_context_descriptors(
     assert retrieval_plan.strict_local_filter is True
 
 
+def test_retrieval_plan_reports_duplicate_5711_branch_skip() -> None:
+    query_plan = search_module.build_query_plan("Nautilus 5711 Blue")
+    retrieval_plan = search_module._build_retrieval_plan(
+        "Nautilus 5711 Blue",
+        query_plan,
+    )
+
+    assert retrieval_plan.fetch_queries == ("Nautilus 5711 Blue",)
+    assert retrieval_plan.fallback_fetch_queries == ("5711",)
+    assert "retrieval.duplicate_branch_skipped" in retrieval_plan.reason_codes
+
+
 def test_search_workflow_expands_15500st_blue_retrieval_with_reference_scoped_filters(
     tmp_path,
 ) -> None:
@@ -2307,6 +2319,18 @@ def test_retrieval_plan_allows_safe_15500st_blue_context_descriptors(
     assert retrieval_plan.fallback_min_matched_count == 5
     assert retrieval_plan.local_filter_queries == (query, "15500st blue")
     assert retrieval_plan.strict_local_filter is True
+
+
+def test_retrieval_plan_reports_duplicate_15500st_branch_skip() -> None:
+    query_plan = search_module.build_query_plan("Royal Oak 15500ST Blue")
+    retrieval_plan = search_module._build_retrieval_plan(
+        "Royal Oak 15500ST Blue",
+        query_plan,
+    )
+
+    assert retrieval_plan.fetch_queries == ("Royal Oak 15500ST Blue",)
+    assert retrieval_plan.fallback_fetch_queries == ("15500st",)
+    assert "retrieval.duplicate_branch_skipped" in retrieval_plan.reason_codes
 
 
 @pytest.mark.parametrize(
