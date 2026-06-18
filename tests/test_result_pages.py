@@ -672,11 +672,11 @@ def test_render_result_page_template_price_sort_prefers_backend_price_amount(tmp
         "query": "backend price field sort",
         "created_at": "2026-06-08T04:00:00Z",
         "expires_at": "2026-06-08T05:00:00Z",
-        "total_count": 3,
+        "total_count": 4,
         "offset": 0,
         "limit": 60,
         "next_offset": None,
-        "result_count": 3,
+        "result_count": 4,
         "results": [
             {
                 "rank": 1,
@@ -720,6 +720,20 @@ def test_render_result_page_template_price_sort_prefers_backend_price_amount(tmp
                 "seller_phone": None,
                 "similar_results": [],
             },
+            {
+                "rank": 4,
+                "source_result_id": "watchfacts-result-004",
+                "result_id": "watchfacts-result-004",
+                "price_amount": None,
+                "listing_text": "No price visible",
+                "price_reason": "price.missing_visible",
+                "seller": "Seller 4",
+                "posted_date": "June 4, 2026",
+                "image_url": None,
+                "source_url": "https://watchfacts.example/listing/4",
+                "seller_phone": None,
+                "similar_results": [],
+            },
         ],
     }
     audit_script = """
@@ -731,10 +745,14 @@ def test_render_result_page_template_price_sort_prefers_backend_price_amount(tmp
           sort.value = "price_desc";
           sort.dispatchEvent(new Event("change", { bubbles: true }));
           output.priceDescFirstRank = document.querySelector(".rank-badge").textContent;
+          output.priceDescRanks = Array.from(document.querySelectorAll(".rank-badge"))
+            .map(node => node.textContent);
 
           sort.value = "price_asc";
           sort.dispatchEvent(new Event("change", { bubbles: true }));
           output.priceAscFirstRank = document.querySelector(".rank-badge").textContent;
+          output.priceAscRanks = Array.from(document.querySelectorAll(".rank-badge"))
+            .map(node => node.textContent);
 
           const node = document.createElement("pre");
           node.id = "behaviorAudit";
@@ -776,7 +794,9 @@ def test_render_result_page_template_price_sort_prefers_backend_price_amount(tmp
 
     assert behavior == {
         "priceDescFirstRank": "#2",
+        "priceDescRanks": ["#2", "#3", "#1", "#4"],
         "priceAscFirstRank": "#1",
+        "priceAscRanks": ["#1", "#3", "#2", "#4"],
     }
 
 
@@ -788,6 +808,15 @@ def test_extract_price_amount_parses_currency_and_suffixes() -> None:
         "Range: 12,000 - 220,000 USD"
     ) == 220000.0
     assert result_pages._extract_price_amount("Seller says 20k is gold purity") is None
+
+
+def test_result_price_amount_prefers_visible_listing_text() -> None:
+    result = SearchResult(
+        listing_text="Visible local item USD 18,500",
+        raw_listing_text="Parent block has another item USD 220,000",
+    )
+
+    assert result_pages._result_price_amount(result) == 18500.0
 
 
 def test_result_page_template_keeps_in_app_browser_header_compact(tmp_path) -> None:

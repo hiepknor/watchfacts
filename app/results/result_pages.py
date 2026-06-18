@@ -338,8 +338,7 @@ def _result_payload(
         "stable_listing_id": stable_listing_id(result),
         "source_result_id": result_id,
         "listing_text": listing_text,
-        "price_amount": _extract_price_amount(result.raw_listing_text)
-        or _extract_price_amount(result.listing_text),
+        "price_amount": _result_price_amount(result),
         "listing_text_preview": {
             density: _listing_preview_text(listing_text, density)
             for density in ("comfortable", "dense")
@@ -374,6 +373,12 @@ def _extract_price_amount(listing_text: str | None) -> float | None:
             best = parsed
 
     return best
+
+
+def _result_price_amount(result: SearchResult) -> float | None:
+    return _extract_price_amount(result.listing_text) or _extract_price_amount(
+        result.raw_listing_text
+    )
 
 
 def _parse_price_token(raw: str, suffix: str) -> float | None:

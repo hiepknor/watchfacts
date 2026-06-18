@@ -215,6 +215,9 @@
     function parsePriceFromData(item) {
       if (!item) return null;
       const candidate = item.price_amount_numeric ?? item.price_amount;
+      if (candidate === null || candidate === undefined || candidate === "") {
+        return parsePriceFromText(item.listing_text);
+      }
       const amount = Number(candidate);
       if (Number.isFinite(amount)) return amount;
       return parsePriceFromText(item.listing_text);
