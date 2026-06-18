@@ -267,9 +267,14 @@ production-postdeploy-check: search-engine-postdeploy-check
 
 production-head-print:
 	@local_head="$$(git rev-parse --short HEAD)"; \
+	current_path="$(abspath $(CURDIR))"; \
+	production_path="$(abspath $(PRODUCTION_REPO_PATH))"; \
 	echo "Local checkout HEAD: $$local_head"; \
-	if [ -n "$(PRODUCTION_HOST)" ]; then \
-		echo "Remote production HEAD: $$(ssh $(PRODUCTION_HOST) 'cd $(PRODUCTION_REPO_PATH) && git rev-parse --short HEAD')"; \
+	if [ -n "$(PRODUCTION_HOST)" ] && [ "$$current_path" = "$$production_path" ]; then \
+		echo "Remote production HEAD: $$local_head (current production checkout; self-SSH skipped)"; \
+	elif [ -n "$(PRODUCTION_HOST)" ]; then \
+		remote_head="$$(ssh $(PRODUCTION_HOST) 'cd $(PRODUCTION_REPO_PATH) && git rev-parse --short HEAD')"; \
+		echo "Remote production HEAD: $$remote_head"; \
 	else \
 		echo "PRODUCTION_HOST not set; remote HEAD check skipped."; \
 	fi

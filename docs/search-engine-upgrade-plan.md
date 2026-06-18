@@ -111,10 +111,11 @@ Phase 11 deploy and postdeploy gate:
   warm pass still showed expected cold misses for non-prewarmed branches, and
   verify pass showed hot cache for all benchmark-default queries.
 - Server `make search-engine-postdeploy-check` passed against the running MCP
-  service. The helper printed local checkout HEAD `3478866`; its self-SSH
-  remote-head line was empty because server-side host-key verification blocked
-  SSH back to the same host. This is an operations helper warning, not a deploy
-  or runtime failure.
+  service. The initial run exposed a `production-head-print` self-SSH warning
+  when the check ran inside the production checkout with `PRODUCTION_HOST` set.
+  The target now skips self-SSH when `CURDIR` already matches
+  `PRODUCTION_REPO_PATH` and prints the current production checkout HEAD
+  directly.
 - MCP smoke passed `4/4`.
 - Server cold-budget passed `4/4` with cold-cache average `13661ms`, median
   `11836ms`, p95/max `25889ms`, and cache misses `4/4`.
@@ -2369,10 +2370,10 @@ Task 11.5 evidence from 2026-06-18:
   `25889ms`, cache misses `4/4`.
 - Postdeploy hot benchmark: average `137ms`, median `95ms`, p95/max `716ms`,
   cache hits `15/15`, alias recall delta `0`.
-- Warning-only operational observation: `production-head-print` printed local
-  checkout HEAD `3478866`, but its self-SSH remote-head line was empty due to
-  server-side host-key verification. Runtime health, deploy, smoke, benchmark,
-  and audit gates still passed.
+- Operational warning resolved after deploy: `production-head-print` now skips
+  self-SSH when the command is already running in the production checkout. The
+  original host-key warning did not affect runtime health, deploy, smoke,
+  benchmark, or audit gates.
 
 Verification:
 
