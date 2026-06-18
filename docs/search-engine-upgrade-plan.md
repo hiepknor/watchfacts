@@ -2177,6 +2177,10 @@ Task 11.2 progress:
   duplicate branch fetches by normalized server-query key.
 - Added `retrieval.duplicate_branch_skipped` to retrieval plan diagnostics when
   normalized branch dedupe removes a duplicate branch before fetch.
+- Added in-flight coalescing for retrieval branch fetches. Concurrent distinct
+  searches that need the same normalized WatchFacts branch, such as
+  `rm07-01 rg` and `rm07-01 wg`, share the active fetch while still applying
+  separate local filters, matching, dedupe, and ranking per query.
 - Did not change matcher eligibility, parser behavior, dedupe, ranking,
   result serialization, or cache key semantics. No `SEARCH_CACHE_VERSION` bump
   is required for this slice.

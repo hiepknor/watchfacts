@@ -64,6 +64,7 @@ PRODUCT_REFERENCE_RE = re.compile(
 MULTI_LIST_REFERENCE_THRESHOLD = 1
 WATCHFACTS_SOURCE_TRUNCATION_THRESHOLD = 200
 _IN_FLIGHT_SEARCHES: dict[str, asyncio.Task[list[SearchResult]]] = {}
+_IN_FLIGHT_RETRIEVAL_BRANCHES: dict[str, asyncio.Task[ScrapeResult]] = {}
 _SEARCH_SEMAPHORES: dict[str, asyncio.Semaphore] = {}
 
 
@@ -974,11 +975,23 @@ class WatchFactsSearchWorkflow:
         capture_errors: bool,
     ) -> RetrievalFetchResult:
         fetch_started_at = time.perf_counter()
-        try:
-            scrape_result = await self.fetch_html(
-                self.settings,
-                query=retrieval_query,
+        in_flight_key = _retrieval_branch_in_flight_key(
+            self.settings,
+            retrieval_query,
+            fetch_html=self.fetch_html,
+        )
+        task = _IN_FLIGHT_RETRIEVAL_BRANCHES.get(in_flight_key)
+        owner = task is None
+        if owner:
+            task = asyncio.create_task(
+                self.fetch_html(
+                    self.settings,
+                    query=retrieval_query,
+                )
             )
+            _IN_FLIGHT_RETRIEVAL_BRANCHES[in_flight_key] = task
+        try:
+            scrape_result = await task
         except Exception as exc:
             if not capture_errors:
                 raise
@@ -989,6 +1002,9 @@ class WatchFactsSearchWorkflow:
                 error_type=exc.__class__.__name__,
                 exception=exc,
             )
+        finally:
+            if owner:
+                _IN_FLIGHT_RETRIEVAL_BRANCHES.pop(in_flight_key, None)
         return RetrievalFetchResult(
             index=index,
             query=retrieval_query,
@@ -1924,6 +1940,21 @@ def _dedupe_retrieval_queries(
 
 def _retrieval_query_key(value: str) -> str:
     return normalize_text(value)
+
+
+def _retrieval_branch_in_flight_key(
+    settings: Settings,
+    retrieval_query: str,
+    *,
+    fetch_html: FetchHtml,
+) -> str:
+    payload = {
+        "db_path": str(settings.db_path.resolve()),
+        "fetcher_id": id(fetch_html),
+        "watchfacts_url": settings.watchfacts_url,
+        "query": _retrieval_query_key(retrieval_query),
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 COLOR_DESCRIPTOR_GROUP = {

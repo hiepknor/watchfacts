@@ -763,6 +763,70 @@ def test_search_workflow_coalesces_in_flight_descriptor_alias_queries(tmp_path) 
     )
 
 
+def test_search_workflow_coalesces_in_flight_retrieval_branch_across_queries(
+    tmp_path,
+) -> None:
+    settings = make_settings(tmp_path)
+    html = """
+    {
+      "listings": [
+        {
+          "title": "RM07-01 RG Snow used fullset",
+          "companyName": "Dealer RG",
+          "number": 701
+        },
+        {
+          "title": "RM07-01 WG Snow used fullset",
+          "companyName": "Dealer WG",
+          "number": 702
+        }
+      ]
+    }
+    """
+    fetch_count = 0
+    fetch_queries: list[str | None] = []
+
+    async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
+        nonlocal fetch_count
+        fetch_count += 1
+        fetch_queries.append(query)
+        await asyncio.sleep(0.01)
+        return ScrapeResult(html=html, final_url=settings.watchfacts_url)
+
+    rg_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+    wg_workflow = WatchFactsSearchWorkflow(
+        settings,
+        database=Database(settings.db_path),
+        fetch_html=fetch_html,
+    )
+
+    async def run_searches() -> tuple[list[SearchResult], list[SearchResult]]:
+        rg_task = asyncio.create_task(rg_workflow.search("rm07-01 rg"))
+        await asyncio.sleep(0)
+        wg = await wg_workflow.search("rm07-01 wg")
+        rg = await rg_task
+        return rg, wg
+
+    rg_results, wg_results = asyncio.run(run_searches())
+
+    assert fetch_count == 1
+    assert fetch_queries == ["rm07-01"]
+    assert [result.listing_text for result in rg_results] == [
+        "RM07-01 RG Snow used fullset"
+    ]
+    assert [result.listing_text for result in wg_results] == [
+        "RM07-01 WG Snow used fullset"
+    ]
+    assert rg_workflow.last_search_diagnostics is not None
+    assert wg_workflow.last_search_diagnostics is not None
+    assert rg_workflow.last_search_diagnostics.retrieval_queries == ("rm07-01",)
+    assert wg_workflow.last_search_diagnostics.retrieval_queries == ("rm07-01",)
+
+
 def test_search_workflow_limits_search_runtime_concurrent_distinct_queries(tmp_path) -> None:
     settings = Settings(
         telegram_bot_token="",
