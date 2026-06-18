@@ -57,6 +57,44 @@ def chrome_executable() -> str | None:
     return next((candidate for candidate in candidates if candidate and os.path.exists(candidate)), None)
 
 
+def run_result_page_browser_audit(
+    tmp_path,
+    *,
+    payload: dict,
+    audit_script: str,
+    audit_id: str,
+    filename: str,
+) -> dict:
+    chrome = chrome_executable()
+    if chrome is None:
+        pytest.skip("Chrome or Chromium is not installed")
+
+    page_path = tmp_path / filename
+    page_path.write_text(
+        render_result_page_template(payload).replace("</body>", f"{audit_script}</body>"),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            chrome,
+            "--headless=new",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            f"--virtual-time-budget={os.getenv('RESULT_TEMPLATE_VIRTUAL_TIME_BUDGET', '8000')}",
+            "--dump-dom",
+            page_path.as_uri(),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=int(os.getenv("RESULT_TEMPLATE_BROWSER_TIMEOUT", "60")),
+    )
+    match = re.search(rf'<pre id="{re.escape(audit_id)}">([^<]+)</pre>', result.stdout)
+    assert match is not None, result.stdout
+    return json.loads(html.unescape(match.group(1)))
+
+
 def test_render_result_page_template_defaults_to_null_results() -> None:
     html = render_result_page_template()
 
@@ -797,6 +835,201 @@ def test_render_result_page_template_price_sort_prefers_backend_price_amount(tmp
         "priceDescRanks": ["#2", "#3", "#1", "#4"],
         "priceAscFirstRank": "#1",
         "priceAscRanks": ["#1", "#3", "#2", "#4"],
+    }
+
+
+def test_render_result_page_template_action_buttons_handle_success_and_report_error(tmp_path) -> None:
+    payload = {
+        "query": "action behavior",
+        "created_at": "2026-06-08T04:00:00Z",
+        "expires_at": "2026-06-08T05:00:00Z",
+        "total_count": 1,
+        "offset": 0,
+        "limit": 60,
+        "next_offset": None,
+        "result_count": 1,
+        "actions": {
+            "action_nonce": "nonce-1",
+            "openwa_draft_url": "https://mcp.example/results/token/actions/openwa-draft",
+            "report_url": "https://mcp.example/results/token/actions/report",
+        },
+        "results": [
+            {
+                "rank": 1,
+                "result_id": "watchfacts-result-001",
+                "source_result_id": "watchfacts-result-001",
+                "listing_text": "5712G blue 2015 full set",
+                "seller": "Seller 1",
+                "posted_date": "June 1, 2026",
+                "image_url": None,
+                "source_url": "https://watchfacts.example/listing/1",
+                "seller_phone": None,
+                "similar_results": [],
+            },
+        ],
+    }
+    audit_script = """
+    <script>
+      setTimeout(() => {
+        const output = {};
+        try {
+          window.__copiedText = [];
+          window.__fetchCalls = [];
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText: async value => window.__copiedText.push(value) }
+          });
+          window.fetch = async (url, options) => {
+            const body = JSON.parse(options.body);
+            window.__fetchCalls.push({ url, body });
+            if (String(url).includes("openwa-draft")) {
+              return {
+                ok: true,
+                json: async () => ({
+                  ok: true,
+                  dashboard_url: "https://openwa.example/drafts/1"
+                })
+              };
+            }
+            if (String(url).includes("report")) {
+              return {
+                ok: false,
+                json: async () => ({
+                  ok: false,
+                  message: "Report failed for audit."
+                })
+              };
+            }
+            return { ok: false, json: async () => ({ ok: false }) };
+          };
+
+          const cardOpenWa = document.querySelector("[data-openwa-action-button='true']");
+          cardOpenWa.click();
+
+          setTimeout(() => {
+            output.openWaText = document.querySelector("[data-openwa-action-button='true']").textContent;
+            output.openWaClass = document.querySelector("[data-openwa-action-button='true']").className;
+            output.openWaCall = window.__fetchCalls[0];
+
+            document.querySelector('button[aria-label="Show result details"]').click();
+            const modal = document.querySelector("#resultModal");
+            const reportSubmit = modal.querySelector(".report-form button[type='submit']");
+            reportSubmit.click();
+
+            setTimeout(() => {
+              output.reportStatus = modal.querySelector(".modal-action-status").textContent;
+              output.reportDisabledAfterError = reportSubmit.disabled;
+              output.reportCall = window.__fetchCalls[1];
+              const node = document.createElement("pre");
+              node.id = "actionAudit";
+              node.textContent = JSON.stringify(output);
+              document.body.appendChild(node);
+            }, 0);
+          }, 0);
+        } catch (error) {
+          const node = document.createElement("pre");
+          node.id = "actionAudit";
+          node.textContent = JSON.stringify({ error: String(error && error.stack || error) });
+          document.body.appendChild(node);
+        }
+      }, 0);
+    </script>
+    """
+    behavior = run_result_page_browser_audit(
+        tmp_path,
+        payload=payload,
+        audit_script=audit_script,
+        audit_id="actionAudit",
+        filename="result-actions.html",
+    )
+
+    assert behavior["openWaText"] == "Open draft"
+    assert "is-success" in behavior["openWaClass"]
+    assert behavior["openWaCall"]["body"] == {
+        "action_nonce": "nonce-1",
+        "result_id": "watchfacts-result-001",
+    }
+    assert behavior["reportStatus"] == "Report failed for audit."
+    assert behavior["reportDisabledAfterError"] is False
+    assert behavior["reportCall"]["body"] == {
+        "action_nonce": "nonce-1",
+        "result_id": "watchfacts-result-001",
+        "reason": "wrong_result",
+        "notes": "",
+    }
+
+
+def test_render_result_page_template_openwa_falls_back_to_copy_prompt_without_actions(tmp_path) -> None:
+    payload = {
+        "query": "fallback action behavior",
+        "created_at": "2026-06-08T04:00:00Z",
+        "expires_at": "2026-06-08T05:00:00Z",
+        "total_count": 1,
+        "offset": 0,
+        "limit": 60,
+        "next_offset": None,
+        "result_count": 1,
+        "results": [
+            {
+                "rank": 1,
+                "result_id": "watchfacts-result-001",
+                "source_result_id": "watchfacts-result-001",
+                "listing_text": "5712G blue 2015 full set",
+                "seller": "Seller 1",
+                "posted_date": "June 1, 2026",
+                "image_url": None,
+                "source_url": None,
+                "seller_phone": None,
+                "similar_results": [],
+            },
+        ],
+    }
+    audit_script = """
+    <script>
+      setTimeout(() => {
+        const output = {};
+        try {
+          window.__copiedText = [];
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText: async value => window.__copiedText.push(value) }
+          });
+          const button = document.querySelector("[data-openwa-action-button='true']");
+          output.buttonDisabled = button.disabled;
+          output.buttonLabel = button.getAttribute("aria-label");
+          button.click();
+          setTimeout(() => {
+            output.copied = window.__copiedText.at(-1);
+            const node = document.createElement("pre");
+            node.id = "fallbackAudit";
+            node.textContent = JSON.stringify(output);
+            document.body.appendChild(node);
+          }, 0);
+        } catch (error) {
+          const node = document.createElement("pre");
+          node.id = "fallbackAudit";
+          node.textContent = JSON.stringify({ error: String(error && error.stack || error) });
+          document.body.appendChild(node);
+        }
+      }, 0);
+    </script>
+    """
+    behavior = run_result_page_browser_audit(
+        tmp_path,
+        payload=payload,
+        audit_script=audit_script,
+        audit_id="fallbackAudit",
+        filename="result-actions-fallback.html",
+    )
+
+    assert behavior == {
+        "buttonDisabled": False,
+        "buttonLabel": "Copy prompt to create an OpenWA chat draft",
+        "copied": (
+            "Create an OpenWA chat draft for this WatchFacts result.\n"
+            "query: fallback action behavior\n"
+            "result_id: watchfacts-result-001"
+        ),
     }
 
 

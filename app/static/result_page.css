@@ -12,6 +12,7 @@
       --accent: #0f766e;
       --accent-strong: #0a4f49;
       --accent-soft: #e1f2f0;
+      --success: #0f766e;
       --listing-accent: #0f766e;
       --listing-strong: #0a4f49;
       --listing-soft: #e8f4f2;
@@ -829,14 +830,6 @@
       gap: 0.35rem;
     }
 
-    .modal-hero {
-      min-width: 0;
-      display: grid;
-      grid-template-columns: minmax(9.5rem, 0.58fr) minmax(0, 1fr);
-      gap: 0.7rem;
-      align-items: stretch;
-    }
-
     .modal-media-card {
       min-width: 0;
       border: 1px solid var(--border);
@@ -969,11 +962,6 @@
 
     .modal-action-status.success {
       color: var(--accent-strong);
-    }
-
-    .draft-link {
-      color: var(--accent-strong);
-      font-weight: 750;
     }
 
     .report-form {
@@ -1220,10 +1208,6 @@
       .modal-panel {
         width: min(58rem, calc(100vw - 2rem));
         max-height: calc(100vh - 2rem);
-      }
-
-      .modal-hero {
-        grid-template-columns: minmax(11.5rem, 0.48fr) minmax(0, 1fr);
       }
 
       .modal-actions {
@@ -1493,11 +1477,6 @@
         white-space: normal;
       }
 
-      .modal-hero {
-        grid-template-columns: minmax(0, 0.78fr) minmax(0, 1fr);
-        gap: 0.55rem;
-      }
-
       .result-details-meta {
         grid-template-columns: minmax(0, 1fr);
       }
@@ -1621,11 +1600,6 @@
       .result-id-wrap,
       .detail-chip {
         padding: 0.48rem 0.52rem;
-      }
-
-      .modal-hero {
-        grid-template-columns: 1fr;
-        gap: 0.5rem;
       }
 
       .modal-media-card {
@@ -2313,11 +2287,6 @@
       padding: 1rem 1.15rem;
     }
 
-    .modal-hero {
-      grid-template-columns: minmax(12rem, 0.42fr) minmax(0, 1fr);
-      gap: 0.85rem;
-    }
-
     .modal-media-card,
     .modal-listing-copy,
     .report-form,
@@ -2430,10 +2399,6 @@
 
       .modal-panel {
         width: var(--modal-width-tablet);
-      }
-
-      .modal-hero {
-        grid-template-columns: minmax(10rem, 0.48fr) minmax(0, 1fr);
       }
 
       .modal-actions,
@@ -2558,7 +2523,6 @@
         border-radius: 16px;
       }
 
-      .modal-hero,
       .modal-actions,
       .modal-meta-section {
         grid-template-columns: 1fr;

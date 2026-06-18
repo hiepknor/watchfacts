@@ -601,11 +601,11 @@
       button.classList.toggle("is-loading", stateValue.status === "loading");
       button.classList.toggle("is-success", stateValue.status === "success");
       button.classList.toggle("is-error", stateValue.status === "error");
-      button.disabled = stateValue.status === "loading" || button.dataset.openwaUnavailable === "true";
+      button.disabled = stateValue.status === "loading";
       if (button.dataset.openwaUnavailable === "true") {
         button.textContent = "OpenWA";
-        button.title = "OpenWA draft creation is not available on this page";
-        button.setAttribute("aria-label", "OpenWA draft creation is not available on this page");
+        button.title = "Copy prompt to create an OpenWA chat draft";
+        button.setAttribute("aria-label", "Copy prompt to create an OpenWA chat draft");
       } else if (stateValue.status === "loading") {
         button.textContent = "Creating...";
         button.title = "Creating an OpenWA chat draft";
@@ -677,9 +677,8 @@
       }
       if (!actions.openwa_draft_url || !actions.action_nonce) {
         button.dataset.openwaUnavailable = "true";
-        button.disabled = true;
-        button.title = "OpenWA draft creation is not available on this page";
-        button.setAttribute("aria-label", "OpenWA draft creation is not available on this page");
+        button.title = "Copy prompt to create an OpenWA chat draft";
+        button.setAttribute("aria-label", "Copy prompt to create an OpenWA chat draft");
       }
       applyOpenWaButtonState(button, getOpenWaDraftState(item));
       updateOpenWaDraftControls(key);
