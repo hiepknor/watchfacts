@@ -84,6 +84,50 @@ reference grammar.
 
 Latest validated deployment/check:
 
+- Repository commit: `be57812`
+- Runtime search cache version: `search-v33`
+- Services: `watchfacts-mcp`
+- Date: 2026-06-18
+- Production host: `ubuntu@43.153.208.222`
+- Worktree state after deploy: clean and synced with `origin/master`
+- Status: Phase 12 MCP/search deployed and postdeploy-validated. Bot runtime
+  remains outside this MCP-only deploy gate.
+
+Phase 12 deploy and postdeploy gate:
+
+- Pushed `master` to `origin` through commit `be57812`.
+- Server `make deploy-mcp` ran in `/opt/watchfacts` on
+  `ubuntu@43.153.208.222`, pulled fast-forward to `be57812`, rebuilt the MCP
+  image, and recreated `watchfacts-mcp`.
+- Container deploy tests passed with `741 passed`.
+- Container `python -m compileall app scripts` passed.
+- Container deploy quality audit passed.
+- `watchfacts-mcp` became healthy after recreate.
+- Deploy prewarm common set passed `14/14` with cache hits `14/14`, average
+  `172ms`, and max `882ms`.
+- Deploy benchmark-default prewarm passed `30/30`, with alias recall delta `0`.
+  The branch-cache effect was visible in the warm pass after the first
+  `rm07-01` branch fetch: `rm07-01 wg` completed in `347ms`, `rm07-01 mop` in
+  `278ms`, and `rm07-01 rg snow` in `259ms` while final search cache was still
+  cold for those canonical queries.
+- Server `make search-engine-postdeploy-check` passed against the running MCP
+  service.
+- `production-head-print` printed local and production HEAD `be57812` without
+  self-SSH host-key warnings.
+- MCP smoke passed `4/4`.
+- Server cold-budget passed `4/4` with final search cache misses `4/4`,
+  average `2586ms`, median `356ms`, p95/max `9405ms`. All four retrieval
+  branches showed branch cache `hit`, so WatchFacts fetch time dropped to
+  `0-1ms` in retrieval timing.
+- Server postdeploy benchmark-default prewarm passed `30/30`, with alias recall
+  delta `0` and average `558ms`.
+- Server hot benchmark passed `15/15` with cache hits `15/15`, average
+  `163ms`, median `108ms`, p95/max `857ms`, and alias recall delta `0`.
+- Server postdeploy quality audit passed; audited top results stayed in quality
+  group `0`.
+
+Previous validated deployment/check:
+
 - Repository commit: `3478866`
 - Runtime search cache version: `search-v33`
 - Services: `watchfacts-mcp`
@@ -2398,7 +2442,7 @@ Phase 11 done criteria:
 
 ## Phase 12: Freshness-Safe Retrieval Branch Cache
 
-Status: in progress.
+Status: complete and deployed.
 
 Goal: reduce repeated cold WatchFacts fetch latency without pruning
 recall-bearing retrieval branches, changing parser/matcher/ranking semantics,
@@ -2442,7 +2486,7 @@ Acceptance:
 
 ### Task 12.2: Short-Lived Branch HTML Cache
 
-Status: complete locally.
+Status: complete and deployed.
 
 Description: Add a conservative in-process cache for successful retrieval
 branch HTML responses. The key is the same normalized branch identity already
@@ -2477,7 +2521,7 @@ Task 12.2 notes:
 
 ### Task 12.3: Branch Cache Diagnostics
 
-Status: complete locally.
+Status: complete and deployed.
 
 Description: Make branch-cache behavior visible in existing retrieval reasons
 and timing output so benchmarks can separate final search cache hits from branch
@@ -2502,7 +2546,7 @@ Task 12.3 notes:
 
 ### Task 12.4: Quality And Speed Guard
 
-Status: in progress.
+Status: complete and deployed.
 
 Description: Prove the branch cache improves repeated cold-path work without
 changing result quality. Clear the final search cache when measuring branch
@@ -2512,35 +2556,55 @@ Acceptance:
 
 - [x] Focused tests cover miss, hit, stale, and query-specific filtering after
   branch reuse.
-- [ ] `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache`
+- [x] `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache`
   preserves alias recall delta and benchmark expectations.
-- [ ] Any speed result is reported as branch-cache evidence, not as final search
+- [x] Any speed result is reported as branch-cache evidence, not as final search
   cache evidence.
 
 Task 12.4 local evidence:
 
 - `python -m pytest tests/test_config.py tests/test_search.py -q` passed with
   `138 passed`.
-- `python -m pytest -q` passed with `739 passed`.
+- `python -m pytest -q` passed with `741 passed`.
 - `python -m compileall app scripts` passed.
 - `git diff --check` passed.
-- MCP benchmark evidence is pending a local MCP restart or production deploy of
-  this branch-cache code.
+- Production cold-budget passed with final search cache misses `4/4`, average
+  `2586ms`, median `356ms`, p95/max `9405ms`, and branch cache `hit` on all
+  focused retrieval branches.
+- Production benchmark-default prewarm passed `30/30`, with alias recall delta
+  `0`. The warm pass showed branch-cache acceleration for shared RM07
+  retrieval branches while final search cache was still cold for those
+  canonical queries.
 
 ### Task 12.5: Deploy Gate
 
-Status: planned.
+Status: complete and deployed.
 
 Description: Deploy only after local predeploy and focused branch-cache evidence
 show no recall or quality drift.
 
 Acceptance:
 
-- [ ] `make search-engine-predeploy-check` passes locally.
-- [ ] Production `make deploy-mcp` uses the documented server flow.
-- [ ] Production `make search-engine-postdeploy-check` passes.
-- [ ] Docs record deployed commit, cache version, branch-cache behavior,
+- [x] `make search-engine-predeploy-check` passes locally.
+- [x] Production `make deploy-mcp` uses the documented server flow.
+- [x] Production `make search-engine-postdeploy-check` passes.
+- [x] Docs record deployed commit, cache version, branch-cache behavior,
   hot benchmark, cold budget, and alias recall.
+
+Task 12.5 evidence from 2026-06-18:
+
+- Deployed commit `be57812` to `watchfacts-mcp` on
+  `ubuntu@43.153.208.222`.
+- Runtime search cache version remains `search-v33`; no cache version bump was
+  required because final result cache keys, eligibility, ranking, ordering, and
+  serialized output did not change.
+- Deploy gate passed with container tests `741 passed`, container compile
+  checks, deploy quality audit, MCP health, and postdeploy prewarm.
+- Postdeploy gate passed with MCP smoke `4/4`, cold budget `4/4`,
+  benchmark-default prewarm `30/30`, hot benchmark `15/15`, and production
+  quality audit.
+- Alias recall delta remained `0` for `rm07-01 rg`, `rm07-01 wg`,
+  `rm07-01 mop`, and `rm07-01 rg snow`.
 
 ## Metrics
 
