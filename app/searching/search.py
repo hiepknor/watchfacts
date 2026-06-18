@@ -794,12 +794,19 @@ class WatchFactsSearchWorkflow:
         result_pipeline_started_at = time.perf_counter()
         results: list[SearchResult] = []
         result_branch_by_key: dict[tuple[str, str, str, str], str] = {}
+        result_convert_started_at = time.perf_counter()
         for listing in matched:
             result = _to_search_result(query, listing)
             results.append(result)
             branch_query = candidate_branch_by_key.get(_listing_candidate_key(listing))
             if branch_query is not None:
                 result_branch_by_key[_search_result_branch_key(result)] = branch_query
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_convert",
+            result_convert_started_at,
+        )
+        result_audit_converted_started_at = time.perf_counter()
         self._audit_search_results(
             audit_events,
             query=query,
@@ -807,6 +814,12 @@ class WatchFactsSearchWorkflow:
             stage="converted",
             results=results,
         )
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_audit_converted",
+            result_audit_converted_started_at,
+        )
+        result_dedupe_latest_started_at = time.perf_counter()
         unique = unique_latest_listings(results)
         latest_drop_count = self._audit_dedupe_drops(
             audit_events,
@@ -820,8 +833,19 @@ class WatchFactsSearchWorkflow:
             reason_code="dedupe.latest_listing",
         )
         unique_latest_count = len(unique)
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_dedupe_latest",
+            result_dedupe_latest_started_at,
+        )
         if self.refine_results is not None and self.settings.hybrid_ai_mode != "off":
+            result_refine_started_at = time.perf_counter()
             unique = await self._handle_hybrid_refinement(query, unique)
+            _add_stage_timing(
+                stage_timings_ms,
+                "result_refine",
+                result_refine_started_at,
+            )
             self._audit_search_results(
                 audit_events,
                 query=query,
@@ -830,6 +854,7 @@ class WatchFactsSearchWorkflow:
                 results=unique,
             )
         before_text_dedupe = list(unique)
+        result_dedupe_text_started_at = time.perf_counter()
         unique = unique_latest_by_text(unique)
         text_drop_count = self._audit_dedupe_drops(
             audit_events,
@@ -840,18 +865,44 @@ class WatchFactsSearchWorkflow:
             reason_code="dedupe.text",
         )
         unique_text_count = len(unique)
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_dedupe_text",
+            result_dedupe_text_started_at,
+        )
+        result_rank_started_at = time.perf_counter()
         unique = rank_results_by_quality(unique, query=query)
+        _add_stage_timing(stage_timings_ms, "result_rank", result_rank_started_at)
+        result_filter_blocked_started_at = time.perf_counter()
         blocked_final_count = self._audit_and_filter_blocked_final_results(
             audit_events,
             query=query,
             query_intent=query_intent,
             results=unique,
         )
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_filter_blocked",
+            result_filter_blocked_started_at,
+        )
+        result_group_similar_started_at = time.perf_counter()
         unique = group_similar_results(unique, query=query)
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_group_similar",
+            result_group_similar_started_at,
+        )
+        result_fuzzy_scores_started_at = time.perf_counter()
         fuzzy_scores = [
             score_fuzzy_match(query, result.listing_text).overall_score
             for result in unique
         ]
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_fuzzy_scores",
+            result_fuzzy_scores_started_at,
+        )
+        result_audit_final_started_at = time.perf_counter()
         self._audit_search_results(
             audit_events,
             query=query,
@@ -859,10 +910,21 @@ class WatchFactsSearchWorkflow:
             stage="final",
             results=unique,
         )
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_audit_final",
+            result_audit_final_started_at,
+        )
+        result_retrieval_contributions_started_at = time.perf_counter()
         retrieval_timings = _add_retrieval_result_contribution_counts(
             retrieval_timings,
             unique,
             result_branch_by_key,
+        )
+        _add_stage_timing(
+            stage_timings_ms,
+            "result_retrieval_contributions",
+            result_retrieval_contributions_started_at,
         )
         deduped_drop_count = latest_drop_count + text_drop_count
         rejection_reasons = {

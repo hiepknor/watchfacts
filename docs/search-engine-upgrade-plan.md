@@ -2606,6 +2606,68 @@ Task 12.5 evidence from 2026-06-18:
 - Alias recall delta remained `0` for `rm07-01 rg`, `rm07-01 wg`,
   `rm07-01 mop`, and `rm07-01 rg snow`.
 
+## Phase 13: High-Fanout Result Pipeline Profiling
+
+Status: in progress.
+
+Goal: identify the next proven bottleneck after Phase 12 reduced repeated
+WatchFacts fetch cost. The first slice is instrumentation only: split the
+coarse `result_pipeline` timing into smaller deterministic stages without
+changing parser, matcher, dedupe, scoring, ranking, grouping, final payloads, or
+cache keys.
+
+Phase 12 production evidence showed `daytona panda` still taking `9405ms` in
+the focused cold-budget check even when retrieval branches were branch-cache
+hits. Its stage timings showed `watchfacts_fetch:1ms` but
+`result_pipeline:6880ms`, so the next decision must be based on sub-stage
+timings instead of guessing.
+
+Non-negotiables:
+
+- Do not change result eligibility, ranking order, grouping, or payload shape
+  in the instrumentation slice.
+- Do not add dependencies or new broad engine packages.
+- Do not optimize before the benchmark identifies the expensive sub-stage.
+- Keep benchmark output readable enough for deploy review.
+
+### Task 13.1: Result Pipeline Sub-Timings
+
+Status: complete locally.
+
+Description: Add sub-stage timing keys inside `stage_timings_ms` for the
+existing result pipeline blocks.
+
+Acceptance:
+
+- [x] `stage_timings_ms` includes timings for conversion, latest dedupe, text
+  dedupe, ranking, blocked-result filtering, similarity grouping, fuzzy scoring,
+  final audit, and retrieval contribution counting.
+- [x] The existing aggregate `result_pipeline` timing remains for continuity.
+- [x] Tests verify sub-timing keys are present and non-negative.
+- [x] No result counts, top snippets, or alias recall behavior changes in the
+  local test suite.
+
+Task 13.1 evidence from 2026-06-18:
+
+- `python -m pytest tests/test_search.py -q` passed with `99 passed`.
+- `python -m compileall app scripts` passed.
+- `python -m pytest -q` passed with `741 passed`.
+- `git diff --check` passed.
+
+### Task 13.2: Benchmark Review
+
+Status: planned.
+
+Description: Run focused benchmark evidence after instrumentation to identify
+whether the next optimization belongs to scoring, grouping, audit, dedupe, or
+serialization/persist.
+
+Acceptance:
+
+- [ ] `make mcp-cold-budget` or equivalent MCP benchmark records result
+  pipeline sub-stage timings for high-fanout cases.
+- [ ] The plan records the selected next optimization target with evidence.
+
 ## Metrics
 
 Track these before and after each phase:
