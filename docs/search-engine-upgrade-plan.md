@@ -2608,7 +2608,7 @@ Task 12.5 evidence from 2026-06-18:
 
 ## Phase 13: High-Fanout Result Pipeline Profiling
 
-Status: in progress.
+Status: complete and deployed.
 
 Goal: identify the next proven bottleneck after Phase 12 reduced repeated
 WatchFacts fetch cost. The first slice is instrumentation only: split the
@@ -2632,7 +2632,7 @@ Non-negotiables:
 
 ### Task 13.1: Result Pipeline Sub-Timings
 
-Status: complete locally.
+Status: complete and deployed.
 
 Description: Add sub-stage timing keys inside `stage_timings_ms` for the
 existing result pipeline blocks.
@@ -2653,10 +2653,13 @@ Task 13.1 evidence from 2026-06-18:
 - `python -m compileall app scripts` passed.
 - `python -m pytest -q` passed with `741 passed`.
 - `git diff --check` passed.
+- Deployed in commit `8324ee2` with `make deploy-mcp`; server-side
+  deployment verification passed with `741 passed`, compileall, quality audit,
+  health check, and cache prewarm.
 
 ### Task 13.2: Benchmark Review
 
-Status: planned.
+Status: complete and deployed.
 
 Description: Run focused benchmark evidence after instrumentation to identify
 whether the next optimization belongs to scoring, grouping, audit, dedupe, or
@@ -2664,9 +2667,90 @@ serialization/persist.
 
 Acceptance:
 
-- [ ] `make mcp-cold-budget` or equivalent MCP benchmark records result
+- [x] `make mcp-cold-budget` or equivalent MCP benchmark records result
   pipeline sub-stage timings for high-fanout cases.
-- [ ] The plan records the selected next optimization target with evidence.
+- [x] The plan records the selected next optimization target with evidence.
+
+Task 13.2 evidence from 2026-06-18:
+
+- `make search-engine-postdeploy-check` passed on production MCP at commit
+  `8324ee2`.
+- Smoke passed `4/4`.
+- Cold-budget benchmark passed `4/4`, avg `5574ms`, median `4850ms`,
+  p95/max `12246ms`, cache hits `0`, cache misses `4`.
+- `daytona panda` remained the high-fanout CPU case: elapsed `9285ms`,
+  `total_count=212`, retrieval branch cache hits, `watchfacts_fetch:0ms`,
+  `parse:142ms`, `match:772ms`, `result_pipeline:7186ms`.
+- The dominant result-pipeline sub-stage for `daytona panda` was
+  `result_group_similar:6212ms`, with smaller costs from `result_rank:302ms`,
+  `result_convert:259ms`, and `result_filter_blocked:200ms`.
+- `5711 blue` and `15500st blue` were not bottlenecked by the result pipeline:
+  `result_pipeline:173ms` and `56ms` respectively.
+- `rm07-01 rg snow` was slow for a different reason: `12246ms` elapsed with
+  `watchfacts_fetch:11965ms` and `result_pipeline:19ms`, so it is a fetch/cache
+  freshness case rather than a grouping case.
+- Benchmark-default prewarm passed `30/30`; alias recall delta stayed `0` for
+  `rm07-01 rg`, `rm07-01 wg`, `rm07-01 mop`, and `rm07-01 rg snow`.
+- Hot benchmark passed `15/15`, avg `149ms`, median `102ms`, p95/max `687ms`,
+  cache hits `15/15`.
+- Quality audit passed after deploy.
+
+Decision: Phase 14 should optimize similarity grouping for high-fanout result
+sets. Do not change matching, parser, or retrieval expansion first; the
+evidence shows the CPU cost is concentrated after ranking in
+`group_similar_results` for large result sets.
+
+## Phase 14: Bounded Similarity Grouping
+
+Status: planned.
+
+Goal: reduce high-fanout result-pipeline latency while preserving result
+quality and avoiding missed results. The target is the `result_group_similar`
+stage only, because Phase 13 measured it as `6212ms` of the `7186ms`
+`result_pipeline` cost for `daytona panda`.
+
+Non-negotiables:
+
+- Do not drop candidates before deterministic eligibility, dedupe, ranking, and
+  blocked-result filtering have already run.
+- Do not change result payload shape, pagination contract, result IDs, seller
+  fields, images, prices, or OpenWA handoff handles.
+- Do not reduce quality by skipping obvious duplicate/similar grouping among
+  top visible results.
+- Keep grouping deterministic and testable; no LLM or probabilistic service.
+
+### Task 14.1: Similarity Grouping Complexity Audit
+
+Status: planned.
+
+Description: Inspect `group_similar_results` and its tests to identify the
+exact complexity driver, expected grouping semantics, and safe pruning points.
+
+Acceptance:
+
+- [ ] Document whether the current grouping is pairwise over all unique results
+  and which fields drive similarity.
+- [ ] Add or identify tests that lock visible high-fanout behavior before
+  changing the algorithm.
+- [ ] Confirm the minimum grouping scope needed for result-page quality.
+
+### Task 14.2: Candidate-Pruned Similarity Grouping
+
+Status: planned.
+
+Description: Bound the expensive comparison space without removing eligible
+results. Candidate pruning should compare likely-similar rows first, using
+stable deterministic buckets such as normalized reference, seller, source,
+listing text fingerprint, or high-signal query tokens.
+
+Acceptance:
+
+- [ ] `daytona panda` keeps the same top result IDs and total count in focused
+  tests unless a documented duplicate-grouping bug is intentionally fixed.
+- [ ] High-fanout grouping latency falls materially from the Phase 13 baseline.
+- [ ] Small-result queries such as `5711 blue`, `15500st blue`, and
+  `rm07-01 rg snow` remain stable.
+- [ ] Full test suite and postdeploy benchmark pass.
 
 ## Metrics
 
