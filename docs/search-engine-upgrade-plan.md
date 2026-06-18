@@ -2140,7 +2140,7 @@ git diff --check
 
 ### Task 11.2: Retrieval Reuse And Conditional Fetch Tightening
 
-Status: in progress.
+Status: complete locally.
 
 Description: Reduce redundant cold retrieval work where existing diagnostics
 show branches repeat equivalent upstream work or contribute no eligible
@@ -2159,12 +2159,12 @@ Allowed changes:
 
 Acceptance:
 
-- [ ] At least one high-cost cold query improves or the task records why no safe
+- [x] At least one high-cost cold query improves or the task records why no safe
   retrieval reduction exists.
-- [ ] Alias recall delta remains zero.
-- [ ] Default benchmark `total_count` and top snippets remain stable.
-- [ ] Branch diagnostics explain every skipped, reused, or fetched branch.
-- [ ] Cache version handling is documented in the commit notes and this plan.
+- [x] Alias recall delta remains zero.
+- [x] Default benchmark `total_count` and top snippets remain stable.
+- [x] Branch diagnostics explain every skipped, reused, or fetched branch.
+- [x] Cache version handling is documented in the commit notes and this plan.
 
 Task 11.2 progress:
 
@@ -2188,6 +2188,10 @@ Task 11.2 progress:
   `4/4`, but the command-level env override does not reconfigure the already
   running MCP service, so this is not evidence to change production runtime
   concurrency.
+- Focused cold-budget after the retrieval slices still shows `daytona white` is
+  the dominant expensive branch for `daytona panda`, but it remains
+  recall-bearing with many unique final results. No safe branch pruning was
+  identified for that query family.
 - Did not change matcher eligibility, parser behavior, dedupe, ranking,
   result serialization, or cache key semantics. No `SEARCH_CACHE_VERSION` bump
   is required for this slice.
@@ -2203,17 +2207,31 @@ make mcp-benchmark
 
 ### Task 11.3: Candidate Processing Drift Guard
 
+Status: complete locally.
+
 Description: Add or adjust focused tests only if Task 11.2 changes expose a
 parser, matcher, dedupe, scoring, or ranking edge case. This task is a guard,
 not a processing rewrite.
 
 Acceptance:
 
-- [ ] Any parser/matcher/ranking edit has a named before failure.
-- [ ] Existing reason-code expectations remain coherent in diagnostics.
-- [ ] Price evidence used for result display or sorting does not become a second
+- [x] Any parser/matcher/ranking edit has a named before failure.
+- [x] Existing reason-code expectations remain coherent in diagnostics.
+- [x] Price evidence used for result display or sorting does not become a second
   eligibility or ranking source.
-- [ ] No broad refactor of parser, matcher, or scoring modules is included.
+- [x] No broad refactor of parser, matcher, or scoring modules is included.
+
+Task 11.3 notes:
+
+- Task 11.2 did not require parser, matcher, dedupe, scoring, or ranking code
+  changes.
+- Existing focused tests cover parser, matcher, result scoring, and search
+  behavior after retrieval branch dedupe/coalescing.
+- The coalesced retrieval branch test verifies that `rm07-01 rg` and
+  `rm07-01 wg` can share the active WatchFacts branch fetch while still
+  producing separate locally filtered final results.
+- Price evidence remains owned by existing parser/scoring/display paths; no
+  retrieval change feeds price evidence into eligibility or ranking.
 
 Verification:
 
