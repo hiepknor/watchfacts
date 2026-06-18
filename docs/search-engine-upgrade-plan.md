@@ -2242,6 +2242,8 @@ git diff --check
 
 ### Task 11.4: Result Delivery Maintainability Pass
 
+Status: complete locally.
+
 Description: Slim result page and action delivery code only where recent result
 page work left duplicated presentation, price-display, or action-state logic.
 This task must not change search eligibility, ranking, or backend candidate
@@ -2258,13 +2260,23 @@ Allowed changes:
 
 Acceptance:
 
-- [ ] Existing result page sort, OpenWA action, report action, fallback copy,
+- [x] Existing result page sort, OpenWA action, report action, fallback copy,
   and expired/invalid-token behavior remain covered.
-- [ ] No MCP/Telegram payload schema change unless explicitly documented.
-- [ ] No parser, matcher, dedupe, or ranking import is added to browser/result
+- [x] No MCP/Telegram payload schema change unless explicitly documented.
+- [x] No parser, matcher, dedupe, or ranking import is added to browser/result
   page presentation code.
-- [ ] Code size is reduced or ownership is clearer; no broad module split that
+- [x] Code size is reduced or ownership is clearer; no broad module split that
   merely adds files.
+
+Task 11.4 notes:
+
+- Extracted presentation-only sort helpers in `app/static/result_page.js`:
+  `rankOrder()` and `priceOrder()`.
+- Removed duplicated missing-price and rank tie-breaker logic from
+  `price_desc` and `price_asc` branches.
+- Kept backend `price_amount` serialization, result payload shape, browser DOM,
+  CSS, parser, matcher, dedupe, and ranking behavior unchanged.
+- No new frontend framework, build step, or broad module split was introduced.
 
 Verification:
 

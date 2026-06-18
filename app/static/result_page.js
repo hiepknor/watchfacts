@@ -260,33 +260,35 @@
       return parsed;
     }
 
+    function rankOrder(a, b) {
+      return numberValue(a.rank) - numberValue(b.rank);
+    }
+
+    function priceOrder(direction) {
+      const descending = direction === "desc";
+      return (a, b) => {
+        const aPrice = priceValue(a);
+        const bPrice = priceValue(b);
+        if (aPrice === null && bPrice === null) return rankOrder(a, b);
+        if (aPrice === null) return 1;
+        if (bPrice === null) return -1;
+        return (descending ? bPrice - aPrice : aPrice - bPrice) || rankOrder(a, b);
+      };
+    }
+
     function currentResults() {
       const filter = state.filter.trim().toLowerCase();
       let items = allResults().filter(item => !filter || resultText(item).includes(filter));
       if (state.sort === "posted_desc") {
-        items = items.slice().sort((a, b) => postedTime(b.posted_date) - postedTime(a.posted_date) || numberValue(a.rank) - numberValue(b.rank));
+        items = items.slice().sort((a, b) => postedTime(b.posted_date) - postedTime(a.posted_date) || rankOrder(a, b));
       } else if (state.sort === "seller") {
-        items = items.slice().sort((a, b) => text(a.seller).localeCompare(text(b.seller)) || numberValue(a.rank) - numberValue(b.rank));
+        items = items.slice().sort((a, b) => text(a.seller).localeCompare(text(b.seller)) || rankOrder(a, b));
       } else if (state.sort === "price_desc") {
-        items = items.slice().sort((a, b) => {
-          const aPrice = priceValue(a);
-          const bPrice = priceValue(b);
-          if (aPrice === null && bPrice === null) return numberValue(a.rank) - numberValue(b.rank);
-          if (aPrice === null) return 1;
-          if (bPrice === null) return -1;
-          return bPrice - aPrice || numberValue(a.rank) - numberValue(b.rank);
-        });
+        items = items.slice().sort(priceOrder("desc"));
       } else if (state.sort === "price_asc") {
-        items = items.slice().sort((a, b) => {
-          const aPrice = priceValue(a);
-          const bPrice = priceValue(b);
-          if (aPrice === null && bPrice === null) return numberValue(a.rank) - numberValue(b.rank);
-          if (aPrice === null) return 1;
-          if (bPrice === null) return -1;
-          return aPrice - bPrice || numberValue(a.rank) - numberValue(b.rank);
-        });
+        items = items.slice().sort(priceOrder("asc"));
       } else {
-        items = items.slice().sort((a, b) => numberValue(a.rank) - numberValue(b.rank));
+        items = items.slice().sort(rankOrder);
       }
       return items;
     }
