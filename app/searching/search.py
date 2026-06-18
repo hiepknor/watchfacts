@@ -645,10 +645,9 @@ class WatchFactsSearchWorkflow:
                 fallback_threshold is None or len(matched) < fallback_threshold
             )
             if should_fetch_fallback:
-                fallback_queries = tuple(
-                    retrieval_query
-                    for retrieval_query in retrieval_plan.fallback_fetch_queries
-                    if retrieval_query not in retrieval_queries
+                fallback_queries = _dedupe_retrieval_queries(
+                    list(retrieval_plan.fallback_fetch_queries),
+                    existing=tuple(retrieval_queries),
                 )
                 if fallback_queries:
                     fallback_reason_codes = _dedupe_strings(
@@ -1690,12 +1689,12 @@ def _build_retrieval_plan(query: str, query_plan: QueryPlan) -> RetrievalPlan:
             ]
         )
         if expansion_rule.fallback_min_matched_count is not None:
-            fallback_fetch_queries = _dedupe_strings(
+            fallback_fetch_queries = _dedupe_retrieval_queries(
                 [
                     retrieval_query
                     for retrieval_query in expansion_rule.retrieval_queries
-                    if retrieval_query != query
-                ]
+                ],
+                existing=(query,),
             )
             return RetrievalPlan(
                 fetch_queries=(query,),
@@ -1709,7 +1708,7 @@ def _build_retrieval_plan(query: str, query_plan: QueryPlan) -> RetrievalPlan:
                 fallback_reason_code=expansion_rule.reason_code,
                 strict_local_filter=True,
             )
-        retrieval_queries = _dedupe_strings(
+        retrieval_queries = _dedupe_retrieval_queries(
             [
                 query,
                 *expansion_rule.retrieval_queries,
@@ -1908,6 +1907,26 @@ def _dedupe_strings(values: list[str]) -> tuple[str, ...]:
         deduped.append(value)
         seen.add(value)
     return tuple(deduped)
+
+
+def _dedupe_retrieval_queries(
+    values: list[str],
+    *,
+    existing: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    seen = {_retrieval_query_key(value) for value in existing}
+    deduped: list[str] = []
+    for value in values:
+        key = _retrieval_query_key(value)
+        if key in seen:
+            continue
+        deduped.append(value)
+        seen.add(key)
+    return tuple(deduped)
+
+
+def _retrieval_query_key(value: str) -> str:
+    return normalize_text(value)
 
 
 COLOR_DESCRIPTOR_GROUP = {

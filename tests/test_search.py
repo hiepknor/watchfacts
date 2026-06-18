@@ -2045,6 +2045,7 @@ def test_search_workflow_does_not_expand_5711_blue_when_extra_descriptors_change
             ("patek 5711 blue", "5711", "nautilus 5711 blue"),
         ),
         ("nautilus 5711 blue", ("nautilus 5711 blue", "5711")),
+        ("Nautilus 5711 Blue", ("Nautilus 5711 Blue", "5711")),
     ],
 )
 def test_retrieval_plan_allows_safe_5711_blue_context_descriptors(
@@ -2291,6 +2292,7 @@ def test_search_workflow_does_not_expand_15500st_blue_when_extra_descriptors_cha
             ),
         ),
         ("royal oak 15500st blue", ("royal oak 15500st blue", "15500st")),
+        ("Royal Oak 15500ST Blue", ("Royal Oak 15500ST Blue", "15500st")),
     ],
 )
 def test_retrieval_plan_allows_safe_15500st_blue_context_descriptors(

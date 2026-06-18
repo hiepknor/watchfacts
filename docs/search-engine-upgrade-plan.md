@@ -2095,20 +2095,40 @@ Non-negotiables:
 
 ### Task 11.1: Fresh Baseline And Engine Ownership Audit
 
+Status: complete locally.
+
 Description: Capture the current cold/hot benchmark profile and map any code
 hotspots to the four pipeline boundaries before changing behavior.
 
 Acceptance:
 
-- [ ] `make mcp-cold-budget` records focused cold-path latency and branch
+- [x] `make mcp-cold-budget` records focused cold-path latency and branch
   contribution for `daytona panda`, `5711 blue`, `15500st blue`, and
   `rm07-01 rg snow`.
-- [ ] `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache`
+- [x] `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache`
   records cold default benchmark `total_count`, top snippets, cache status, and
   alias recall.
-- [ ] The review identifies whether the next code edit belongs to Retrieval,
+- [x] The review identifies whether the next code edit belongs to Retrieval,
   Candidate Processing, or Result Delivery.
-- [ ] No production behavior changes in this task.
+- [x] No production behavior changes in this task.
+
+Baseline from 2026-06-18:
+
+- `make mcp-cold-budget` passed `4/4` with cold-cache average `22157ms`,
+  median `20192ms`, p95/max `30630ms`, and cache misses `4/4`.
+- Focused cold-budget branch evidence still showed `daytona white` as
+  recall-bearing: it contributed `83` unique final results for `daytona panda`.
+  Do not prune this branch without new evidence.
+- `5711 blue` and `15500st blue` each fetched one primary branch and skipped
+  conditional fallback because primary matched counts stayed above threshold.
+- `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache` passed
+  `15/15` with cold-cache average `12868ms`, median `10064ms`, p95/max
+  `40090ms`, cache misses `15/15`, and alias recall delta `0`.
+- The two baseline commands were initially run at the same time, so
+  `concurrency_wait` values in the wider cold benchmark are treated as local
+  measurement noise rather than production evidence. The actionable ownership
+  finding is still Retrieval, specifically branch reuse/dedupe and conditional
+  fallback, not Candidate Processing.
 
 Verification:
 
@@ -2119,6 +2139,8 @@ git diff --check
 ```
 
 ### Task 11.2: Retrieval Reuse And Conditional Fetch Tightening
+
+Status: in progress.
 
 Description: Reduce redundant cold retrieval work where existing diagnostics
 show branches repeat equivalent upstream work or contribute no eligible
@@ -2143,6 +2165,19 @@ Acceptance:
 - [ ] Default benchmark `total_count` and top snippets remain stable.
 - [ ] Branch diagnostics explain every skipped, reused, or fetched branch.
 - [ ] Cache version handling is documented in the commit notes and this plan.
+
+Task 11.2 progress:
+
+- Added normalized retrieval-query dedupe for expansion and conditional fallback
+  plans. This prevents duplicate fetches when a user query matches an expansion
+  branch with different casing, such as `Nautilus 5711 Blue` versus
+  `nautilus 5711 blue`, or `Royal Oak 15500ST Blue` versus
+  `royal oak 15500st blue`.
+- Kept the first user-facing retrieval query unchanged and only removes
+  duplicate branch fetches by normalized server-query key.
+- Did not change matcher eligibility, parser behavior, dedupe, ranking,
+  result serialization, or cache key semantics. No `SEARCH_CACHE_VERSION` bump
+  is required for this slice.
 
 Verification:
 
