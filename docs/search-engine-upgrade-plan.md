@@ -16,7 +16,7 @@ because `.env` currently provides the placeholder
 
 2026-06-13
 
-Last reviewed: 2026-06-15
+Last reviewed: 2026-06-18
 
 ## Objective
 
@@ -204,6 +204,35 @@ Naming guidance:
 - Telegram handlers, MCP tools, and result pages belong to Result Delivery.
   They must call the shared runtime instead of reimplementing recognition,
   retrieval, parsing, matching, or ranking.
+
+## Engine Health Review Before Next Optimization
+
+This review records the pre-implementation state for the next optimization
+phase. The four names below describe pipeline boundaries, not a request to add
+four broad `*Engine` classes. Keep code names concrete and behavior-driven.
+
+| Boundary | Current health | Main risk | Next action |
+| --- | --- | --- | --- |
+| Query Recognition | Stable enough for current high-value aliases, descriptors, references, and multi-brand taxonomy. | Rulebooks can become a speculative product catalog if additions are not audit-gated. | Add only evidence-backed aliases/descriptors; centralize remaining global terms such as set or condition tokens only after an audit shows user-visible value. |
+| Retrieval | Quality-preserving and well-instrumented, but still the largest cold-path latency source. | Pruning or narrowing branches can silently lose recall; widening prewarm can hide the real problem. | Optimize cold-path branch execution, reuse, and fallback policy while keeping alias recall, `total_count`, and top snippets stable. |
+| Candidate Processing | Strongest quality boundary: deterministic parser, matcher, dedupe, scoring, ranking, and reason codes are doing the core work. | Parser, matcher, ranking, diagnostics, and price evidence can drift or duplicate logic if refactors are broad. | Keep behavior stable; extract only small pure helpers where duplication is proven by tests or review. |
+| Result Delivery | Functionally improved after result-page sorting and action-state hardening. | Result page rendering, browser JS/CSS, action payloads, and display sorting can accumulate business logic. | Do a maintainability pass only after retrieval optimization, keeping presentation code out of parser/matcher/ranking. |
+
+Cross-boundary decision:
+
+- Do not rename packages or introduce a generic engine layer before a concrete
+  duplicated ownership problem exists.
+- The next speed work belongs primarily to Retrieval. Recognition enrichment
+  and parser changes remain evidence-gated because they can increase search
+  breadth and cold latency.
+- Result Delivery cleanup is a separate maintainability pass. It should not
+  change search eligibility, ranking, cache keys, or serialized result
+  semantics unless a dedicated finding requires it.
+- Preserve the system contract:
+
+```text
+raw_query -> QueryPlan -> CandidateBatch -> RankedResults -> ResponsePayload
+```
 
 ## Target Flow
 
@@ -2028,6 +2057,194 @@ Phase 10 done criteria:
 - If no backlog item meets the evidence threshold, Phase 10 is explicitly
   deferred rather than filled with speculative taxonomy work.
 
+## Phase 11: Cold-Path Retrieval Optimization And Delivery Slimming
+
+Status: planned.
+
+Goal: improve uncached search speed and keep the project smaller without
+reducing result quality, dropping valid results, or moving deterministic search
+logic into presentation code.
+
+Phase 11 starts from the 2026-06-18 engine review:
+
+- Query Recognition is stable enough for current audited aliases. It should not
+  grow during Phase 11 unless a production audit proves a recognition miss.
+- Retrieval remains the primary speed bottleneck. Hot-cache performance is good;
+  cold expanded retrieval is the next optimization target.
+- Candidate Processing is the core quality boundary. Parser, matcher, dedupe,
+  scoring, and ranking behavior should stay stable unless a retrieval change
+  exposes a concrete regression.
+- Result Delivery is functionally improved but should be slimmed only where
+  duplicated display/action logic is visible. Search behavior must not be
+  reimplemented in the result page.
+
+Non-negotiables:
+
+- Keep alias-equivalent recall delta at zero for canonical groups.
+- Keep default benchmark `total_count` and top-result snippets stable unless an
+  audited WatchFacts data change explains the drift.
+- Do not reduce retrieval breadth without branch contribution evidence.
+- Do not use broader prewarm as a substitute for reducing cold-path work.
+- Do not introduce LLM, vector, or semantic matching into the core WatchFacts
+  request path.
+- Do not create a new `engine` package or broad abstract engine class for this
+  phase.
+- Bump `SEARCH_CACHE_VERSION` if retrieval semantics, cached output behavior,
+  ordering, eligibility, extraction, scoring, or cache-affecting diagnostics
+  change.
+
+### Task 11.1: Fresh Baseline And Engine Ownership Audit
+
+Description: Capture the current cold/hot benchmark profile and map any code
+hotspots to the four pipeline boundaries before changing behavior.
+
+Acceptance:
+
+- [ ] `make mcp-cold-budget` records focused cold-path latency and branch
+  contribution for `daytona panda`, `5711 blue`, `15500st blue`, and
+  `rm07-01 rg snow`.
+- [ ] `make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache`
+  records cold default benchmark `total_count`, top snippets, cache status, and
+  alias recall.
+- [ ] The review identifies whether the next code edit belongs to Retrieval,
+  Candidate Processing, or Result Delivery.
+- [ ] No production behavior changes in this task.
+
+Verification:
+
+```bash
+make mcp-cold-budget
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+git diff --check
+```
+
+### Task 11.2: Retrieval Reuse And Conditional Fetch Tightening
+
+Description: Reduce redundant cold retrieval work where existing diagnostics
+show branches repeat equivalent upstream work or contribute no eligible
+results, while keeping fallback branches available for sparse or under-matched
+primary results.
+
+Allowed changes:
+
+- Reuse canonical or overlapping branch results within one query execution.
+- Tighten conditional fallback thresholds only when branch contribution evidence
+  shows no recall loss.
+- Preserve deterministic merge order and expose branch skip/fetch reasons in
+  diagnostics.
+- Keep `SEARCH_RETRIEVAL_CONCURRENCY` conservative unless the production
+  cold-budget comparison shows a clear win without count or top-result drift.
+
+Acceptance:
+
+- [ ] At least one high-cost cold query improves or the task records why no safe
+  retrieval reduction exists.
+- [ ] Alias recall delta remains zero.
+- [ ] Default benchmark `total_count` and top snippets remain stable.
+- [ ] Branch diagnostics explain every skipped, reused, or fetched branch.
+- [ ] Cache version handling is documented in the commit notes and this plan.
+
+Verification:
+
+```bash
+python -m pytest tests/test_search.py tests/test_benchmark_mcp_queries.py -q
+make mcp-cold-budget
+make mcp-benchmark MCP_BENCHMARK_EXTRA_ARGS=--clear-search-cache
+make mcp-benchmark
+```
+
+### Task 11.3: Candidate Processing Drift Guard
+
+Description: Add or adjust focused tests only if Task 11.2 changes expose a
+parser, matcher, dedupe, scoring, or ranking edge case. This task is a guard,
+not a processing rewrite.
+
+Acceptance:
+
+- [ ] Any parser/matcher/ranking edit has a named before failure.
+- [ ] Existing reason-code expectations remain coherent in diagnostics.
+- [ ] Price evidence used for result display or sorting does not become a second
+  eligibility or ranking source.
+- [ ] No broad refactor of parser, matcher, or scoring modules is included.
+
+Verification:
+
+```bash
+python -m pytest tests/test_parser.py tests/test_matcher.py tests/test_search.py tests/test_result_scoring.py -q
+git diff --check
+```
+
+### Task 11.4: Result Delivery Maintainability Pass
+
+Description: Slim result page and action delivery code only where recent result
+page work left duplicated presentation, price-display, or action-state logic.
+This task must not change search eligibility, ranking, or backend candidate
+processing.
+
+Allowed changes:
+
+- Extract small helpers for result page display/action payload assembly when
+  tests already cover behavior.
+- Keep browser-facing JS/CSS grouped by existing UI concerns instead of adding a
+  new frontend framework or build step.
+- Keep sort behavior presentation-only. Backend parsed price may be serialized
+  for display/sort, but UI parsing must not feed matcher/ranking.
+
+Acceptance:
+
+- [ ] Existing result page sort, OpenWA action, report action, fallback copy,
+  and expired/invalid-token behavior remain covered.
+- [ ] No MCP/Telegram payload schema change unless explicitly documented.
+- [ ] No parser, matcher, dedupe, or ranking import is added to browser/result
+  page presentation code.
+- [ ] Code size is reduced or ownership is clearer; no broad module split that
+  merely adds files.
+
+Verification:
+
+```bash
+python -m pytest tests/test_result_pages.py tests/test_tool_runtime.py -q
+git diff --check
+```
+
+### Task 11.5: Predeploy And Production Gate
+
+Description: Deploy only after the speed work proves it preserved result
+quality. Record both speed and quality evidence so future phases do not repeat
+the same analysis.
+
+Production deploy commands in this task are run on the production host through
+the documented server workflow, not against a local Docker runtime.
+
+Acceptance:
+
+- [ ] `make search-engine-predeploy-check` passes locally.
+- [ ] Production deploy uses the documented server flow on the production host.
+- [ ] `make search-engine-postdeploy-check` passes against the running MCP
+  service.
+- [ ] Docs record production commit, cache version, hot benchmark, cold budget,
+  alias recall, and any warning-only cold latency observations.
+
+Verification:
+
+```bash
+make search-engine-predeploy-check
+# On the production host:
+make deploy-mcp
+make search-engine-postdeploy-check
+git diff --check
+```
+
+Phase 11 done criteria:
+
+- Cold-path latency improves for at least one high-cost focused query, or the
+  plan records why remaining cold cost is recall-bearing and unsafe to prune.
+- Hot-cache benchmark remains in the current profile.
+- Alias recall delta remains zero.
+- Default benchmark counts and top snippets remain stable.
+- Result Delivery cleanup, if performed, reduces ownership drift without
+  changing search semantics.
+
 ## Metrics
 
 Track these before and after each phase:
@@ -2070,7 +2287,12 @@ Track these before and after each phase:
 
 ## Recommended Next Step
 
-Phase 9 MCP/search is deployed and postdeploy-validated. Restore the real
-`TELEGRAM_BOT_TOKEN` in `.env` and run `make deploy-bot` to bring Telegram
-polling back, then begin Phase 10 recognition/parser work from the audited
-brand backlog.
+Begin Phase 11 with Task 11.1 before implementation. Capture a fresh cold/hot
+baseline and confirm the first code change belongs to Retrieval, not Query
+Recognition or Candidate Processing. Keep Phase 10 recognition/parser work
+audit-gated; do not expand brand taxonomy unless a new production audit proves
+a user-visible miss.
+
+Operational note: Phase 9 MCP/search was deployed and postdeploy-validated.
+Telegram polling still depends on restoring the real `TELEGRAM_BOT_TOKEN` in
+`.env` and running `make deploy-bot`.
