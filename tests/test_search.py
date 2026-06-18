@@ -825,6 +825,13 @@ def test_search_workflow_coalesces_in_flight_retrieval_branch_across_queries(
     assert wg_workflow.last_search_diagnostics is not None
     assert rg_workflow.last_search_diagnostics.retrieval_queries == ("rm07-01",)
     assert wg_workflow.last_search_diagnostics.retrieval_queries == ("rm07-01",)
+    reason_codes = [
+        reason
+        for workflow in (rg_workflow, wg_workflow)
+        for timing in workflow.last_search_diagnostics.retrieval_timings
+        for reason in timing.reason_codes
+    ]
+    assert "retrieval.branch_coalesced" in reason_codes
 
 
 def test_search_workflow_limits_search_runtime_concurrent_distinct_queries(tmp_path) -> None:

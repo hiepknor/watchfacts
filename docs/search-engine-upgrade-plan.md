@@ -2181,6 +2181,13 @@ Task 11.2 progress:
   searches that need the same normalized WatchFacts branch, such as
   `rm07-01 rg` and `rm07-01 wg`, share the active fetch while still applying
   separate local filters, matching, dedupe, and ranking per query.
+- Added `retrieval.branch_coalesced` to retrieval timing reason codes when a
+  branch reuses an active branch fetch from another in-flight search.
+- Compared focused cold-budget runs with `SEARCH_RETRIEVAL_CONCURRENCY=1` and a
+  sequential `SEARCH_RETRIEVAL_CONCURRENCY=2` benchmark invocation. Both passed
+  `4/4`, but the command-level env override does not reconfigure the already
+  running MCP service, so this is not evidence to change production runtime
+  concurrency.
 - Did not change matcher eligibility, parser behavior, dedupe, ranking,
   result serialization, or cache key semantics. No `SEARCH_CACHE_VERSION` bump
   is required for this slice.

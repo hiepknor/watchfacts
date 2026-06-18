@@ -124,6 +124,7 @@ class RetrievalFetchResult:
     query: str
     fetch_ms: int
     scrape_result: ScrapeResult | None = None
+    coalesced: bool = False
     error_type: str | None = None
     exception: Exception | None = None
 
@@ -534,6 +535,11 @@ class WatchFactsSearchWorkflow:
                             error_type=error_type,
                             reason_codes=(
                                 *reason_codes,
+                                *(
+                                    ("retrieval.branch_coalesced",)
+                                    if fetch_result.coalesced
+                                    else ()
+                                ),
                                 f"retrieval.fetch_error:{error_type}",
                             ),
                         )
@@ -627,7 +633,14 @@ class WatchFactsSearchWorkflow:
                         empty=not retrieval_matched,
                         server_filtered=scrape_result.server_filtered,
                         playwright_fallback=scrape_result.used_playwright_fallback,
-                        reason_codes=reason_codes,
+                        reason_codes=(
+                            *reason_codes,
+                            *(
+                                ("retrieval.branch_coalesced",)
+                                if fetch_result.coalesced
+                                else ()
+                            ),
+                        ),
                     )
                 )
 
@@ -999,6 +1012,7 @@ class WatchFactsSearchWorkflow:
                 index=index,
                 query=retrieval_query,
                 fetch_ms=_stage_elapsed_ms(fetch_started_at),
+                coalesced=not owner,
                 error_type=exc.__class__.__name__,
                 exception=exc,
             )
@@ -1010,6 +1024,7 @@ class WatchFactsSearchWorkflow:
             query=retrieval_query,
             fetch_ms=_stage_elapsed_ms(fetch_started_at),
             scrape_result=scrape_result,
+            coalesced=not owner,
         )
 
     @staticmethod
