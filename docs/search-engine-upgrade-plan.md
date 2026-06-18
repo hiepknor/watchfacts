@@ -2,11 +2,11 @@
 
 ## Status
 
-Phase 9 search runtime is deployed and validated on `watchfacts-mcp`.
+Phase 11 search runtime is deployed and validated on `watchfacts-mcp`.
 
-As of 2026-06-15, commit `c9412e0` is pushed to `origin/master` and validated
+As of 2026-06-18, commit `3478866` is pushed to `origin/master` and validated
 against the production `watchfacts-mcp` service with
-`SEARCH_CACHE_VERSION=search-v32`.
+`SEARCH_CACHE_VERSION=search-v33`.
 The `watchfacts-bot` container was recreated during deploy but is not healthy
 because `.env` currently provides the placeholder
 `TELEGRAM_BOT_TOKEN=your_telegram_token`; restore the operator secret and run
@@ -82,6 +82,50 @@ reference grammar.
 ## Deployment Validation Evidence
 
 Latest validated deployment/check:
+
+- Repository commit: `3478866`
+- Runtime search cache version: `search-v33`
+- Services: `watchfacts-mcp`
+- Date: 2026-06-18
+- Production host: `ubuntu@43.153.208.222`
+- Worktree state after deploy: clean and synced with `origin/master`
+- Status: Phase 11 MCP/search deployed and postdeploy-validated. Bot runtime
+  remains outside this MCP-only deploy gate.
+
+Phase 11 deploy and postdeploy gate:
+
+- Local `make search-engine-predeploy-check` passed with `731 passed,
+  2 skipped`, `python -m compileall app scripts`, and focused hard-case
+  quality audit.
+- Pushed `master` to `origin` through commit `3478866`.
+- Server `make deploy-mcp` ran in `/opt/watchfacts` on
+  `ubuntu@43.153.208.222`, pulled fast-forward to `3478866`, rebuilt the MCP
+  image, and recreated `watchfacts-mcp`.
+- Container deploy tests passed with `733 passed`.
+- Container `python -m compileall app scripts` passed.
+- Container deploy quality audit passed.
+- `watchfacts-mcp` became healthy after recreate.
+- Deploy prewarm passed the common set `14/14` with cache hits `14/14`, average
+  `198ms`, and max `698ms`.
+- Deploy benchmark-default prewarm passed `30/30`, with alias recall delta `0`;
+  warm pass still showed expected cold misses for non-prewarmed branches, and
+  verify pass showed hot cache for all benchmark-default queries.
+- Server `make search-engine-postdeploy-check` passed against the running MCP
+  service. The helper printed local checkout HEAD `3478866`; its self-SSH
+  remote-head line was empty because server-side host-key verification blocked
+  SSH back to the same host. This is an operations helper warning, not a deploy
+  or runtime failure.
+- MCP smoke passed `4/4`.
+- Server cold-budget passed `4/4` with cold-cache average `13661ms`, median
+  `11836ms`, p95/max `25889ms`, and cache misses `4/4`.
+- Server postdeploy benchmark-default prewarm passed `30/30`, with alias recall
+  delta `0`.
+- Server hot benchmark passed `15/15` with cache hits `15/15`, average
+  `137ms`, median `95ms`, p95/max `716ms`, and alias recall delta `0`.
+- Server postdeploy quality audit passed; audited top results stayed in quality
+  group `0`.
+
+Previous validated deployment/check:
 
 - Repository commit: `c9412e0`
 - Runtime search cache version: `search-v32`
@@ -2059,7 +2103,7 @@ Phase 10 done criteria:
 
 ## Phase 11: Cold-Path Retrieval Optimization And Delivery Slimming
 
-Status: planned.
+Status: complete and deployed.
 
 Goal: improve uncached search speed and keep the project smaller without
 reducing result quality, dropping valid results, or moving deterministic search
@@ -2287,6 +2331,8 @@ git diff --check
 
 ### Task 11.5: Predeploy And Production Gate
 
+Status: complete and deployed.
+
 Description: Deploy only after the speed work proves it preserved result
 quality. Record both speed and quality evidence so future phases do not repeat
 the same analysis.
@@ -2296,12 +2342,37 @@ the documented server workflow, not against a local Docker runtime.
 
 Acceptance:
 
-- [ ] `make search-engine-predeploy-check` passes locally.
-- [ ] Production deploy uses the documented server flow on the production host.
-- [ ] `make search-engine-postdeploy-check` passes against the running MCP
+- [x] `make search-engine-predeploy-check` passes locally.
+- [x] Production deploy uses the documented server flow on the production host.
+- [x] `make search-engine-postdeploy-check` passes against the running MCP
   service.
-- [ ] Docs record production commit, cache version, hot benchmark, cold budget,
+- [x] Docs record production commit, cache version, hot benchmark, cold budget,
   alias recall, and any warning-only cold latency observations.
+
+Task 11.5 evidence from 2026-06-18:
+
+- Local predeploy gate passed: `make search-engine-predeploy-check` completed
+  `git diff --check`, `731 passed, 2 skipped`, `python -m compileall app
+  scripts`, and the focused hard-case quality audit.
+- Production deploy used the documented MCP-only server flow:
+  `ssh ubuntu@43.153.208.222 'cd /opt/watchfacts && make deploy-mcp'`.
+- Production deploy pulled fast-forward to commit `3478866`, rebuilt the MCP
+  image, ran container tests with `733 passed`, ran container compile checks,
+  ran deploy quality audit, recreated `watchfacts-mcp`, and reached healthy.
+- Deploy prewarm passed `14/14` on the common set with cache hits `14/14`,
+  average `198ms`, max `698ms`.
+- Deploy benchmark-default prewarm passed `30/30`; alias recall delta remained
+  `0` for `rm07-01 rg`, `rm07-01 wg`, `rm07-01 mop`, and `rm07-01 rg snow`.
+- Postdeploy gate passed: MCP smoke `4/4`, cold budget `4/4`, benchmark-default
+  prewarm `30/30`, hot benchmark `15/15`, and production quality audit.
+- Postdeploy cold budget: average `13661ms`, median `11836ms`, p95/max
+  `25889ms`, cache misses `4/4`.
+- Postdeploy hot benchmark: average `137ms`, median `95ms`, p95/max `716ms`,
+  cache hits `15/15`, alias recall delta `0`.
+- Warning-only operational observation: `production-head-print` printed local
+  checkout HEAD `3478866`, but its self-SSH remote-head line was empty due to
+  server-side host-key verification. Runtime health, deploy, smoke, benchmark,
+  and audit gates still passed.
 
 Verification:
 
@@ -2315,12 +2386,12 @@ git diff --check
 
 Phase 11 done criteria:
 
-- Cold-path latency improves for at least one high-cost focused query, or the
+- [x] Cold-path latency improves for at least one high-cost focused query, or the
   plan records why remaining cold cost is recall-bearing and unsafe to prune.
-- Hot-cache benchmark remains in the current profile.
-- Alias recall delta remains zero.
-- Default benchmark counts and top snippets remain stable.
-- Result Delivery cleanup, if performed, reduces ownership drift without
+- [x] Hot-cache benchmark remains in the current profile.
+- [x] Alias recall delta remains zero.
+- [x] Default benchmark counts and top snippets remain stable.
+- [x] Result Delivery cleanup, if performed, reduces ownership drift without
   changing search semantics.
 
 ## Metrics
