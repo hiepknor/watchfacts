@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import app.similarity as similarity
 from app.similarity import group_similar_results
 from app.telegram_bot import SearchResult, format_search_result_caption
 
@@ -110,3 +111,33 @@ def test_group_similar_results_prefers_scored_primary() -> None:
     assert len(grouped) == 1
     assert grouped[0].listing_text == local.listing_text
     assert grouped[0].similar_results == (weak,)
+
+
+def test_group_similar_results_prunes_disjoint_price_candidates(monkeypatch) -> None:
+    compatibility_checks = 0
+    original_prices_compatible = similarity._prices_compatible
+
+    def counting_prices_compatible(left: set[str], right: set[str]) -> bool:
+        nonlocal compatibility_checks
+        compatibility_checks += 1
+        return original_prices_compatible(left, right)
+
+    monkeypatch.setattr(
+        similarity,
+        "_prices_compatible",
+        counting_prices_compatible,
+    )
+    distinct_price_results = [
+        SearchResult(f"Daytona Panda 126500ln full set ${30_000 + index}")
+        for index in range(40)
+    ]
+    duplicate_price = SearchResult("Rolex Daytona Panda 126500ln full set $30005")
+
+    grouped = group_similar_results(
+        [*distinct_price_results, duplicate_price],
+        query="daytona panda",
+    )
+
+    assert len(grouped) == 40
+    assert grouped[5].similar_results == (duplicate_price,)
+    assert compatibility_checks == 1

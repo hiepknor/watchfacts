@@ -2702,7 +2702,7 @@ evidence shows the CPU cost is concentrated after ranking in
 
 ## Phase 14: Bounded Similarity Grouping
 
-Status: planned.
+Status: in progress.
 
 Goal: reduce high-fanout result-pipeline latency while preserving result
 quality and avoiding missed results. The target is the `result_group_similar`
@@ -2721,22 +2721,36 @@ Non-negotiables:
 
 ### Task 14.1: Similarity Grouping Complexity Audit
 
-Status: planned.
+Status: complete locally.
 
 Description: Inspect `group_similar_results` and its tests to identify the
 exact complexity driver, expected grouping semantics, and safe pruning points.
 
 Acceptance:
 
-- [ ] Document whether the current grouping is pairwise over all unique results
+- [x] Document whether the current grouping is pairwise over all unique results
   and which fields drive similarity.
-- [ ] Add or identify tests that lock visible high-fanout behavior before
+- [x] Add or identify tests that lock visible high-fanout behavior before
   changing the algorithm.
-- [ ] Confirm the minimum grouping scope needed for result-page quality.
+- [x] Confirm the minimum grouping scope needed for result-page quality.
+
+Task 14.1 notes from 2026-06-18:
+
+- The pre-Phase 14 implementation compared each incoming result against
+  already grouped primary results until the first similar group was found.
+- Each comparison rebuilt profiles for both listing texts, then checked
+  reference, year, condition, price, product-token compatibility, and token
+  similarity.
+- Price compatibility is a mandatory condition: if either side has no parsed
+  price, or the parsed price sets do not intersect, the pair cannot group.
+- Safe pruning point: keep all eligible, deduped, ranked, and blocked-filtered
+  results, but only compare an incoming result with existing groups that share
+  at least one parsed normalized price. Candidate indexes are still evaluated in
+  original grouped order to preserve first-similar behavior.
 
 ### Task 14.2: Candidate-Pruned Similarity Grouping
 
-Status: planned.
+Status: complete locally; deploy benchmark pending.
 
 Description: Bound the expensive comparison space without removing eligible
 results. Candidate pruning should compare likely-similar rows first, using
@@ -2751,6 +2765,29 @@ Acceptance:
 - [ ] Small-result queries such as `5711 blue`, `15500st blue`, and
   `rm07-01 rg snow` remain stable.
 - [ ] Full test suite and postdeploy benchmark pass.
+
+Task 14.2 local implementation notes from 2026-06-18:
+
+- `group_similar_results` now computes each result profile once and keeps a
+  deterministic price-to-group-index map.
+- New results only compare against grouped primaries with an intersecting
+  parsed price set, which is a necessary condition already enforced by
+  `_looks_similar`.
+- Primary replacement updates both the grouped profile and price index so
+  future comparisons continue to use the current primary listing, matching the
+  previous semantics.
+- Added a high-fanout pruning regression test: 40 same-product listings with
+  distinct prices plus one duplicate-price listing still produce the same
+  grouping result while reducing price compatibility checks to the single
+  plausible candidate.
+
+Task 14.2 local evidence from 2026-06-18:
+
+- `python -m pytest tests/test_similarity.py -q` passed with `8 passed`.
+- `python -m pytest tests/test_search.py -q` passed with `99 passed`.
+- `python -m pytest -q` passed with `742 passed`.
+- `python -m compileall app scripts` passed.
+- `git diff --check` passed.
 
 ## Metrics
 

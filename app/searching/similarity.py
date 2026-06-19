@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import replace
 from difflib import SequenceMatcher
+from typing import TypeAlias
 
 from app.integrations.ai_refiner import deterministic_refine_listing_text
 from app.searching.matcher import normalize_text
@@ -52,6 +53,7 @@ STOP_TOKENS = {
     "watch",
     "with",
 }
+SimilarityProfile: TypeAlias = dict[str, set[str]]
 
 
 def group_similar_results(
@@ -60,18 +62,37 @@ def group_similar_results(
     query: str | None = None,
 ) -> list[SearchResult]:
     grouped: list[SearchResult] = []
+    grouped_profiles: list[SimilarityProfile] = []
+    group_indexes_by_price: dict[str, set[int]] = {}
 
     for result in results:
-        for index, existing in enumerate(grouped):
-            if not _looks_similar(existing.listing_text, result.listing_text, query=query):
+        result_profile = _profile(result.listing_text, query=query)
+        candidate_indexes = _candidate_group_indexes_by_price(
+            result_profile,
+            group_indexes_by_price,
+        )
+        for index in candidate_indexes:
+            existing = grouped[index]
+            if not _looks_similar_profiles(grouped_profiles[index], result_profile):
                 continue
             if _is_better_primary(result, existing, query=query):
+                _remove_group_price_index(
+                    group_indexes_by_price,
+                    grouped_profiles[index],
+                    index,
+                )
                 grouped[index] = replace(
                     result,
                     similar_results=(
                         _without_similar_results(existing),
                         *existing.similar_results,
                     ),
+                )
+                grouped_profiles[index] = result_profile
+                _add_group_price_index(
+                    group_indexes_by_price,
+                    result_profile,
+                    index,
                 )
             else:
                 grouped[index] = replace(
@@ -81,6 +102,12 @@ def group_similar_results(
             break
         else:
             grouped.append(result)
+            grouped_profiles.append(result_profile)
+            _add_group_price_index(
+                group_indexes_by_price,
+                result_profile,
+                len(grouped) - 1,
+            )
 
     return grouped
 
@@ -89,6 +116,13 @@ def _looks_similar(left: str, right: str, *, query: str | None = None) -> bool:
     left_profile = _profile(left, query=query)
     right_profile = _profile(right, query=query)
 
+    return _looks_similar_profiles(left_profile, right_profile)
+
+
+def _looks_similar_profiles(
+    left_profile: SimilarityProfile,
+    right_profile: SimilarityProfile,
+) -> bool:
     if _has_conflict(left_profile["references"], right_profile["references"]):
         return False
     if _has_conflict(left_profile["years"], right_profile["years"]):
@@ -101,6 +135,42 @@ def _looks_similar(left: str, right: str, *, query: str | None = None) -> bool:
         return False
 
     return _token_similarity(left_profile["tokens"], right_profile["tokens"]) >= SIMILARITY_THRESHOLD
+
+
+def _candidate_group_indexes_by_price(
+    profile: SimilarityProfile,
+    group_indexes_by_price: dict[str, set[int]],
+) -> tuple[int, ...]:
+    prices = profile["prices"]
+    if not prices:
+        return ()
+    candidate_indexes = set()
+    for price in prices:
+        candidate_indexes.update(group_indexes_by_price.get(price, ()))
+    return tuple(sorted(candidate_indexes))
+
+
+def _add_group_price_index(
+    group_indexes_by_price: dict[str, set[int]],
+    profile: SimilarityProfile,
+    index: int,
+) -> None:
+    for price in profile["prices"]:
+        group_indexes_by_price.setdefault(price, set()).add(index)
+
+
+def _remove_group_price_index(
+    group_indexes_by_price: dict[str, set[int]],
+    profile: SimilarityProfile,
+    index: int,
+) -> None:
+    for price in profile["prices"]:
+        indexes = group_indexes_by_price.get(price)
+        if indexes is None:
+            continue
+        indexes.discard(index)
+        if not indexes:
+            del group_indexes_by_price[price]
 
 
 def _is_better_primary(
@@ -142,7 +212,7 @@ def _without_similar_results(result: SearchResult) -> SearchResult:
     return replace(result, similar_results=())
 
 
-def _profile(value: str, *, query: str | None = None) -> dict[str, set[str]]:
+def _profile(value: str, *, query: str | None = None) -> SimilarityProfile:
     query_tokens = set(normalize_text(query).split()) if query else set()
     if query:
         value = deterministic_refine_listing_text(query, value)
