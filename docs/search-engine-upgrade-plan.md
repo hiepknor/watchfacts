@@ -2702,7 +2702,7 @@ evidence shows the CPU cost is concentrated after ranking in
 
 ## Phase 14: Bounded Similarity Grouping
 
-Status: in progress.
+Status: complete and deployed.
 
 Goal: reduce high-fanout result-pipeline latency while preserving result
 quality and avoiding missed results. The target is the `result_group_similar`
@@ -2721,7 +2721,7 @@ Non-negotiables:
 
 ### Task 14.1: Similarity Grouping Complexity Audit
 
-Status: complete locally.
+Status: complete and deployed.
 
 Description: Inspect `group_similar_results` and its tests to identify the
 exact complexity driver, expected grouping semantics, and safe pruning points.
@@ -2750,7 +2750,7 @@ Task 14.1 notes from 2026-06-18:
 
 ### Task 14.2: Candidate-Pruned Similarity Grouping
 
-Status: complete locally; deploy benchmark pending.
+Status: complete and deployed.
 
 Description: Bound the expensive comparison space without removing eligible
 results. Candidate pruning should compare likely-similar rows first, using
@@ -2759,12 +2759,12 @@ listing text fingerprint, or high-signal query tokens.
 
 Acceptance:
 
-- [ ] `daytona panda` keeps the same top result IDs and total count in focused
+- [x] `daytona panda` keeps the same top result IDs and total count in focused
   tests unless a documented duplicate-grouping bug is intentionally fixed.
-- [ ] High-fanout grouping latency falls materially from the Phase 13 baseline.
-- [ ] Small-result queries such as `5711 blue`, `15500st blue`, and
+- [x] High-fanout grouping latency falls materially from the Phase 13 baseline.
+- [x] Small-result queries such as `5711 blue`, `15500st blue`, and
   `rm07-01 rg snow` remain stable.
-- [ ] Full test suite and postdeploy benchmark pass.
+- [x] Full test suite and postdeploy benchmark pass.
 
 Task 14.2 local implementation notes from 2026-06-18:
 
@@ -2788,6 +2788,35 @@ Task 14.2 local evidence from 2026-06-18:
 - `python -m pytest -q` passed with `742 passed`.
 - `python -m compileall app scripts` passed.
 - `git diff --check` passed.
+
+Task 14.2 deployment evidence from 2026-06-19:
+
+- Deployed in commit `29d68f5` with `make deploy-mcp`; server-side deployment
+  verification passed with `742 passed`, compileall, quality audit, health
+  check, and cache prewarm.
+- `make search-engine-postdeploy-check` passed on production MCP at commit
+  `29d68f5`.
+- Smoke passed `4/4`.
+- Cold-budget benchmark passed `4/4`, avg `960ms`, median `332ms`, p95/max
+  `2975ms`, cache hits `0`, cache misses `4`.
+- `daytona panda` remained the high-fanout case with `total_count=213` on live
+  data; `watchfacts_fetch:0ms`, `parse:157ms`, `match:759ms`,
+  `result_pipeline:918ms`, and `result_group_similar:109ms`.
+- Versus the Phase 13 baseline for `daytona panda`, `result_group_similar`
+  dropped from `6212ms` to `109ms`, and `result_pipeline` dropped from
+  `7186ms` to `918ms`.
+- Smaller benchmark cases stayed bounded: `5711 blue` had
+  `result_pipeline:114ms` and `result_group_similar:5ms`; `15500st blue` had
+  `result_pipeline:27ms` and `result_group_similar:0ms`; `rm07-01 rg snow` had
+  `result_pipeline:16ms` and `result_group_similar:0ms`.
+- Benchmark-default prewarm passed `30/30`; alias recall delta stayed `0` for
+  `rm07-01 rg`, `rm07-01 wg`, `rm07-01 mop`, and `rm07-01 rg snow`.
+- Hot benchmark passed `15/15`, avg `136ms`, median `93ms`, p95/max `675ms`,
+  cache hits `15/15`.
+- Quality audit passed after deploy. Live WatchFacts data changed between
+  Phase 13 and Phase 14 runs, so exact visible listing IDs are not a stable
+  cross-day assertion; behavior stability is covered by local regression tests,
+  quality audit, smoke checks, totals, and alias recall checks.
 
 ## Metrics
 
