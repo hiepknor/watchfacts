@@ -1043,6 +1043,13 @@ def test_extract_price_amount_parses_currency_and_suffixes() -> None:
     assert result_pages._extract_price_amount("Seller says 20k is gold purity") is None
 
 
+def test_extract_price_ignores_date_fragment_before_suffix_price() -> None:
+    listing = "5205R Green 3/2026 410k hkd"
+
+    assert result_pages._extract_price_amount(listing) == 410000.0
+    assert result_pages._extract_price_text(listing) == "410k hkd"
+
+
 def test_result_price_amount_prefers_visible_listing_text() -> None:
     result = SearchResult(
         listing_text="Visible local item USD 18,500",

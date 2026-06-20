@@ -31,7 +31,7 @@ PRICE_WITH_PREFIX_RE = re.compile(
     re.IGNORECASE,
 )
 PRICE_WITH_SUFFIX_RE = re.compile(
-    rf"(?P<amount>{PRICE_TOKEN_RE.pattern})(?P<suffix>{PRICE_SUFFIX_RE.pattern})\s*(?:{PRICE_TEXT_CURRENCIES}|\b(?:{PRICE_WORD_CURRENCIES})\b)",
+    rf"(?<![\d.,/-])(?P<amount>{PRICE_TOKEN_RE.pattern})(?P<suffix>{PRICE_SUFFIX_RE.pattern})\s*(?:{PRICE_TEXT_CURRENCIES}|\b(?:{PRICE_WORD_CURRENCIES})\b)",
     re.IGNORECASE,
 )
 SENSITIVE_TEXT_RE = re.compile(
@@ -391,6 +391,8 @@ def _extract_price_amount(listing_text: str | None) -> float | None:
             best = parsed
 
     for amount in PRICE_WITH_SUFFIX_RE.finditer(listing_text):
+        if not _has_valid_price_suffix_boundary(listing_text, amount):
+            continue
         parsed = _parse_price_token(amount.group("amount"), amount.group("suffix") or "")
         if parsed is not None and (best is None or parsed > best):
             best = parsed
@@ -412,6 +414,11 @@ def _extract_price_text(listing_text: str | None) -> str | None:
     best_amount = None
     for pattern in (PRICE_WITH_PREFIX_RE, PRICE_WITH_SUFFIX_RE):
         for match in pattern.finditer(listing_text):
+            if pattern is PRICE_WITH_SUFFIX_RE and not _has_valid_price_suffix_boundary(
+                listing_text,
+                match,
+            ):
+                continue
             parsed = _parse_price_token(
                 match.group("amount"),
                 match.group("suffix") or "",
@@ -423,6 +430,15 @@ def _extract_price_text(listing_text: str | None) -> str | None:
                 best_text = match.group(0)
 
     return _clean_optional_text(best_text, max_chars=80)
+
+
+def _has_valid_price_suffix_boundary(listing_text: str, match: re.Match[str]) -> bool:
+    amount_start = match.start("amount")
+    if amount_start <= 0:
+        return True
+
+    previous = listing_text[amount_start - 1]
+    return not (previous.isdigit() or previous in {".", ",", "/", "-"})
 
 
 def _result_price_amount(result: SearchResult) -> float | None:
