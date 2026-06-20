@@ -146,6 +146,21 @@ def test_watchfacts_search_payload_serializes_results_for_tool_runtime(tmp_path)
     assert result["price_reason"] == "price.visible"
     assert result["segment_reason_codes"] == ["segment.reference_boundary"]
     assert result["similar_results"] == []
+    assert payload["output_version"] == "watchfacts.search.v1"
+    assert payload["presentation_schema_version"] == 1
+    assert result["presentation"] == {
+        "title": "5712G Used 2015 - 76k usdt",
+        "preview": {
+            "comfortable": "5712G Used 2015 - 76k usdt",
+            "dense": "5712G Used 2015 - 76k usdt",
+        },
+        "price_amount": 76000.0,
+        "price_text": "76k usdt",
+        "seller_line": "Issac",
+        "posted_line": None,
+        "source_label": "WatchFacts",
+        "has_image": False,
+    }
 
 
 def test_watchfacts_search_payload_preserves_mcp_contract_fields(tmp_path) -> None:
@@ -210,6 +225,9 @@ def test_watchfacts_search_payload_preserves_mcp_contract_fields(tmp_path) -> No
     assert result["image_url"] == "/images/5205r-green.jpg"
     assert result["seller"] == "Mr Dain"
     assert result["posted_date"] == "11/06/2026"
+    assert result["presentation"]["price_amount"] == 417000.0
+    assert result["presentation"]["price_text"] == "$417,000"
+    assert result["presentation"]["has_image"] is True
 
 
 def test_watchfacts_create_chat_draft_uses_db_reference_when_memory_cache_missing(
@@ -431,33 +449,49 @@ def test_watchfacts_search_payload_can_include_raw_and_similar_results() -> None
         )
     )
 
-    assert payload["results"] == [
-        {
-            "listing_text": "5712G Used",
-            "seller": None,
-            "posted_date": None,
-            "image_url": None,
-            "source_url": None,
-            "seller_phone": None,
-            "similar_results": [
-                {
-                    "listing_text": "5712G similar",
-                    "seller": None,
-                    "posted_date": None,
-                    "image_url": None,
-                    "source_url": None,
-                    "seller_phone": None,
-                    "similar_results": [],
-                    "raw_listing_text": None,
-                }
-            ],
-            "raw_listing_text": "raw listing text",
-            "rank": 1,
-            "result_id": payload["results"][0]["result_id"],
-            "stable_listing_id": payload["results"][0]["stable_listing_id"],
-            "source_result_id": payload["results"][0]["result_id"],
-        }
-    ]
+    result = payload["results"][0]
+    assert {
+        key: result[key]
+        for key in (
+            "listing_text",
+            "seller",
+            "posted_date",
+            "image_url",
+            "source_url",
+            "seller_phone",
+            "similar_results",
+            "raw_listing_text",
+            "rank",
+            "result_id",
+            "stable_listing_id",
+            "source_result_id",
+        )
+    } == {
+        "listing_text": "5712G Used",
+        "seller": None,
+        "posted_date": None,
+        "image_url": None,
+        "source_url": None,
+        "seller_phone": None,
+        "similar_results": [
+            {
+                "listing_text": "5712G similar",
+                "seller": None,
+                "posted_date": None,
+                "image_url": None,
+                "source_url": None,
+                "seller_phone": None,
+                "similar_results": [],
+                "raw_listing_text": None,
+            }
+        ],
+        "raw_listing_text": "raw listing text",
+        "rank": 1,
+        "result_id": result["result_id"],
+        "stable_listing_id": result["stable_listing_id"],
+        "source_result_id": result["result_id"],
+    }
+    assert result["presentation"]["title"] == "5712G Used"
 
 
 def test_watchfacts_search_payload_supports_offset_pagination() -> None:

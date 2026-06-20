@@ -357,6 +357,29 @@ def _result_payload(
     return payload
 
 
+def result_presentation_payload(
+    result: SearchResult,
+    *,
+    watchfacts_url: str,
+) -> dict[str, Any]:
+    listing_text = _clean_text(result.listing_text, MAX_TEXT_CHARS)
+    preview = {
+        density: _listing_preview_text(listing_text, density)
+        for density in ("comfortable", "dense")
+    }
+    image_url = _normalize_url(result.image_url, watchfacts_url)
+    return {
+        "title": preview["dense"],
+        "preview": preview,
+        "price_amount": _result_price_amount(result),
+        "price_text": _result_price_text(result),
+        "seller_line": _clean_optional_text(result.seller),
+        "posted_line": _clean_optional_text(result.posted_date),
+        "source_label": "WatchFacts",
+        "has_image": image_url is not None,
+    }
+
+
 def _extract_price_amount(listing_text: str | None) -> float | None:
     best = None
     if not listing_text:
@@ -373,6 +396,33 @@ def _extract_price_amount(listing_text: str | None) -> float | None:
             best = parsed
 
     return best
+
+
+def _result_price_text(result: SearchResult) -> str | None:
+    return _extract_price_text(result.listing_text) or _extract_price_text(
+        result.raw_listing_text
+    )
+
+
+def _extract_price_text(listing_text: str | None) -> str | None:
+    if not listing_text:
+        return None
+
+    best_text = None
+    best_amount = None
+    for pattern in (PRICE_WITH_PREFIX_RE, PRICE_WITH_SUFFIX_RE):
+        for match in pattern.finditer(listing_text):
+            parsed = _parse_price_token(
+                match.group("amount"),
+                match.group("suffix") or "",
+            )
+            if parsed is None:
+                continue
+            if best_amount is None or parsed > best_amount:
+                best_amount = parsed
+                best_text = match.group(0)
+
+    return _clean_optional_text(best_text, max_chars=80)
 
 
 def _result_price_amount(result: SearchResult) -> float | None:

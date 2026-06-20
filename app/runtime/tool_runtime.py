@@ -25,7 +25,11 @@ from app.integrations.openwa_handoff import (
     OpenWAChatDraftResponse,
     OpenWAHandoffConfig,
 )
-from app.results.result_pages import ResultPageConfig, generate_result_page
+from app.results.result_pages import (
+    ResultPageConfig,
+    generate_result_page,
+    result_presentation_payload,
+)
 from app.integrations.scraper import BrowserSessionStatus, check_watchfacts_session
 from app.searching.search import WatchFactsSearchWorkflow, _search_cache_key
 from app.searching.search_result import (
@@ -144,7 +148,15 @@ async def watchfacts_search_payload(
         limit=limit,
         offset=offset,
     )
-    return _search_payload(page, include_similar=include_similar, include_raw=include_raw)
+    watchfacts_url = (
+        active_settings.watchfacts_url if active_settings is not None else None
+    )
+    return _search_payload(
+        page,
+        include_similar=include_similar,
+        include_raw=include_raw,
+        watchfacts_url=watchfacts_url,
+    )
 
 
 def _search_payload(
@@ -152,8 +164,11 @@ def _search_payload(
     *,
     include_similar: bool,
     include_raw: bool,
+    watchfacts_url: str | None,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
+        "output_version": "watchfacts.search.v1",
+        "presentation_schema_version": 1,
         "query": page.query,
         "total_count": page.total_count,
         "offset": page.offset,
@@ -170,6 +185,7 @@ def _search_payload(
                 result,
                 include_similar=include_similar,
                 include_raw=include_raw,
+                watchfacts_url=watchfacts_url,
             )
             for rank, result in enumerate(
                 page.visible_results,
@@ -483,6 +499,7 @@ def _search_result_payload(
     *,
     include_similar: bool,
     include_raw: bool,
+    watchfacts_url: str | None,
 ) -> dict[str, Any]:
     result_id = _source_result_id(query, rank, result)
     payload = search_result_to_dict(
@@ -496,6 +513,10 @@ def _search_result_payload(
             "result_id": result_id,
             "stable_listing_id": stable_listing_id(result),
             "source_result_id": result_id,
+            "presentation": result_presentation_payload(
+                result,
+                watchfacts_url=watchfacts_url or "",
+            ),
         }
     )
     return payload

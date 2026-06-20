@@ -142,6 +142,9 @@ MCP client behavior:
 - Initial search should call `search(query=<full user text>, limit=5, offset=0, include_similar=true)`.
 - "Load more" should call `search` again with the same query and previous
   `next_offset`.
+- Use `results[].presentation` for chat/UI display when present. Keep using the
+  stable raw fields (`listing_text`, `seller`, `posted_date`, `source_url`,
+  `image_url`, and ids) for automation and fallbacks.
 - Use the returned `result_id` for immediate `create_chat_draft` and issue
   reporting. Use the returned `stable_listing_id` when the follow-up may cross a
   restart or when the client preserved that field instead. If the user says
