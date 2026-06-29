@@ -12,7 +12,6 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       HEADLESS: "${HEADLESS:-true}"
-      ENABLE_CRAWL4AI: "${ENABLE_CRAWL4AI:-true}"
       WATCHFACTS_URL: "${WATCHFACTS_URL:-https://watchfacts.com/simon-match-making}"
     volumes:
       - ./data:/app/data

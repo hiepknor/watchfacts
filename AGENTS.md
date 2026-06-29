@@ -158,7 +158,6 @@ Expected `.env` keys:
 TELEGRAM_BOT_TOKEN=your_telegram_token
 WATCHFACTS_URL=https://watchfacts.com/simon-match-making
 HEADLESS=true
-ENABLE_CRAWL4AI=true
 ENABLE_OPENWA_CHAT_HANDOFF=false
 OPENWA_BASE_URL=
 OPENWA_API_KEY=

@@ -131,7 +131,6 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.telegram_max_concurrent_searches == DEFAULT_TELEGRAM_MAX_CONCURRENT_SEARCHES
     assert settings.watchfacts_url == DEFAULT_WATCHFACTS_URL
     assert settings.headless is True
-    assert settings.enable_crawl4ai is True
     assert settings.hybrid_ai_mode == DEFAULT_HYBRID_AI_MODE
     assert settings.openai_api_key == ""
     assert settings.openai_model == DEFAULT_OPENAI_MODEL

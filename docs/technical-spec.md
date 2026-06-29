@@ -110,7 +110,6 @@ Expected environment:
 | `TELEGRAM_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum WatchFacts searches running at the same time; extra queries wait with a queue notice |
 | `WATCHFACTS_URL` | Yes | `https://watchfacts.com/simon-match-making` | WatchFacts page to crawl |
 | `HEADLESS` | No | `true` | Browser headless mode |
-| `ENABLE_CRAWL4AI` | No | `true` | Reserved compatibility flag; current runtime uses WatchFacts JSON/HTML parsing |
 | `SEARCH_CACHE_TTL_SECONDS` | No | `1800` | Fresh-result cache lifetime for identical normalized searches before calling WatchFacts again |
 | `SEARCH_MAX_CONCURRENT_SEARCHES` | No | `1` | Maximum non-Telegram WatchFacts searches running at the same time; identical queries still coalesce |
 | `SEARCH_RETRIEVAL_CONCURRENCY` | No | `1` | Maximum WatchFacts retrieval branches fetched in parallel inside one search; valid range is `1` through `4` |

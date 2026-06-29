@@ -31,7 +31,6 @@ def test_main_starts_bot_with_loaded_settings(monkeypatch, tmp_path) -> None:
         telegram_result_limit=5,
         watchfacts_url="https://example.test",
         headless=True,
-        enable_crawl4ai=True,
         project_root=tmp_path,
         data_dir=tmp_path / "data",
         logs_dir=tmp_path / "logs",

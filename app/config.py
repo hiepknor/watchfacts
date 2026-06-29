@@ -54,7 +54,6 @@ class Settings:
     telegram_result_limit: int
     watchfacts_url: str
     headless: bool
-    enable_crawl4ai: bool
     project_root: Path
     data_dir: Path
     logs_dir: Path
@@ -223,10 +222,6 @@ def load_settings(
         raise ConfigError("WATCHFACTS_URL must not be empty")
 
     headless = parse_bool(source.get("HEADLESS", "true"), name="HEADLESS")
-    enable_crawl4ai = parse_bool(
-        source.get("ENABLE_CRAWL4AI", "true"),
-        name="ENABLE_CRAWL4AI",
-    )
     hybrid_ai_mode = parse_hybrid_ai_mode(
         source.get("HYBRID_AI_MODE", DEFAULT_HYBRID_AI_MODE),
         name="HYBRID_AI_MODE",
@@ -423,7 +418,6 @@ def load_settings(
         telegram_max_concurrent_searches=telegram_max_concurrent_searches,
         watchfacts_url=watchfacts_url,
         headless=headless,
-        enable_crawl4ai=enable_crawl4ai,
         hybrid_ai_mode=hybrid_ai_mode,
         openai_api_key=openai_api_key,
         openai_model=openai_model,

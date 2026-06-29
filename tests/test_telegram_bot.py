@@ -83,7 +83,6 @@ def make_settings(tmp_path, *, hybrid_ai_mode: str = "shadow") -> Settings:
         telegram_result_limit=5,
         watchfacts_url="https://watchfacts.example/simon-match-making",
         headless=True,
-        enable_crawl4ai=True,
         project_root=tmp_path,
         data_dir=tmp_path / "data",
         logs_dir=tmp_path / "logs",
