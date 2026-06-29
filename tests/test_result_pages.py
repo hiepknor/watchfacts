@@ -241,6 +241,16 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "grid-template-columns: repeat(3, minmax(5.25rem, 5.25rem));" in html
     assert ".result-actions-primary .source-link,\n    .results.density-dense .result-actions-primary .source-link" in html
     assert ".result-actions-primary .source-link,\n      .results.density-dense .result-actions-primary .source-link {\n        display: none;" in html
+    assert re.search(
+        r"@media \(max-width: 1024px\)\s*\{\s*"
+        r"\.result-actions-primary \.source-link,\s*"
+        r"\.result-actions-primary \.action-button\[disabled\]:not\(\.openwa-action\),\s*"
+        r"\.results\.density-dense \.result-actions-primary \.source-link,\s*"
+        r"\.results\.density-dense \.result-actions-primary "
+        r"\.action-button\[disabled\]:not\(\.openwa-action\)\s*\{\s*"
+        r"display: none;",
+        html,
+    )
     assert "order: 3;" in html
     assert ".result-actions-primary .action-button:first-child" in html
     assert "order: 1;" in html

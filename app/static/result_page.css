@@ -3291,6 +3291,15 @@
       }
     }
 
+    @media (max-width: 1024px) {
+      .result-actions-primary .source-link,
+      .result-actions-primary .action-button[disabled]:not(.openwa-action),
+      .results.density-dense .result-actions-primary .source-link,
+      .results.density-dense .result-actions-primary .action-button[disabled]:not(.openwa-action) {
+        display: none;
+      }
+    }
+
     @media print {
       .commandbar, .result-actions, .result-modal, .toast {
         display: none;
