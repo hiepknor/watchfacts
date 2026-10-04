@@ -51,6 +51,8 @@ RESULT_PAGE_STATIC_DIR = APP_ROOT / "static"
 RESULT_PAGE_CSS_PATH = RESULT_PAGE_STATIC_DIR / "result_page.css"
 RESULT_PAGE_JS_PATH = RESULT_PAGE_STATIC_DIR / "result_page.js"
 RESULT_PAGE_SCHEMA_VERSION = 2
+RESULT_PAGE_CLEANUP_INTERVAL_SECONDS = 5 * 60
+RESULT_PAGE_CLEANUP_STAMP = ".cleanup-stamp"
 
 
 @dataclass(frozen=True)
@@ -150,7 +152,6 @@ def generate_result_page(
         "results": page_results,
     }
 
-    cleanup_expired_result_pages(active_config, now=created_at)
     active_config.storage_dir.mkdir(parents=True, exist_ok=True)
     html = render_result_page_template(payload)
     page_path = _page_path(active_config, token)
@@ -189,6 +190,7 @@ def generate_result_page(
     finally:
         _unlink_quietly(page_temporary_path)
         _unlink_quietly(sidecar_temporary_path)
+    _maybe_cleanup_expired_result_pages(active_config, now=created_at)
     return GeneratedResultPage(
         url=f"{active_config.public_base_url.rstrip('/')}/{token}",
         expires_at=payload["expires_at"],
@@ -244,26 +246,26 @@ def read_result_page_html(
 
     page_path = _page_path(active_config, token)
     if not page_path.exists() or not page_path.is_file():
-        cleanup_expired_result_pages(active_config, now=now)
+        _maybe_cleanup_expired_result_pages(active_config, now=now)
         return ResultPageRead(status_code=404)
 
     if _is_expired(page_path, active_config, now=_utc_now(now)):
         _unlink_page_files(active_config, token)
-        cleanup_expired_result_pages(active_config, now=now)
+        _maybe_cleanup_expired_result_pages(active_config, now=now)
         return ResultPageRead(status_code=410)
 
     sidecar_path = _sidecar_path(active_config, token)
     sidecar = _read_result_page_sidecar(sidecar_path)
     if sidecar is None:
         _unlink_page_files(active_config, token)
-        cleanup_expired_result_pages(active_config, now=now)
+        _maybe_cleanup_expired_result_pages(active_config, now=now)
         return ResultPageRead(status_code=404)
     if not _sidecar_uses_current_schema(sidecar):
         _unlink_page_files(active_config, token)
-        cleanup_expired_result_pages(active_config, now=now)
+        _maybe_cleanup_expired_result_pages(active_config, now=now)
         return ResultPageRead(status_code=410)
 
-    cleanup_expired_result_pages(active_config, now=now)
+    _maybe_cleanup_expired_result_pages(active_config, now=now)
     return ResultPageRead(
         status_code=200,
         html=page_path.read_text(encoding="utf-8"),
@@ -284,15 +286,15 @@ def read_result_page_action_payload(
     page_path = _page_path(active_config, token)
     sidecar_path = _sidecar_path(active_config, token)
     if not page_path.exists() or not page_path.is_file():
-        cleanup_expired_result_pages(active_config, now=now)
+        _maybe_cleanup_expired_result_pages(active_config, now=now)
         return ResultPageActionRead(status_code=404, error="not_found")
     if not sidecar_path.exists() or not sidecar_path.is_file():
-        cleanup_expired_result_pages(active_config, now=now)
+        _maybe_cleanup_expired_result_pages(active_config, now=now)
         return ResultPageActionRead(status_code=404, error="missing_sidecar")
 
     if _is_expired(page_path, active_config, now=_utc_now(now)):
         _unlink_page_files(active_config, token)
-        cleanup_expired_result_pages(active_config, now=now)
+        _maybe_cleanup_expired_result_pages(active_config, now=now)
         return ResultPageActionRead(status_code=410, error="expired")
 
     sidecar = _read_result_page_sidecar(sidecar_path)
@@ -307,10 +309,10 @@ def read_result_page_action_payload(
         return ResultPageActionRead(status_code=404, error="invalid_sidecar")
     if not _sidecar_uses_current_schema(sidecar):
         _unlink_page_files(active_config, token)
-        cleanup_expired_result_pages(active_config, now=now)
+        _maybe_cleanup_expired_result_pages(active_config, now=now)
         return ResultPageActionRead(status_code=410, error="incompatible_schema")
 
-    cleanup_expired_result_pages(active_config, now=now)
+    _maybe_cleanup_expired_result_pages(active_config, now=now)
     return ResultPageActionRead(
         status_code=200,
         payload=payload,
@@ -357,6 +359,36 @@ def cleanup_expired_result_pages(
         page_path = _page_path(config, path.stem)
         if not page_path.exists() or _is_expired(path, config, now=current):
             _unlink_quietly(path)
+    return removed
+
+
+def _maybe_cleanup_expired_result_pages(
+    config: ResultPageConfig,
+    *,
+    now: datetime | None = None,
+) -> int:
+    """Run the directory scan at most once per interval for each shared store."""
+
+    if not config.storage_dir.exists():
+        return 0
+    current = _utc_now(now)
+    stamp_path = config.storage_dir / RESULT_PAGE_CLEANUP_STAMP
+    try:
+        elapsed = current.timestamp() - stamp_path.stat().st_mtime
+        if elapsed < RESULT_PAGE_CLEANUP_INTERVAL_SECONDS:
+            return 0
+    except FileNotFoundError:
+        pass
+
+    removed = cleanup_expired_result_pages(config, now=current)
+    try:
+        stamp_path.touch(exist_ok=True)
+        timestamp = current.timestamp()
+        os.utime(stamp_path, (timestamp, timestamp))
+    except OSError:
+        # Cleanup is best-effort; serving a valid result page must not depend on
+        # writing the scheduling marker.
+        pass
     return removed
 
 

@@ -47,6 +47,7 @@ Architecture Decision Records live in [decisions/](decisions/):
 | [ADR-008](decisions/008-runtime-architecture-boundaries.md) | Adopt layered runtime architecture boundaries |
 | [ADR-009](decisions/009-retire-mcp-transport.md) | Retire MCP and keep a dedicated result-page web service |
 | [ADR-010](decisions/010-retire-openwa-handoff.md) | Retire OpenWA handoff across Telegram, result pages, and runtime diagnostics |
+| [ADR-011](decisions/011-isolate-web-runtime.md) | Isolate the result-page web runtime and harden shared SQLite concurrency |
 
 ## Agent Usage
 

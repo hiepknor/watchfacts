@@ -54,6 +54,18 @@ def test_database_connection_sets_busy_timeout(tmp_path) -> None:
     assert timeout == 5000
 
 
+def test_database_connection_enables_wal_and_normal_sync(tmp_path) -> None:
+    db_path = tmp_path / "data" / "bot.db"
+    database = Database(db_path)
+
+    with database.connect() as connection:
+        journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+        synchronous = connection.execute("PRAGMA synchronous").fetchone()[0]
+
+    assert journal_mode == "wal"
+    assert synchronous == 1
+
+
 def test_record_query_results_persists_query_listing_and_relationship(tmp_path) -> None:
     db_path = tmp_path / "data" / "bot.db"
     database = Database(db_path)

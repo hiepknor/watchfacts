@@ -11,7 +11,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.config import DEFAULT_WATCHFACTS_URL, ConfigError, parse_bool
+from app.config import (
+    DEFAULT_BROWSER_STATE_PATH,
+    DEFAULT_WATCHFACTS_URL,
+    ConfigError,
+    parse_bool,
+)
 
 
 
@@ -29,13 +34,19 @@ def load_login_settings() -> LoginSettings:
     if not watchfacts_url:
         raise ConfigError("WATCHFACTS_URL must not be empty")
 
+    browser_state_path = Path(
+        os.environ.get("BROWSER_STATE_PATH", DEFAULT_BROWSER_STATE_PATH).strip()
+    )
+    if not browser_state_path.is_absolute():
+        browser_state_path = PROJECT_ROOT / browser_state_path
+
     return LoginSettings(
         watchfacts_url=watchfacts_url,
         headless=parse_bool(
             os.environ.get("LOGIN_HEADLESS", "false"),
             name="LOGIN_HEADLESS",
         ),
-        browser_state_path=PROJECT_ROOT / "data" / "watchfacts_state.json",
+        browser_state_path=browser_state_path,
     )
 
 

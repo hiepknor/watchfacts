@@ -3,7 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE:-watchfacts:local}
+      target: bot
+    image: ${IMAGE:-watchfacts:local}-bot
     container_name: watchfacts-bot
     restart: unless-stopped
     env_file:
@@ -13,8 +14,13 @@ services:
       PYTHONUNBUFFERED: "1"
       HEADLESS: "${HEADLESS:-true}"
       WATCHFACTS_URL: "${WATCHFACTS_URL:-https://watchfacts.com/simon-match-making}"
+      DB_PATH: /app/runtime/database/bot.db
+      BROWSER_STATE_PATH: /app/runtime/browser/watchfacts_state.json
+      RESULT_PAGE_STORAGE_DIR: /app/runtime/result_pages
     volumes:
-      - ./data:/app/data
+      - ./data/database:/app/runtime/database
+      - ./data/browser:/app/runtime/browser
+      - ./data/result_pages:/app/runtime/result_pages
       - ./logs:/app/logs
     shm_size: "1gb"
     init: true
@@ -35,20 +41,27 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE:-watchfacts:local}
+      target: web
+    image: ${IMAGE:-watchfacts:local}-web
     container_name: watchfacts-web
     restart: unless-stopped
-    env_file:
-      - path: .env
-        required: false
     environment:
       PYTHONUNBUFFERED: "1"
+      WATCHFACTS_URL: "${WATCHFACTS_URL:-https://watchfacts.com/simon-match-making}"
+      DB_PATH: /app/runtime/database/bot.db
+      RESULT_PAGE_PUBLIC_BASE_URL: "${RESULT_PAGE_PUBLIC_BASE_URL:-}"
+      RESULT_PAGE_TTL_SECONDS: "${RESULT_PAGE_TTL_SECONDS:-86400}"
+      RESULT_PAGE_MAX_RESULTS: "${RESULT_PAGE_MAX_RESULTS:-200}"
+      RESULT_PAGE_STORAGE_DIR: /app/runtime/result_pages
+      RESULT_PAGE_RATE_LIMIT_ENABLED: "${RESULT_PAGE_RATE_LIMIT_ENABLED:-true}"
+      RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS: "${RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS:-60}"
+      RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS: "${RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS:-60}"
+      RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS: "${RESULT_PAGE_RATE_LIMIT_BLOCK_SECONDS:-120}"
     ports:
       - "127.0.0.1:8765:8766"
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    shm_size: "1gb"
+      - ./data/database:/app/runtime/database
+      - ./data/result_pages:/app/runtime/result_pages
     init: true
     healthcheck:
       test:
@@ -56,7 +69,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8766/healthz', timeout=5); payload = json.load(response); raise SystemExit(0 if response.status == 200 and payload.get('status') == 'ok' else 1)",
+          "import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8766/readyz', timeout=5); payload = json.load(response); raise SystemExit(0 if response.status == 200 and payload.get('status') == 'ok' else 1)",
         ]
       interval: 30s
       timeout: 10s

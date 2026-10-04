@@ -17,7 +17,7 @@ WatchFacts requires authenticated access. The project must not store passwords o
 Provide a `scripts/ops/login.py` flow that opens Chromium for manual operator login and saves Playwright storage state to:
 
 ```text
-data/watchfacts_state.json
+data/browser/watchfacts_state.json
 ```
 
 The bot reuses this state when crawling.

@@ -32,6 +32,8 @@ DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH = True
 DEFAULT_RESULT_PAGE_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_RESULT_PAGE_MAX_RESULTS = 200
 DEFAULT_RESULT_PAGE_STORAGE_DIR = "data/result_pages"
+DEFAULT_DB_PATH = "data/database/bot.db"
+DEFAULT_BROWSER_STATE_PATH = "data/browser/watchfacts_state.json"
 DEFAULT_RESULT_PAGE_RATE_LIMIT_ENABLED = True
 DEFAULT_RESULT_PAGE_RATE_LIMIT_MAX_REQUESTS = 60
 DEFAULT_RESULT_PAGE_RATE_LIMIT_WINDOW_SECONDS = 60
@@ -166,6 +168,20 @@ def parse_bounded_positive_int(value: str, *, name: str, max_value: int) -> int:
     if parsed > max_value:
         raise ConfigError(f"{name} must be at most {max_value}")
     return parsed
+
+
+def _runtime_path(
+    source: Mapping[str, str],
+    *,
+    name: str,
+    default: str,
+    root: Path,
+) -> Path:
+    raw_value = source.get(name, default).strip()
+    if not raw_value:
+        raise ConfigError(f"{name} must not be empty")
+    path = Path(raw_value)
+    return path if path.is_absolute() else root / path
 
 
 def parse_hybrid_ai_mode(value: str, *, name: str) -> HybridAIMode:
@@ -332,6 +348,18 @@ def load_settings(
     )
     data_dir = root / "data"
     logs_dir = root / "logs"
+    db_path = _runtime_path(
+        source,
+        name="DB_PATH",
+        default=DEFAULT_DB_PATH,
+        root=root,
+    )
+    browser_state_path = _runtime_path(
+        source,
+        name="BROWSER_STATE_PATH",
+        default=DEFAULT_BROWSER_STATE_PATH,
+        root=root,
+    )
     result_page_public_base_url = source.get(
         "RESULT_PAGE_PUBLIC_BASE_URL",
         "",
@@ -432,8 +460,8 @@ def load_settings(
         project_root=root,
         data_dir=data_dir,
         logs_dir=logs_dir,
-        db_path=data_dir / "bot.db",
-        browser_state_path=data_dir / "watchfacts_state.json",
+        db_path=db_path,
+        browser_state_path=browser_state_path,
         runtime_mode=runtime_mode,
     )
 

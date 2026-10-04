@@ -2,7 +2,7 @@
 
 ## Runtime Topology
 
-Production has two services built from the same image:
+Production has two services built from separate targets in the same Dockerfile:
 
 - `watchfacts-bot`: Telegram polling and search orchestration.
 - `watchfacts-web`: generated result pages and server-side actions.
@@ -11,8 +11,9 @@ Production has two services built from the same image:
 compatible host address `127.0.0.1:8765`. Caddy may expose `/results/*`; no
 general search API is exposed. The former MCP transport is retired.
 
-Both services mount `./data` and `./logs`, so Telegram can write result-page
-artifacts that the web service reads.
+The bot owns the WatchFacts browser session and logs. The services share only
+`data/database/` and `data/result_pages/`; the web service does not receive the
+bot `.env`, Telegram/OpenAI secrets, browser state, or logs.
 
 ## Initial Setup
 
@@ -33,8 +34,13 @@ Create the authorized WatchFacts session on a machine with a browser:
 make login
 ```
 
-This creates `data/watchfacts_state.json`. Treat it as a credential and never
+This creates `data/browser/watchfacts_state.json`. Treat it as a credential and never
 commit or paste it into logs.
+
+`make init` also copies the legacy `data/watchfacts_state.json` and
+`data/bot.db` into the isolated layout when the destination does not exist. It
+does not delete the legacy files; remove those only after validating the new
+deployment.
 
 ## Local Runtime
 
@@ -43,14 +49,17 @@ make run
 python -m app.web_server
 ```
 
-The web readiness endpoint is:
+The web health endpoints are:
 
 ```text
-http://127.0.0.1:8766/healthz
+http://127.0.0.1:8766/livez
+http://127.0.0.1:8766/readyz
 ```
 
 Direct Python execution listens on `8766`; Docker publishes that container port
-as legacy-compatible host port `8765`. Readiness loads runtime configuration,
+as legacy-compatible host port `8765`. `/livez` only checks that the HTTP
+process responds. `/readyz` (with `/healthz` retained as a compatibility alias)
+loads runtime configuration,
 initializes SQLite, and verifies that result-page storage is writable. It returns
 `503` without exposing paths or credentials when those dependencies fail.
 
@@ -105,7 +114,7 @@ Authorized WatchFacts HTTP smoke:
 make watchfacts-http-smoke
 ```
 
-Direct shared-runtime checks inside `watchfacts-web`:
+Direct shared-runtime checks inside `watchfacts-bot`:
 
 ```bash
 make runtime-smoke
@@ -175,8 +184,8 @@ Never review production issues by exposing SQLite over a public API.
 Back up:
 
 - `.env` through a secret manager or encrypted operator backup;
-- `data/watchfacts_state.json` securely;
-- `data/bot.db`;
+- `data/browser/watchfacts_state.json` securely;
+- `data/database/bot.db`;
 - optionally active `data/result_pages/` artifacts.
 
 Stop services or use SQLite's backup mechanism before copying a live database.

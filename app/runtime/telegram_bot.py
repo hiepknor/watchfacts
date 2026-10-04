@@ -104,7 +104,7 @@ WATCHFACTS_OWNER_ALERT_MESSAGE = (
     "Bot không còn truy cập được WatchFacts bằng session đã lưu.\n\n"
     "📌 Việc cần làm:\n"
     "1. Đăng nhập lại WatchFacts để tạo session mới.\n"
-    "2. Cập nhật `data/watchfacts_state.json` trên server nếu login ở máy khác.\n"
+    "2. Cập nhật `data/browser/watchfacts_state.json` trên server nếu login ở máy khác.\n"
     "3. Restart hoặc deploy lại bot.\n\n"
     "🔒 Bot không lưu mật khẩu WatchFacts và không tự đăng nhập lại."
 )

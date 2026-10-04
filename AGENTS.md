@@ -91,8 +91,10 @@ scripts/
     generate_audit_fixtures.py
     generate_issue_fixtures.py
 data/
-  bot.db
-  watchfacts_state.json
+  database/
+    bot.db
+  browser/
+    watchfacts_state.json
 docs/
 logs/
 Dockerfile
@@ -167,8 +169,8 @@ Rules:
 - Never commit `.env`.
 - Never commit real Telegram tokens, WatchFacts credentials, cookies, browser state, or session files.
 - Never commit OpenAI API keys or generated files containing secrets.
-- Treat `data/watchfacts_state.json` as sensitive because it contains authenticated browser state.
-- Treat `data/bot.db` as local runtime data.
+- Treat `data/browser/watchfacts_state.json` as sensitive because it contains authenticated browser state.
+- Treat `data/database/bot.db` as local runtime data.
 - Keep `logs/`, `.venv/`, `__pycache__/`, and generated runtime files out of commits.
 
 ## Compliance Boundaries

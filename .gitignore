@@ -6,6 +6,8 @@ __pycache__/
 .codegraph/
 .skills
 
+data/browser/
+data/database/
 data/watchfacts_state.json
 data/bot.db
 data/result_pages/

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import threading
@@ -57,12 +58,19 @@ def route(path: str, *, methods: list[str]):
     return register
 
 
+@route("/livez", methods=["GET"])
+async def livez(_request: Request):
+    """Report that the HTTP process can serve requests."""
+    return JSONResponse({"status": "ok", "service": "watchfacts-web"})
+
+
 @route("/healthz", methods=["GET"])
+@route("/readyz", methods=["GET"])
 async def healthz(_request: Request):
     """Report readiness for the result-page HTTP service."""
     try:
         settings = load_search_settings()
-        check_runtime_readiness(settings)
+        await asyncio.to_thread(check_runtime_readiness, settings)
     except Exception as exc:
         logger.warning(
             "event=web.readiness_failed error_type=%s",
@@ -115,7 +123,8 @@ async def result_page(request: Request):
         )
         return PlainTextResponse("Result page not found", status_code=404)
 
-    page = read_result_page_html(
+    page = await asyncio.to_thread(
+        read_result_page_html,
         token,
         config=config,
     )
@@ -158,7 +167,8 @@ async def result_page_report_action(request: Request):
     item = context["item"]
     payload = context["payload"]
     settings = context["settings"]
-    issue = IssueTriageUseCase.from_settings(settings).record_feedback(
+    issue = await asyncio.to_thread(
+        IssueTriageUseCase.from_settings(settings).record_feedback,
         query_text=str(payload.get("query") or ""),
         result_rank=_int_value(item.get("rank"), fallback=0),
         reason=reason,
@@ -271,7 +281,11 @@ async def _load_result_page_action_context(
     if not config.enabled:
         return _action_error("not_found", "Result page action not found.", status_code=404)
 
-    action_page = read_result_page_action_payload(token, config=config)
+    action_page = await asyncio.to_thread(
+        read_result_page_action_payload,
+        token,
+        config=config,
+    )
     if action_page.status_code == 410:
         return _action_error("expired", "Result page expired.", status_code=410)
     if action_page.status_code != 200 or action_page.payload is None:

@@ -182,8 +182,10 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.result_page_storage_dir == tmp_path / "data" / "result_pages"
     assert settings.data_dir == tmp_path / "data"
     assert settings.logs_dir == tmp_path / "logs"
-    assert settings.db_path == tmp_path / "data" / "bot.db"
-    assert settings.browser_state_path == tmp_path / "data" / "watchfacts_state.json"
+    assert settings.db_path == tmp_path / "data" / "database" / "bot.db"
+    assert settings.browser_state_path == (
+        tmp_path / "data" / "browser" / "watchfacts_state.json"
+    )
 
 
 def test_openwa_environment_is_not_part_of_runtime_settings(tmp_path: Path) -> None:
@@ -385,6 +387,35 @@ def test_load_settings_reads_result_page_options(tmp_path: Path) -> None:
     assert settings.result_page_ttl_seconds == 60
     assert settings.result_page_max_results == 25
     assert settings.result_page_storage_dir == tmp_path / "tmp" / "result-pages"
+
+
+def test_load_settings_supports_isolated_runtime_paths(tmp_path: Path) -> None:
+    settings = load_search_settings(
+        env={
+            "DB_PATH": "runtime/database/watchfacts.db",
+            "BROWSER_STATE_PATH": "runtime/browser/session.json",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.db_path == tmp_path / "runtime" / "database" / "watchfacts.db"
+    assert settings.browser_state_path == tmp_path / "runtime" / "browser" / "session.json"
+
+
+def test_load_settings_preserves_absolute_runtime_paths(tmp_path: Path) -> None:
+    db_path = tmp_path / "mounted" / "watchfacts.db"
+    browser_state_path = tmp_path / "secrets" / "session.json"
+
+    settings = load_search_settings(
+        env={
+            "DB_PATH": str(db_path),
+            "BROWSER_STATE_PATH": str(browser_state_path),
+        },
+        project_root=tmp_path / "project",
+    )
+
+    assert settings.db_path == db_path
+    assert settings.browser_state_path == browser_state_path
 
 
 def test_load_settings_rejects_empty_result_page_storage_dir(tmp_path: Path) -> None:

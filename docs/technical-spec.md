@@ -74,7 +74,8 @@ should use the layered package paths.
 - Listens on container port 8766, published to legacy-compatible host-local
   port 8765 only.
 - Exposes:
-  - `GET /healthz`
+  - `GET /livez`
+  - `GET /readyz` (`GET /healthz` compatibility alias)
   - `GET /results/{token}`
   - `POST /results/{token}/actions/report`
 - Does not expose search, issue review, browser state, or database access.

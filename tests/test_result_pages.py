@@ -1173,6 +1173,27 @@ def test_generate_result_page_does_not_publish_partial_pair(
     assert list(config.storage_dir.iterdir()) == []
 
 
+def test_result_page_cleanup_scan_is_throttled(monkeypatch, tmp_path) -> None:
+    config = make_config(tmp_path)
+    config.storage_dir.mkdir(parents=True)
+    cleanup_calls: list[datetime] = []
+
+    def fake_cleanup(_config, *, now=None):
+        cleanup_calls.append(now)
+        return 0
+
+    monkeypatch.setattr(result_pages, "cleanup_expired_result_pages", fake_cleanup)
+    now = datetime(2026, 6, 7, 12, 0, tzinfo=timezone.utc)
+
+    result_pages._maybe_cleanup_expired_result_pages(config, now=now)
+    result_pages._maybe_cleanup_expired_result_pages(
+        config,
+        now=now + timedelta(seconds=30),
+    )
+
+    assert cleanup_calls == [now]
+
+
 def test_read_result_page_action_payload_reports_sidecar_states(tmp_path) -> None:
     config = make_config(tmp_path)
     now = datetime(2026, 6, 7, 12, 0, tzinfo=timezone.utc)

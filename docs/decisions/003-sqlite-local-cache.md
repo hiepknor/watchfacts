@@ -17,7 +17,7 @@ The bot is self-hosted and intended to run on a local machine or small Linux ser
 Use SQLite at:
 
 ```text
-data/bot.db
+data/database/bot.db
 ```
 
 SQLite stores query history, listing records, and query-result relationships.
@@ -45,5 +45,5 @@ SQLite stores query history, listing records, and query-result relationships.
 ## Consequences
 
 - Local deployment stays simple.
-- `data/bot.db` must be ignored and backed up if the operator cares about history.
+- `data/database/bot.db` must be ignored and backed up if the operator cares about history.
 - Schema changes should be documented and tested.

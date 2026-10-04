@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -362,6 +363,31 @@ def test_search_payload_use_case_searches_stores_and_paginates_results() -> None
             "next_offset": 2,
         }
     ]
+
+
+def test_search_payload_use_case_offloads_blocking_callbacks() -> None:
+    workflow = FakeSearchWorkflow([SearchResult("5712G")])
+    caller_thread = threading.get_ident()
+    callback_threads: list[int] = []
+
+    def store_results(*_args) -> None:
+        callback_threads.append(threading.get_ident())
+
+    def generate_page(**_kwargs):
+        callback_threads.append(threading.get_ident())
+        return None
+
+    asyncio.run(
+        SearchPayloadUseCase(
+            workflow=workflow,
+            result_cache_ttl_seconds=60,
+            store_results=store_results,
+            generate_result_page=generate_page,
+        ).search_page("5712g")
+    )
+
+    assert callback_threads
+    assert all(thread_id != caller_thread for thread_id in callback_threads)
 
 
 @dataclass(frozen=True)

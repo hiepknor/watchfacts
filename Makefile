@@ -83,14 +83,15 @@ help:
 	@printf "%s\n" "  make clean    Remove local Python caches"
 
 init:
-	@mkdir -p data logs
+	@mkdir -p data/browser data/database data/result_pages logs
+	@$(PYTHON) scripts/ops/migrate_runtime_layout.py
 	@if [ ! -f .env ]; then cp .env.example .env; fi
 
 verify-env: init
 	@test -s .env || { printf "%s\n" "Missing .env. Run make init and edit .env."; exit 1; }
-	@test -s data/watchfacts_state.json || { printf "%s\n" "Missing data/watchfacts_state.json. Run make login on a machine with browser access."; exit 1; }
 
 verify-bot-env: verify-env
+	@test -s data/browser/watchfacts_state.json || { printf "%s\n" "Missing data/browser/watchfacts_state.json. Run make login on a machine with browser access."; exit 1; }
 	@awk -F= '/^TELEGRAM_BOT_TOKEN=/{ token=$$2 } END { if (token == "" || token == "your_telegram_token") { printf "%s\n", "TELEGRAM_BOT_TOKEN is missing or still set to the placeholder. Edit .env before deploying watchfacts-bot."; exit 1 } }' .env
 
 pull:
@@ -159,9 +160,8 @@ web-build:
 
 web-predeploy-check:
 	git diff --check
-	$(COMPOSE) run --rm $(WEB_SERVICE) python -m pytest -q
-	$(COMPOSE) run --rm $(WEB_SERVICE) python -m compileall app scripts
-	$(COMPOSE) run --rm $(WEB_SERVICE) python scripts/diagnostics/audit_quality.py --limit $(QUALITY_AUDIT_LIMIT)
+	$(PYTHON) -m pytest -q tests/test_web_server.py tests/test_result_pages.py tests/test_runtime_health.py tests/test_docker_compose.py
+	$(COMPOSE) run --rm $(WEB_SERVICE) python -m compileall app
 
 web-up:
 	$(COMPOSE) up -d --build $(WEB_SERVICE)
@@ -182,19 +182,19 @@ watchfacts-http-smoke:
 	$(PYTHON) scripts/diagnostics/benchmark_watchfacts_http.py --query "$(SMOKE_QUERY)" --warmup --repeat 1
 
 runtime-smoke:
-	$(COMPOSE) exec -T $(WEB_SERVICE) python scripts/diagnostics/runtime_smoke.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS)
+	$(COMPOSE) exec -T $(BOT_SERVICE) python scripts/diagnostics/runtime_smoke.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS)
 
 search-benchmark:
-	$(COMPOSE) exec -T $(WEB_SERVICE) python scripts/diagnostics/benchmark_search_queries.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS) --limit $(SEARCH_BENCHMARK_LIMIT) --repeat $(SEARCH_BENCHMARK_REPEAT) --format $(SEARCH_BENCHMARK_FORMAT) --allow-empty $(SEARCH_BENCHMARK_EXTRA_ARGS)
+	$(COMPOSE) exec -T $(BOT_SERVICE) python scripts/diagnostics/benchmark_search_queries.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS) --limit $(SEARCH_BENCHMARK_LIMIT) --repeat $(SEARCH_BENCHMARK_REPEAT) --format $(SEARCH_BENCHMARK_FORMAT) --allow-empty $(SEARCH_BENCHMARK_EXTRA_ARGS)
 
 search-cold-budget:
-	$(COMPOSE) exec -T $(WEB_SERVICE) python scripts/diagnostics/benchmark_search_queries.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS) --limit $(SEARCH_BENCHMARK_LIMIT) --repeat $(SEARCH_BENCHMARK_REPEAT) --format $(SEARCH_COLD_BUDGET_FORMAT) --allow-empty --clear-search-cache --use-cold-path-budget-defaults
+	$(COMPOSE) exec -T $(BOT_SERVICE) python scripts/diagnostics/benchmark_search_queries.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS) --limit $(SEARCH_BENCHMARK_LIMIT) --repeat $(SEARCH_BENCHMARK_REPEAT) --format $(SEARCH_COLD_BUDGET_FORMAT) --allow-empty --clear-search-cache --use-cold-path-budget-defaults
 
 search-prewarm:
-	$(COMPOSE) exec -T $(WEB_SERVICE) python scripts/diagnostics/prewarm_search_cache.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS) --limit $(SEARCH_PREWARM_LIMIT) --format $(SEARCH_PREWARM_FORMAT) $(SEARCH_PREWARM_VERIFY_HOT_ARGS)
+	$(COMPOSE) exec -T $(BOT_SERVICE) python scripts/diagnostics/prewarm_search_cache.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS) --limit $(SEARCH_PREWARM_LIMIT) --format $(SEARCH_PREWARM_FORMAT) $(SEARCH_PREWARM_VERIFY_HOT_ARGS)
 
 search-prewarm-benchmark-defaults:
-	$(COMPOSE) exec -T $(WEB_SERVICE) python scripts/diagnostics/prewarm_search_cache.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS) --limit $(SEARCH_PREWARM_LIMIT) --format $(SEARCH_PREWARM_FORMAT) $(SEARCH_PREWARM_VERIFY_HOT_ARGS) --use-benchmark-defaults
+	$(COMPOSE) exec -T $(BOT_SERVICE) python scripts/diagnostics/prewarm_search_cache.py --timeout-seconds $(WEB_HEALTH_TIMEOUT_SECONDS) --limit $(SEARCH_PREWARM_LIMIT) --format $(SEARCH_PREWARM_FORMAT) $(SEARCH_PREWARM_VERIFY_HOT_ARGS) --use-benchmark-defaults
 
 search-postdeploy-prewarm:
 	@if [ "$(SEARCH_POSTDEPLOY_PREWARM)" = "1" ]; then \
@@ -207,7 +207,7 @@ search-postdeploy-prewarm:
 	fi
 
 runtime-config:
-	$(COMPOSE) exec -T $(WEB_SERVICE) python scripts/diagnostics/runtime_config.py
+	$(COMPOSE) exec -T $(BOT_SERVICE) python scripts/diagnostics/runtime_config.py
 
 web-wait-healthy:
 	@if ! command -v docker >/dev/null 2>&1; then \

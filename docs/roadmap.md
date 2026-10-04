@@ -70,7 +70,7 @@ Goal: authorized browser automation works with manual login state.
 Deliverables:
 
 - `scripts/ops/login.py`.
-- Playwright scraper using `data/watchfacts_state.json`.
+- Playwright scraper using `data/browser/watchfacts_state.json`.
 - Clear handling for missing/expired session.
 
 Exit criteria:

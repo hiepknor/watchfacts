@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -49,14 +50,20 @@ class SearchPayloadUseCase:
     ) -> SearchPayloadPage:
         results = await self.workflow.search(query)
         if self.store_results is not None:
-            self.store_results(query, results, self.result_cache_ttl_seconds)
+            await asyncio.to_thread(
+                self.store_results,
+                query,
+                results,
+                self.result_cache_ttl_seconds,
+            )
 
         visible_results = (
             results[offset : offset + limit] if limit is not None else results[offset:]
         )
         next_offset = offset + len(visible_results)
         has_more = next_offset < len(results)
-        result_page = self._generate_result_page(
+        result_page = await asyncio.to_thread(
+            self._generate_result_page,
             query=query,
             results=results,
             offset=offset,

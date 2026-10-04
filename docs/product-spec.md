@@ -68,7 +68,8 @@ There is no public search API; diagnostics call the shared runtime directly.
 - Search payload must include a short-lived `result_id` for follow-up actions.
 - Search payload must include `stable_listing_id` when a listing identity can be computed, so restart-tolerant follow-up lookup does not depend only on process memory.
 - Search payload should include `image_url` when WatchFacts provides a product image.
-- Expose readiness through `GET /healthz`; it must fail safely when shared
+- Expose liveness through `GET /livez` and readiness through `GET /readyz`
+  (`GET /healthz` remains a compatibility alias); readiness must fail safely when shared
   SQLite or result-page storage is unavailable.
 - Support issue reporting through Telegram callbacks and nonce-protected
   result-page actions.
@@ -99,7 +100,7 @@ There is no public search API; diagnostics call the shared runtime directly.
 - Rank final output by explicit quality signals first, then newest posted date descending inside the same quality group.
 - Demote missing-price and suspicious results without hiding them.
 - Persist local cache, query history, and dedupe records in SQLite.
-- Reuse `data/watchfacts_state.json` for authenticated browser state.
+- Reuse `data/browser/watchfacts_state.json` for authenticated browser state.
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
 - Support Docker deployment of `watchfacts-bot` and `watchfacts-web` from the
   shared `watchfacts:local` image.
@@ -200,7 +201,7 @@ at the start of the message or reply to a bot message.
 - OpenAI-assisted suggestions, when enabled, are schema-validated, safely logged, and never required for search availability.
 - Docker image builds successfully.
 - `make init`, `make build`, `make check`, and `make deploy` work on the production server.
-- `.env`, `data/watchfacts_state.json`, `data/bot.db`, and `logs/` stay out of git.
+- `.env`, `data/browser/`, `data/database/`, and `logs/` stay out of git.
 
 ## Open Questions
 

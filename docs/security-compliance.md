@@ -23,15 +23,15 @@ Never commit:
 - WatchFacts credentials
 - cookies
 - browser storage state
-- `data/watchfacts_state.json`
-- `data/bot.db`
+- `data/browser/watchfacts_state.json`
+- `data/database/bot.db`
 - logs containing sensitive data
 
 Use `.env.example` for placeholders only.
 
 ## Browser State
 
-`data/watchfacts_state.json` is sensitive because it can contain authenticated browser state.
+`data/browser/watchfacts_state.json` is sensitive because it can contain authenticated browser state.
 
 Rules:
 
@@ -97,7 +97,7 @@ Rules:
   database paths.
 - Store only sanitized result-page payloads in action sidecars. Do not store raw
   WatchFacts HTML, full browser responses, cookies, CSRF tokens, or
-  `data/watchfacts_state.json`.
+  `data/browser/watchfacts_state.json`.
 - Result page action errors must be safe for public display and must not include
   stack traces or config details.
 - Anyone with a live result page can use the embedded nonce. Keep result page TTL
@@ -144,7 +144,7 @@ OpenAI must never receive:
 - `OPENAI_API_KEY`
 - WatchFacts cookies
 - browser storage state
-- `data/watchfacts_state.json`
+- `data/browser/watchfacts_state.json`
 - WatchFacts passwords or credentials
 - full page HTML unless a future ADR explicitly approves it
 - deployment logs containing secrets

@@ -4,6 +4,9 @@
 
 Accepted
 
+Amended by [ADR-011](011-isolate-web-runtime.md): bot and web now use separate
+Docker targets and share only their database and result-page directories.
+
 ## Date
 
 2026-05-12

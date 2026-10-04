@@ -10,7 +10,9 @@ def test_login_settings_default_to_headed_browser(monkeypatch, tmp_path) -> None
     settings = login.load_login_settings()
 
     assert settings.headless is False
-    assert settings.browser_state_path == tmp_path / "data" / "watchfacts_state.json"
+    assert settings.browser_state_path == (
+        tmp_path / "data" / "browser" / "watchfacts_state.json"
+    )
 
 
 def test_login_settings_allow_explicit_headless_override(monkeypatch, tmp_path) -> None:

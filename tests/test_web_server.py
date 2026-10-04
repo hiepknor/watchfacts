@@ -32,6 +32,32 @@ def test_healthz_reports_web_service(monkeypatch, tmp_path) -> None:
     assert response.json() == {"status": "ok", "service": "watchfacts-web"}
 
 
+def test_livez_does_not_probe_runtime_dependencies(monkeypatch) -> None:
+    monkeypatch.setattr(
+        web_server,
+        "check_runtime_readiness",
+        lambda _settings: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+
+    response = TestClient(web_server.app).get("/livez")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "service": "watchfacts-web"}
+
+
+def test_readyz_alias_reports_web_readiness(monkeypatch, tmp_path) -> None:
+    settings = load_search_settings(
+        env={"RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages")},
+        project_root=tmp_path,
+    )
+    monkeypatch.setattr(web_server, "load_search_settings", lambda: settings)
+
+    response = TestClient(web_server.app).get("/readyz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "service": "watchfacts-web"}
+
+
 def test_healthz_reports_unready_runtime(monkeypatch, tmp_path) -> None:
     settings = load_search_settings(env={}, project_root=tmp_path)
     monkeypatch.setattr(web_server, "load_search_settings", lambda: settings)
