@@ -3,9 +3,9 @@
 This directory is the project knowledge base for humans and AI agents.
 
 Current production direction: `watchfacts-bot` is the primary user-facing
-Telegram runtime. WatchFacts search logic lives in a reusable runtime, and
-trusted MCP clients access the same pipeline through the `watchfacts-mcp` Docker
-service for structured integrations, result pages, diagnostics, and handoff.
+Telegram runtime. `watchfacts-web` serves generated result pages and bounded
+actions. Diagnostics call the shared search runtime directly; the former MCP
+transport has been retired.
 
 ## Documents
 
@@ -23,7 +23,7 @@ service for structured integrations, result pages, diagnostics, and handoff.
 | [Result Quality Scoring Spec](result-quality-scoring.md) | Next-phase ranking, matcher diagnostics, score reasons, and refactor guardrails |
 | [Production Quality Audit Spec](production-quality-audit.md) | Production query audit loop, issue classification, ambiguous price policy, and deploy verification |
 | [Data Quality Pipeline Improvement Plan](data-quality-pipeline-improvement-plan.md) | Phased plan for audit funnel exports, data contracts, fuzzy diagnostics, and dedupe evaluation |
-| [Result Page Real Actions Plan](result-page-actions-plan.md) | Phase plan for turning result-page modal buttons into real OpenWA and issue actions |
+| [Result Page Real Actions Plan](result-page-actions-plan.md) | Historical plan for result-page actions; OpenWA portions are superseded by ADR-010 |
 | [Implementation Plan](implementation-plan.md) | Ordered implementation phases and verifiable tasks |
 | [Roadmap](roadmap.md) | Milestones from foundation to production hardening |
 | [Post-Subdomain Upgrade Plan](post-subdomain-upgrade-plan.md) | Recommended upgrade sequence after moving result templates to dedicated public subdomain |
@@ -45,6 +45,8 @@ Architecture Decision Records live in [decisions/](decisions/):
 | [ADR-006](decisions/006-result-identity-and-followup-caching.md) | Separate short-lived follow-up `result_id` from durable `stable_listing_id` identity |
 | [ADR-007](decisions/007-result-page-server-side-actions.md) | Use server-side result page actions with page nonces |
 | [ADR-008](decisions/008-runtime-architecture-boundaries.md) | Adopt layered runtime architecture boundaries |
+| [ADR-009](decisions/009-retire-mcp-transport.md) | Retire MCP and keep a dedicated result-page web service |
+| [ADR-010](decisions/010-retire-openwa-handoff.md) | Retire OpenWA handoff across Telegram, result pages, and runtime diagnostics |
 
 ## Agent Usage
 
@@ -53,7 +55,8 @@ Agents should read documents selectively:
 - For new features: start with `product-spec.md`, then `technical-spec.md`, then `implementation-plan.md`.
 - For architecture redesign or boundary refactors: read `architecture-redesign.md`, ADR-008, then `technical-spec.md`.
 - For architecture review or system-risk triage: read `system-design-review.md`, then the relevant spec or ADR it references.
-- For MCP changes: read `../SOUL.md`, `technical-spec.md`, `operations.md`, and `security-compliance.md`.
+- For web/result-page changes: read `../SOUL.md`, `technical-spec.md`,
+  `operations.md`, `security-compliance.md`, ADR-009, and ADR-010.
 - For infrastructure changes: read `operations.md`, `security-compliance.md`, and ADR-004.
 - For crawler changes: read `technical-spec.md`, `security-compliance.md`, and ADR-002.
 - For matching/parser changes: read `technical-spec.md` and ADR-001.
@@ -63,9 +66,12 @@ Agents should read documents selectively:
 - For production query audits or quality gate changes: read `production-quality-audit.md`, `result-quality-scoring.md`, and `operations.md`.
 - For data pipeline quality, audit funnel exports, DuckDB/RapidFuzz diagnostics, or dedupe evidence work: read `data-quality-pipeline-improvement-plan.md`, `production-quality-audit.md`, and `result-quality-scoring.md`.
 - For feedback/reporting improvements: read `continuous-improvement.md`, `technical-spec.md`, and `security-compliance.md`.
-- For result page modal actions: read `result-page-actions-plan.md`, `technical-spec.md`, `security-compliance.md`, and ADR-007.
+- For result page modal actions: read `technical-spec.md`,
+  `security-compliance.md`, ADR-007, and ADR-010. The detailed action plan is
+  historical.
 - For OpenAI controlled refinement: read `roadmap.md` Milestone 7, `implementation-plan.md` Phase 7, `technical-spec.md`, `security-compliance.md`, and ADR-005.
-- For deploys: use `make deploy` on the server for `watchfacts-bot` + `watchfacts-mcp`, `make deploy-mcp` for MCP only, or `make deploy-bot` for bot only.
+- For deploys: use `make deploy` for bot + web, `make deploy-web` for result
+  pages only, or `make deploy-bot` for Telegram only.
 - For commits: follow `AGENTS.md` and the workflow in `contributing.md`.
 
 Do not load every document into context by default. Load the smallest set that applies to the task.

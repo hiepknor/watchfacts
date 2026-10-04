@@ -7,10 +7,6 @@ from types import SimpleNamespace
 import app.telegram_bot as telegram_bot
 from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, Settings
 from app.db import Database
-from app.openwa_handoff import (
-    OpenWAChatDraftResponse,
-    OpenWAHandoffConfig,
-)
 from app.scraper import BrowserSessionError, BrowserSessionStatus
 from app.telegram_bot import (
     EMPTY_QUERY_MESSAGE,
@@ -21,8 +17,6 @@ from app.telegram_bot import (
     ISSUE_DATABASE_KEY,
     PROCESSING_MIN_SECONDS_KEY,
     PROCESSING_MESSAGE,
-    OPENWA_HANDOFF_CONFIG_KEY,
-    OPENWA_CHAT_DRAFT_CLIENT_KEY,
     QUEUED_MESSAGE,
     SEARCH_SEMAPHORE_KEY,
     START_MESSAGE,
@@ -44,7 +38,6 @@ from app.telegram_bot import (
     ai_suggestion_command,
     ai_suggestions_command,
     ai_suggestions_export_command,
-    build_openwa_chat_draft_payload,
     cancel_command,
     error_handler,
     format_result_summary,
@@ -57,7 +50,6 @@ from app.telegram_bot import (
     format_suspicious_issues_message,
     format_suspicious_summary_message,
     handle_more_results,
-    handle_openwa_chat_draft,
     handle_feedback,
     handle_text_message,
     health_command,
@@ -220,8 +212,6 @@ def make_context(
     session_checker=None,
     result_limit: int | None = None,
     allowed_user_ids: tuple[int, ...] = (),
-    openwa_config: OpenWAHandoffConfig | None = None,
-    openwa_client=None,
     result_page_config: ResultPageConfig | None = None,
     watchfacts_url: str = "https://watchfacts.example/simon-match-making",
 ):
@@ -239,24 +229,10 @@ def make_context(
         bot_data[WATCHFACTS_SESSION_CHECKER_KEY] = session_checker
     if db_path is not None:
         bot_data[ISSUE_DATABASE_KEY] = Database(db_path)
-    if openwa_config is not None:
-        bot_data[OPENWA_HANDOFF_CONFIG_KEY] = openwa_config
-    if openwa_client is not None:
-        bot_data[OPENWA_CHAT_DRAFT_CLIENT_KEY] = openwa_client
     if result_page_config is not None:
         bot_data[RESULT_PAGE_CONFIG_KEY] = result_page_config
     bot = FakeBot()
     return SimpleNamespace(bot=bot, application=SimpleNamespace(bot=bot, bot_data=bot_data))
-
-
-def make_openwa_config(*, enabled: bool = True) -> OpenWAHandoffConfig:
-    return OpenWAHandoffConfig(
-        base_url="https://openwa.example",
-        api_key="openwa-secret",
-        dashboard_url="https://dashboard.example",
-        chat_draft_endpoint="/api/chats/drafts",
-        enabled=enabled,
-    )
 
 
 def test_build_result_refiner_shadow_records_suggestions_without_changing_output(
@@ -376,8 +352,7 @@ def test_settings_command_returns_safe_runtime_settings() -> None:
             "👤 ID chủ bot: 2\n"
             "📨 Kết quả mỗi lượt: 7\n"
             "🤖 AI mode: off\n"
-            "🧠 OpenAI model: disabled\n"
-            "💬 OpenWA chat draft: disabled\n\n"
+            "🧠 OpenAI model: disabled\n\n"
             "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
         )
     ]
@@ -792,8 +767,7 @@ def test_format_settings_message_shows_public_access() -> None:
         "👤 ID chủ bot: Không giới hạn\n"
         "📨 Kết quả mỗi lượt: 5\n"
         "🤖 AI mode: off\n"
-        "🧠 OpenAI model: disabled\n"
-        "💬 OpenWA chat draft: disabled\n\n"
+        "🧠 OpenAI model: disabled\n\n"
         "🔒 Mã bot, cookie và trạng thái trình duyệt không bao giờ hiển thị ở đây."
     )
 
@@ -825,7 +799,7 @@ def test_search_summary_includes_generated_result_page_link_when_enabled(tmp_pat
     message = FakeMessage("5712g")
     workflow = FakeWorkflow([SearchResult("5712G Used")])
     result_page_config = ResultPageConfig(
-        public_base_url="https://mcp.example/results",
+        public_base_url="https://watchfacts.example/results",
         ttl_seconds=60,
         max_results=10,
         storage_dir=tmp_path / "pages",
@@ -846,7 +820,7 @@ def test_search_summary_includes_generated_result_page_link_when_enabled(tmp_pat
     markup = message.sent_messages[-1].reply_markup
     assert len(markup.inline_keyboard) == 1
     assert markup.inline_keyboard[0][0].text == "🔗 Mở trang kết quả"
-    assert markup.inline_keyboard[0][0].url.startswith("https://mcp.example/results/")
+    assert markup.inline_keyboard[0][0].url.startswith("https://watchfacts.example/results/")
     assert context.application.bot_data.get("result_pages", {}) == {}
     assert len(list(result_page_config.storage_dir.glob("*.html"))) == 1
 
@@ -862,7 +836,7 @@ def test_search_summary_ignores_result_page_generator_failure(
     message = FakeMessage("5712g")
     workflow = FakeWorkflow([SearchResult("5712G Used")])
     result_page_config = ResultPageConfig(
-        public_base_url="https://mcp.example/results",
+        public_base_url="https://watchfacts.example/results",
         ttl_seconds=60,
         max_results=10,
         storage_dir=tmp_path / "pages",
@@ -1425,203 +1399,6 @@ def test_feedback_callback_rejects_unauthorized_user(tmp_path) -> None:
     asyncio.run(handle_feedback(SimpleNamespace(callback_query=callback), context))
 
     assert callback.answers == [UNAUTHORIZED_MESSAGE]
-
-
-def test_openwa_chat_draft_button_is_hidden_when_handoff_is_disabled() -> None:
-    message = FakeMessage("5712r")
-    workflow = FakeWorkflow([SearchResult("5712R 2016 HKD 830000")])
-    context = make_context(workflow)
-
-    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
-    result_token = message.sent_messages[-1].reply_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
-    asyncio.run(
-        handle_more_results(
-            SimpleNamespace(callback_query=FakeCallbackQuery(f"more_results:{result_token}", message)),
-            context,
-        )
-    )
-
-    result_markup = message.sent_messages[-2].reply_markup
-    button_texts = [
-        button.text
-        for row in result_markup.inline_keyboard
-        for button in row
-    ]
-    assert "💬 Gửi tin nhắn" not in button_texts
-
-
-def test_openwa_chat_draft_button_is_visible_when_handoff_is_configured() -> None:
-    message = FakeMessage("5712r")
-    workflow = FakeWorkflow([SearchResult("5712R 2016 HKD 830000")])
-    context = make_context(workflow, openwa_config=make_openwa_config())
-
-    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
-    result_token = message.sent_messages[-1].reply_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
-    asyncio.run(
-        handle_more_results(
-            SimpleNamespace(callback_query=FakeCallbackQuery(f"more_results:{result_token}", message)),
-            context,
-        )
-    )
-
-    result_markup = message.sent_messages[-2].reply_markup
-    assert result_markup.inline_keyboard[1][0].text == "💬 Gửi tin nhắn"
-    assert result_markup.inline_keyboard[1][0].callback_data.startswith("openwa_chat:")
-
-
-def test_openwa_chat_draft_callback_creates_payload_and_returns_dashboard_link() -> None:
-    message = FakeMessage("5712r")
-    workflow = FakeWorkflow(
-        [
-            SearchResult(
-                "5712R 2016 HKD 830000",
-                seller="AM.Timepiece TONY",
-                posted_date="February 14, 2026",
-                image_url="https://images.example/5712r.jpg",
-                source_url="/flash-sales/9927122",
-                raw_listing_text="raw 5712R 2016 HKD 830000",
-                seller_phone="17826241887",
-            )
-        ]
-    )
-    calls = []
-
-    async def create_chat_draft(payload):
-        calls.append(payload)
-        return OpenWAChatDraftResponse(
-            draft_id="draft-123",
-            chat_id=None,
-            dashboard_url="https://dashboard.example/chats/drafts/draft-123",
-        )
-
-    context = make_context(
-        workflow,
-        allowed_user_ids=(123,),
-        openwa_config=make_openwa_config(),
-        openwa_client=create_chat_draft,
-    )
-
-    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
-    result_token = message.sent_messages[-1].reply_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
-    asyncio.run(
-        handle_more_results(
-            SimpleNamespace(callback_query=FakeCallbackQuery(f"more_results:{result_token}", message)),
-            context,
-        )
-    )
-    openwa_data = message.sent_messages[-2].reply_markup.inline_keyboard[1][0].callback_data
-    callback = FakeCallbackQuery(openwa_data, message)
-
-    asyncio.run(handle_openwa_chat_draft(SimpleNamespace(callback_query=callback), context))
-
-    assert callback.answers == ["Đang tạo chat draft trong OpenWA..."]
-    assert len(calls) == 1
-    payload = calls[0]
-    assert payload["source"] == "watchfacts"
-    assert payload["sourceResultId"].startswith("watchfacts:")
-    assert payload["sourceUrl"] == "https://watchfacts.example/flash-sales/9927122"
-    assert payload["queryText"] == "5712r"
-    assert payload["listingText"] == "5712R 2016 HKD 830000"
-    assert payload["rawListingText"] == "raw 5712R 2016 HKD 830000"
-    assert payload["seller"] == {
-        "name": "AM.Timepiece TONY",
-        "phone": "17826241887",
-        "watchfactsId": None,
-        "profileUrl": None,
-    }
-    assert payload["product"]["title"] == "5712R 2016 HKD 830000"
-    assert payload["product"]["imageUrl"] == "https://images.example/5712r.jpg"
-    assert payload["product"]["reference"] is None
-    assert payload["origin"] == {
-        "telegramUserId": 123,
-        "telegramUsername": "dealer_user",
-        "telegramChatId": 12345,
-        "telegramMessageId": 777,
-    }
-    assert message.replies[-1] == "✅ Đã tạo chat draft trong OpenWA."
-    button = message.sent_messages[-1].reply_markup.inline_keyboard[0][0]
-    assert button.text == "Mở OpenWA"
-    assert button.url == "https://dashboard.example/chats/drafts/draft-123"
-
-
-def test_openwa_chat_draft_payload_matches_openwa_contract() -> None:
-    message = FakeMessage("5712r")
-    update = SimpleNamespace(callback_query=FakeCallbackQuery("openwa_chat:token", message))
-    long_text = "A" * 300
-
-    payload = build_openwa_chat_draft_payload(
-        update,
-        query="Q" * 600,
-        rank=1,
-        result=SearchResult(
-            long_text,
-            seller="S" * 300,
-            image_url="/media/watch.jpg",
-            source_url="/flash-sales/9927122",
-            seller_phone="+1 (782) 624-1887",
-        ),
-        watchfacts_url="https://watchfacts.example/simon-match-making",
-    )
-
-    assert payload["sourceUrl"] == "https://watchfacts.example/flash-sales/9927122"
-    assert payload["product"]["imageUrl"] == "https://watchfacts.example/media/watch.jpg"
-    assert len(payload["queryText"]) == 500
-    assert len(payload["seller"]["name"]) == 255
-    assert payload["seller"]["phone"] == "17826241887"
-    assert len(payload["product"]["title"]) == 255
-    assert payload["listingText"] == long_text
-
-
-def test_openwa_chat_draft_payload_drops_invalid_phone() -> None:
-    message = FakeMessage("5712r")
-    update = SimpleNamespace(callback_query=FakeCallbackQuery("openwa_chat:token", message))
-
-    payload = build_openwa_chat_draft_payload(
-        update,
-        query="5712r",
-        rank=1,
-        result=SearchResult(
-            "5712R 2016 HKD 830000",
-            seller="Dealer",
-            seller_phone="123",
-        ),
-        watchfacts_url="https://watchfacts.example/simon-match-making",
-    )
-
-    assert payload["seller"]["phone"] is None
-
-
-def test_openwa_chat_draft_callback_reports_failure_without_leaking_api_key(caplog) -> None:
-    message = FakeMessage("5712r")
-    workflow = FakeWorkflow([SearchResult("5712R 2016 HKD 830000")])
-    secret = "openwa-secret"
-
-    async def fail_create_chat_draft(payload):
-        raise RuntimeError(f"boom {secret}")
-
-    context = make_context(
-        workflow,
-        openwa_config=make_openwa_config(),
-        openwa_client=fail_create_chat_draft,
-    )
-
-    asyncio.run(handle_text_message(SimpleNamespace(message=message), context))
-    result_token = message.sent_messages[-1].reply_markup.inline_keyboard[0][0].callback_data.split(":", maxsplit=1)[1]
-    asyncio.run(
-        handle_more_results(
-            SimpleNamespace(callback_query=FakeCallbackQuery(f"more_results:{result_token}", message)),
-            context,
-        )
-    )
-    openwa_data = message.sent_messages[-2].reply_markup.inline_keyboard[1][0].callback_data
-    callback = FakeCallbackQuery(openwa_data, message)
-
-    with caplog.at_level(logging.INFO):
-        asyncio.run(handle_openwa_chat_draft(SimpleNamespace(callback_query=callback), context))
-
-    assert message.replies[-1] == "⚠️ Chưa kết nối được OpenWA. Thử lại sau."
-    assert secret not in message.replies[-1]
-    assert secret not in caplog.text
 
 
 def test_text_messages_fallback_to_text_when_image_is_missing() -> None:

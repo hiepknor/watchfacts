@@ -68,29 +68,18 @@ Logs must not include:
 - Avoid echoing untrusted HTML as Markdown without escaping.
 - Avoid sending too many messages for one query.
 
-## MCP Safety
+## Runtime Interface Safety
 
-- Treat MCP client prompts and Telegram messages as untrusted user input.
-- Expose only explicit WatchFacts tools to MCP clients.
-- Keep MCP tool names and schemas stable so clients do not need prompt hacks to call them.
-- Do not expose `.env`, browser state, raw cookies, OpenWA API keys, or Telegram tokens through MCP payloads.
-- Issue review tools may return only bounded, redacted raw context around the
-  stored listing. They must not return full HTML, `.env`,
-  `data/watchfacts_state.json`, cookies, or unbounded raw listings.
-- Do not let clients invent seller contact, source links, prices, product images, result ids, or OpenWA links.
-- Use only references returned by `search` for follow-up tools such as
-  `create_chat_draft` and `report_issue`: short-lived `result_id`, returned
-  `stable_listing_id`, or explicit `rank`.
-- Use `offset` / `next_offset` for pagination instead of hidden Telegram callback state.
-
-## OpenWA Safety
-
-- Store `OPENWA_API_KEY` only in `.env` or deployment secret storage.
-- Use the internal OpenWA API URL for server-to-server calls.
-- Return only safe dashboard/draft links intended for operators.
-- Do not create chat drafts without a prior WatchFacts result reference from
-  `search`: `result_id`, `stable_listing_id`, or explicit `rank`.
-- Do not invent or normalize seller phone numbers outside the data returned by WatchFacts/runtime.
+- Treat Telegram messages, result-page requests, and diagnostic inputs as
+  untrusted user input.
+- Do not expose a public search or issue-review API from `watchfacts-web`.
+- Keep search orchestration inside shared application/search modules; interfaces
+  must not reimplement matching or extraction.
+- Diagnostic payloads may include only bounded, redacted raw context. They must
+  not return full HTML, `.env`, browser state, cookies, or unbounded listings.
+- Use only runtime-generated `result_id`, `stable_listing_id`, or explicit rank
+  for follow-up actions.
+- Use `offset` / `next_offset` for pagination instead of hidden prompt state.
 
 ## Result Page Action Safety
 
@@ -101,17 +90,15 @@ Rules:
 
 - Require token validation, page TTL validation, `action_nonce` validation, and
   rate limiting before any result-page action side effect.
-- Keep OpenWA draft creation server-side. Browser code must never receive
-  `OPENWA_API_KEY`, internal OpenWA URLs, `.env` values, cookies, browser state,
-  or database paths.
+- Browser code must never receive `.env` values, cookies, browser state, or
+  database paths.
 - Store only sanitized result-page payloads in action sidecars. Do not store raw
   WatchFacts HTML, full browser responses, cookies, CSRF tokens, or
   `data/watchfacts_state.json`.
 - Result page action errors must be safe for public display and must not include
   stack traces or config details.
 - Anyone with a live result page can use the embedded nonce. Keep result page TTL
-  and action rate limits meaningful, and disable OpenWA handoff if public-link
-  action risk becomes unacceptable.
+  and action rate limits meaningful.
 - Report issue actions may record displayed listing fields and optional operator
   notes only. They must not claim access to hidden WatchFacts data that was not
   present in the result page payload.

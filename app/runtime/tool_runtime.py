@@ -3,12 +3,10 @@ from __future__ import annotations
 import logging
 import re
 import time
-import urllib.parse
 from typing import Any, Awaitable, Callable, Protocol
 
 from app.application import (
     IssueTriageUseCase,
-    OpenWAHandoffUseCase,
     ResultReferenceUseCase,
     SearchPayloadPage,
     SearchPayloadUseCase,
@@ -21,10 +19,6 @@ from app.config import (
     load_search_settings,
 )
 from app.db import Database, IssueRecord
-from app.integrations.openwa_handoff import (
-    OpenWAChatDraftResponse,
-    OpenWAHandoffConfig,
-)
 from app.results.result_pages import (
     ResultPageConfig,
     generate_result_page,
@@ -46,10 +40,6 @@ from app.integrations.watchfacts_http import (
 from app.infrastructure import ResultReferenceRepository
 
 
-OPENWA_MAX_SOURCE_URL_LENGTH = 2048
-OPENWA_MAX_QUERY_TEXT_LENGTH = 500
-OPENWA_MAX_SELLER_NAME_LENGTH = 255
-OPENWA_MAX_PRODUCT_TITLE_LENGTH = 255
 RESULT_CACHE_TTL_SECONDS = DEFAULT_SEARCH_CACHE_TTL_SECONDS
 VALID_FEEDBACK_REASONS = {"missing_info", "wrong_result", "other"}
 VALID_ISSUE_TYPES = {"all", "feedback", "suspicious"}
@@ -73,7 +63,6 @@ class SearchWorkflow(Protocol):
 
 
 SessionChecker = Callable[[Settings], Awaitable[BrowserSessionStatus]]
-ChatDraftClient = Callable[[dict[str, Any]], Awaitable[OpenWAChatDraftResponse]]
 HttpClientStatusProvider = Callable[[Settings], WatchFactsHttpClientStatus]
 
 
@@ -262,7 +251,6 @@ async def watchfacts_health_payload(
             "error": exc.__class__.__name__,
         }
 
-    openwa_config = OpenWAHandoffConfig.from_settings(active_settings)
     http_status_provider = http_client_status_provider or watchfacts_http_client_status
     if (
         http_client_status_provider is None
@@ -279,58 +267,12 @@ async def watchfacts_health_payload(
         "watchfacts_session": session_status,
         "database": database_status,
         "watchfacts_http_client": http_client_status.to_payload(),
-        "openwa": {
-            "enabled": openwa_config.enabled,
-            "ready": openwa_config.is_ready,
-        },
         "search_runtime": {
             "ready": bool(database_status["ok"]) and bool(session_status["ok"]),
             "quality_metrics": (
                 database.get_search_quality_metrics() if database_status["ok"] else {}
             ),
         },
-    }
-
-
-async def watchfacts_create_chat_draft_payload(
-    query: str,
-    result_id: str | None = None,
-    *,
-    rank: int | None = None,
-    settings: Settings | None = None,
-    workflow: SearchWorkflow | None = None,
-    openwa_client: ChatDraftClient | None = None,
-) -> dict[str, object]:
-    normalized_query = _require_text(query, "query")
-    normalized_result_id = _clean_optional_text(result_id)
-    active_settings = settings or load_search_settings()
-    stored = await _resolve_result_reference(
-        normalized_query,
-        result_id=normalized_result_id,
-        rank=rank,
-        settings=active_settings,
-        workflow=workflow,
-    )
-    resolved_result_id = _source_result_id(stored.query, stored.rank, stored.result)
-
-    payload = _build_openwa_chat_draft_payload(
-        query=stored.query,
-        rank=stored.rank,
-        result=stored.result,
-        watchfacts_url=active_settings.watchfacts_url,
-    )
-    response = await OpenWAHandoffUseCase.from_settings(
-        active_settings,
-        client=openwa_client,
-    ).create_chat_draft(payload)
-
-    return {
-        "status": "created",
-        "result_id": resolved_result_id,
-        "rank": stored.rank,
-        "draft_id": response.draft_id,
-        "chat_id": response.chat_id,
-        "dashboard_url": response.dashboard_url,
     }
 
 
@@ -617,84 +559,6 @@ def _cache_ttl_seconds(settings: Settings | None) -> int:
 
 def _source_result_id(query: str, rank: int, result: SearchResult) -> str:
     return source_result_id(query, rank, result)
-
-
-def _build_openwa_chat_draft_payload(
-    *,
-    query: str,
-    rank: int,
-    result: SearchResult,
-    watchfacts_url: str | None,
-) -> dict[str, Any]:
-    return {
-        "source": "watchfacts",
-        "sourceResultId": _source_result_id(query, rank, result),
-        "sourceUrl": _openwa_url(result.source_url, watchfacts_url),
-        "queryText": _openwa_text(query, max_length=OPENWA_MAX_QUERY_TEXT_LENGTH),
-        "listingText": result.listing_text,
-        "rawListingText": result.raw_listing_text,
-        "seller": {
-            "name": _openwa_text(result.seller, max_length=OPENWA_MAX_SELLER_NAME_LENGTH),
-            "phone": _openwa_phone(result.seller_phone),
-            "watchfactsId": None,
-            "profileUrl": None,
-        },
-        "product": {
-            "title": _openwa_text(
-                result.listing_text,
-                max_length=OPENWA_MAX_PRODUCT_TITLE_LENGTH,
-            ),
-            "reference": None,
-            "brand": None,
-            "year": None,
-            "condition": None,
-            "set": None,
-            "dial": None,
-            "priceText": None,
-            "imageUrl": _openwa_url(result.image_url, watchfacts_url),
-        },
-        "origin": {
-            "telegramUserId": None,
-            "telegramUsername": None,
-            "telegramChatId": None,
-            "telegramMessageId": None,
-        },
-    }
-
-
-def _openwa_text(value: str | None, *, max_length: int) -> str | None:
-    if value is None:
-        return None
-    normalized = value.strip()
-    if not normalized:
-        return None
-    return normalized[:max_length]
-
-
-def _openwa_url(value: str | None, watchfacts_url: str | None) -> str | None:
-    raw_value = _openwa_text(value, max_length=OPENWA_MAX_SOURCE_URL_LENGTH)
-    if raw_value is None:
-        return None
-
-    candidate = raw_value
-    parsed = urllib.parse.urlparse(candidate)
-    if not (parsed.scheme in {"http", "https"} and parsed.netloc):
-        base_url = (watchfacts_url or "").strip()
-        candidate = urllib.parse.urljoin(base_url, candidate)
-
-    parsed_candidate = urllib.parse.urlparse(candidate)
-    if parsed_candidate.scheme not in {"http", "https"} or not parsed_candidate.netloc:
-        return None
-    return candidate[:OPENWA_MAX_SOURCE_URL_LENGTH]
-
-
-def _openwa_phone(value: str | None) -> str | None:
-    if value is None:
-        return None
-    digits = "".join(character for character in value if character.isdigit())
-    if len(digits) < 8 or len(digits) > 15 or digits.startswith("0"):
-        return None
-    return digits
 
 
 def _browser_session_status_payload(status: BrowserSessionStatus) -> dict[str, object]:

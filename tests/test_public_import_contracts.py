@@ -15,8 +15,6 @@ PUBLIC_MODULE_ALIASES = {
     "app.matcher_rulebook": "app.searching.matcher_rulebook",
     "app.matcher_rules": "app.searching.matcher_rules",
     "app.matcher_token_classification": "app.searching.matcher_token_classification",
-    "app.mcp_server": "app.runtime.mcp_server",
-    "app.openwa_handoff": "app.integrations.openwa_handoff",
     "app.parser": "app.searching.parser",
     "app.query_intent": "app.searching.query_intent",
     "app.result_pages": "app.results.result_pages",
@@ -30,6 +28,7 @@ PUBLIC_MODULE_ALIASES = {
     "app.tool_runtime": "app.runtime.tool_runtime",
     "app.watchfacts_forms": "app.integrations.watchfacts_forms",
     "app.watchfacts_http": "app.integrations.watchfacts_http",
+    "app.web_server": "app.runtime.web_server",
 }
 
 
@@ -45,11 +44,11 @@ def test_public_module_imports_resolve_to_domain_implementations() -> None:
 def test_public_logger_names_remain_stable_after_module_move() -> None:
     expected_logger_names = {
         "app.ai_refiner": "app.ai_refiner",
-        "app.mcp_server": "app.mcp_server",
         "app.search": "app.search",
         "app.telegram_bot": "app.telegram_bot",
         "app.tool_runtime": "app.tool_runtime",
         "app.watchfacts_http": "app.watchfacts_http",
+        "app.web_server": "app.web_server",
     }
 
     for module_name, logger_name in expected_logger_names.items():
@@ -58,7 +57,7 @@ def test_public_logger_names_remain_stable_after_module_move() -> None:
         assert module.logger.name == logger_name
 
 
-def test_public_mcp_entrypoint_exposes_main() -> None:
-    module = importlib.import_module("app.mcp_server")
+def test_public_web_entrypoint_exposes_main() -> None:
+    module = importlib.import_module("app.web_server")
 
     assert callable(module.main)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from scripts.diagnostics.prewarm_mcp_cache import (
+from scripts.diagnostics.prewarm_search_cache import (
     PrewarmRow,
     evaluate_prewarm_alias_recall,
     prewarm_passed,
@@ -62,7 +62,7 @@ def test_renderers_emit_text_and_jsonl() -> None:
     text = render_text(rows)
     decoded = [json.loads(line) for line in render_jsonl(rows).splitlines()]
 
-    assert "MCP_PREWARM pass=warm query='5205r green' ok=true" in text
+    assert "SEARCH_PREWARM pass=warm query='5205r green' ok=true" in text
     assert "SUMMARY" in text
     assert decoded[1]["query"] == "5712r"
     assert decoded[1]["cache_hit"] is True

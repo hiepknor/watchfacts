@@ -15,22 +15,23 @@ responses, matches listings deterministically, deduplicates latest reposts, and
 returns ranked results with seller, date, source link, product image,
 short-lived result handles, and stable listing identities for follow-up lookup.
 
-The MCP bridge remains available as a supporting structured-tool integration and
-must use the shared runtime instead of reimplementing search.
+Generated result pages are served by a dedicated localhost-only web service.
+There is no public search API; diagnostics call the shared runtime directly.
 
 ## Users
 
 - Primary user: a watch trader or collector using Telegram to search WatchFacts.
-- Operator: the person who deploys `watchfacts-bot` and `watchfacts-mcp`,
+- Operator: the person who deploys `watchfacts-bot` and `watchfacts-web`,
   manages `.env`, creates the browser login session, and monitors logs.
-- Maintainer: a developer or AI agent extending crawler, parser, matcher, database, MCP tools, OpenWA handoff, or Telegram behavior.
+- Maintainer: a developer or AI agent extending crawler, parser, matcher,
+  database, result pages, feedback, or Telegram behavior.
 
 ## User Stories
 
 - As a Telegram user, I can send a model/reference query and receive relevant WatchFacts listings.
 - As a Telegram user, I can ask for more results and receive the next page without losing the original query context.
 - As a Telegram user, I can see product images when WatchFacts provides `image_url`.
-- As a Telegram user, I can open the generated result page and use copy, source, OpenWA, feedback, filtering, sorting, and export actions.
+- As a Telegram user, I can open the generated result page and use copy, source, feedback, filtering, sorting, and export actions.
 - As a Telegram user, I can include multiple terms and get listings that contain all required tokens.
 - As an operator, I can log in to WatchFacts manually once and let the bot reuse the saved session.
 - As an operator, I can run the bot locally or through Docker Compose.
@@ -56,21 +57,20 @@ must use the shared runtime instead of reimplementing search.
 10. If OpenAI controlled intelligence is enabled, runtime may record or apply a guarded suggestion only after strict validation.
 11. Runtime stores query/cache/dedupe/issue data in SQLite.
 12. Telegram returns a compact summary and generated result page when available.
-13. Result pages and MCP payloads preserve `result_id`, `stable_listing_id`,
+13. Telegram callbacks, diagnostics, and result pages preserve `result_id`, `stable_listing_id`,
     `rank`, `image_url`, `has_more`, and `next_offset` for actions and
     integrations.
 14. For "load more", the runtime reuses the same query with `offset=next_offset`.
 
 ## Functional Requirements
 
-- Expose MCP tool `search(query, limit=5, offset=0, include_similar=true)`.
 - Search payload must include pagination fields `offset`, `limit`, `has_more`, `next_offset`, and stable absolute `rank`.
 - Search payload must include a short-lived `result_id` for follow-up actions.
 - Search payload must include `stable_listing_id` when a listing identity can be computed, so restart-tolerant follow-up lookup does not depend only on process memory.
 - Search payload should include `image_url` when WatchFacts provides a product image.
-- Expose MCP tool `health` for WatchFacts session, database, OpenWA, and search readiness.
-- Expose MCP tool `create_chat_draft(query, result_id=None, rank=None)` for seller handoff through OpenWA; `result_id` may be either the short-lived `result_id` or the returned `stable_listing_id`.
-- Expose MCP issue tools `report_issue`, `list_issues`, `get_issue`, `update_issue`, and `suspicious_summary`; issue reporting should accept `result_id`, `stable_listing_id`, or `rank`.
+- Expose `GET /healthz` from the result-page web service.
+- Support issue reporting through Telegram callbacks and nonce-protected
+  result-page actions.
 - Accept plain-text Telegram messages as search queries in the primary bot.
 - When generated result pages are configured, Telegram should return a compact
   summary plus a result-page link instead of sending listing batches into the
@@ -100,10 +100,10 @@ must use the shared runtime instead of reimplementing search.
 - Persist local cache, query history, and dedupe records in SQLite.
 - Reuse `data/watchfacts_state.json` for authenticated browser state.
 - Support Docker Compose deployment with persistent `data/` and `logs/` volumes.
-- Support Docker deployment of `watchfacts-bot` and `watchfacts-mcp` from the
+- Support Docker deployment of `watchfacts-bot` and `watchfacts-web` from the
   shared `watchfacts:local` image.
 - Support Makefile deployment with `make deploy` for the standard
-  `watchfacts-bot` + `watchfacts-mcp` release, `make deploy-mcp` for MCP only,
+  `watchfacts-bot` + `watchfacts-web` release, `make deploy-web` for web only,
   and `make deploy-bot` for bot only.
 - Limit Telegram photo captions and text messages to platform-safe lengths.
 - Notify the owner in Vietnamese when WatchFacts browser session state is missing or expired.
@@ -115,8 +115,8 @@ must use the shared runtime instead of reimplementing search.
 ## Non-Functional Requirements
 
 - No LLM is required for core behavior.
-- MCP clients must not reimplement WatchFacts search logic; they should call MCP tools.
-- MCP tool output must be structured enough for clients to answer without inventing seller contact, result ids, source links, prices, product images, or OpenWA links.
+- Telegram, web routes, and diagnostics must reuse the shared search runtime
+  instead of reimplementing WatchFacts search logic.
 - Matching must be deterministic and testable.
 - Ranking must be deterministic, quality-first, and covered by regression tests.
 - Continuous improvement must be evidence collection and review, not autonomous code mutation.
@@ -156,8 +156,8 @@ must use the shared runtime instead of reimplementing search.
 | Run bot locally | `python -m app.main` |
 | Run login locally | `python scripts/ops/login.py` |
 | Deploy `watchfacts-bot` | `make deploy-bot` |
-| Deploy `watchfacts-mcp` | `make deploy-mcp` |
-| Deploy `watchfacts-bot` + `watchfacts-mcp` | `make deploy-bot-mcp` |
+| Deploy `watchfacts-web` | `make deploy-web` |
+| Deploy `watchfacts-bot` + `watchfacts-web` | `make deploy-bot-web` |
 | Deploy both services | `make deploy` |
 
 Telegram commands:
@@ -186,7 +186,8 @@ at the start of the message or reply to a bot message.
 - A Telegram user can request WatchFacts search and receive matching listings.
 - A Telegram user can ask for more results and the runtime returns the next page through `offset`.
 - Product image URLs are passed through when available and never invented.
-- A selected result can be handed off to OpenWA through `create_chat_draft`.
+- A selected result can be reported for owner review without exposing hidden
+  listing or credential data.
 - A Telegram user can send a query and receive a generated result page link, or
   matching listing batches when result pages are unavailable.
 - Matching is case-insensitive, token-based, and covered by tests.

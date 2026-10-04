@@ -1,38 +1,24 @@
 from __future__ import annotations
 
+import hmac
 import logging
 import threading
 import time
-import hmac
 from collections import defaultdict, deque
 from typing import Any, Deque
 
+from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
-from app.application import IssueTriageUseCase, OpenWAHandoffUseCase
+from app.application import IssueTriageUseCase
 from app.config import ConfigError, Settings, load_search_settings
-from app.integrations.openwa_handoff import OpenWAHandoffError
 from app.results.result_pages import (
     ResultPageConfig,
     read_result_page_action_payload,
     read_result_page_html,
 )
-from mcp.server.fastmcp import FastMCP
-
-from app.runtime.tool_runtime import (
-    watchfacts_create_chat_draft_payload,
-    watchfacts_get_issue_payload,
-    watchfacts_health_payload,
-    watchfacts_list_issues_payload,
-    watchfacts_report_issue_payload,
-    watchfacts_search_payload,
-    watchfacts_suspicious_summary_payload,
-    watchfacts_update_issue_payload,
-)
-
-
-logger = logging.getLogger("app.mcp_server")
+logger = logging.getLogger("app.web_server")
 RESULT_PAGE_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'none'; "
@@ -55,48 +41,26 @@ _RESULT_PAGE_RATE_LIMIT_BLOCKED: dict[str, float] = {}
 VALID_RESULT_PAGE_REPORT_REASONS = {"missing_info", "wrong_result", "other"}
 
 
-app = FastMCP(
-    "watchfacts",
-    host="0.0.0.0",
-    port=8765,
-    streamable_http_path="/mcp",
-)
+app = Starlette()
 
 
-@app.tool(
-    name="search",
-    description=(
-        "Search WatchFacts products. Use offset/next_offset for pagination. "
-        "Results include rank, short-lived result_id, seller, seller_phone, "
-        "image_url, and source_url."
-    ),
-)
-async def search(
-    query: str,
-    limit: int = 5,
-    offset: int = 0,
-    include_similar: bool = True,
-) -> dict[str, object]:
-    """Search WatchFacts and return a structured payload."""
-    return await watchfacts_search_payload(
-        query=query,
-        limit=limit,
-        offset=offset,
-        include_similar=include_similar,
-        include_raw=False,
-    )
+def route(path: str, *, methods: list[str]):
+    """Register a route without relying on Starlette's removed decorator API."""
+
+    def register(endpoint):
+        app.add_route(path, endpoint, methods=methods)
+        return endpoint
+
+    return register
 
 
-@app.tool(
-    name="health",
-    description="Check WatchFacts search runtime, browser session, database, and OpenWA readiness.",
-)
-async def health() -> dict[str, object]:
-    """Check whether WatchFacts runtime dependencies are ready."""
-    return await watchfacts_health_payload()
+@route("/healthz", methods=["GET"])
+async def healthz(_request: Request):
+    """Report liveness for the result-page HTTP service."""
+    return JSONResponse({"status": "ok", "service": "watchfacts-web"})
 
 
-@app.custom_route("/results/{token}", methods=["GET"], include_in_schema=False)
+@route("/results/{token}", methods=["GET"])
 async def result_page(request: Request):
     client_ip = _extract_client_ip(request)
     try:
@@ -153,55 +117,9 @@ async def result_page(request: Request):
     return PlainTextResponse("Result page not found", status_code=404)
 
 
-@app.custom_route(
-    "/results/{token}/actions/openwa-draft",
-    methods=["POST"],
-    include_in_schema=False,
-)
-async def result_page_openwa_draft_action(request: Request):
-    context = await _load_result_page_action_context(request, action="openwa-draft")
-    if isinstance(context, JSONResponse):
-        return context
-
-    item = context["item"]
-    settings = context["settings"]
-    draft_payload = _openwa_draft_payload_from_page_item(
-        query=str(context["payload"].get("query") or ""),
-        item=item,
-        watchfacts_url=settings.watchfacts_url,
-    )
-    try:
-        response = await OpenWAHandoffUseCase.from_settings(
-            settings,
-        ).create_chat_draft(draft_payload)
-    except OpenWAHandoffError:
-        logger.warning(
-            "event=result_page.openwa_failed token=%s ip=%s",
-            context["token"],
-            context["client_ip"],
-        )
-        return _action_error(
-            "openwa_unavailable",
-            "OpenWA draft creation is unavailable.",
-            status_code=503,
-        )
-
-    return JSONResponse(
-        {
-            "ok": True,
-            "status": "created",
-            "result_id": item.get("result_id"),
-            "draft_id": response.draft_id,
-            "chat_id": response.chat_id,
-            "dashboard_url": response.dashboard_url,
-        }
-    )
-
-
-@app.custom_route(
+@route(
     "/results/{token}/actions/report",
     methods=["POST"],
-    include_in_schema=False,
 )
 async def result_page_report_action(request: Request):
     context = await _load_result_page_action_context(request, action="report")
@@ -350,57 +268,6 @@ def _find_result_page_item(
     return None
 
 
-def _openwa_draft_payload_from_page_item(
-    *,
-    query: str,
-    item: dict[str, Any],
-    watchfacts_url: str,
-) -> dict[str, Any]:
-    listing_text = _optional_action_text(item.get("listing_text"))
-    return {
-        "source": "watchfacts",
-        "sourceResultId": _optional_action_text(item.get("result_id")),
-        "sourceUrl": _absolute_action_url(item.get("source_url"), watchfacts_url),
-        "queryText": _optional_action_text(query),
-        "listingText": listing_text,
-        "rawListingText": None,
-        "seller": {
-            "name": _optional_action_text(item.get("seller")),
-            "phone": _optional_action_text(item.get("seller_phone")),
-            "watchfactsId": None,
-            "profileUrl": None,
-        },
-        "product": {
-            "title": listing_text,
-            "reference": None,
-            "brand": None,
-            "year": None,
-            "condition": None,
-            "set": None,
-            "dial": None,
-            "priceText": None,
-            "imageUrl": _absolute_action_url(item.get("image_url"), watchfacts_url),
-        },
-        "origin": {
-            "telegramUserId": None,
-            "telegramUsername": None,
-            "telegramChatId": None,
-            "telegramMessageId": None,
-        },
-    }
-
-
-def _absolute_action_url(value: object, watchfacts_url: str) -> str | None:
-    raw = _optional_action_text(value)
-    if raw is None:
-        return None
-    if raw.startswith(("http://", "https://")):
-        return raw
-    from urllib.parse import urljoin
-
-    return urljoin(watchfacts_url, raw)
-
-
 def _safe_issue_payload(issue) -> dict[str, object] | None:
     if issue is None:
         return None
@@ -444,124 +311,15 @@ def _int_value(value: object, *, fallback: int) -> int:
         return fallback
 
 
-@app.tool(
-    name="create_chat_draft",
-    description=(
-        "Create an OpenWA chat draft for a WatchFacts search result. "
-        "Pass the short-lived result_id from search when available, or pass rank "
-        "when the user says a result number such as 'ket qua 20'. Do not use "
-        "terminal/docker for this."
-    ),
-)
-async def create_chat_draft(
-    query: str,
-    result_id: str | None = None,
-    rank: int | None = None,
-) -> dict[str, object]:
-    """Create an OpenWA chat draft from a prior search result."""
-    return await watchfacts_create_chat_draft_payload(
-        query=query,
-        result_id=result_id,
-        rank=rank,
-    )
-
-
-@app.tool(
-    name="report_issue",
-    description=(
-        "Report a missing-info or wrong-result issue for a WatchFacts search result. "
-        "Pass the short-lived result_id from search when available, or pass rank "
-        "when the user refers to a result number."
-    ),
-)
-async def report_issue(
-    query: str,
-    reason: str,
-    result_id: str | None = None,
-    rank: int | None = None,
-    notes: str | None = None,
-) -> dict[str, object]:
-    """Record result feedback for owner review."""
-    return await watchfacts_report_issue_payload(
-        query=query,
-        result_id=result_id,
-        rank=rank,
-        reason=reason,
-        notes=notes,
-    )
-
-
-@app.tool(
-    name="list_issues",
-    description="List WatchFacts feedback and suspicious QA issues by status.",
-)
-def list_issues(
-    issue_type: str = "all",
-    limit: int = 20,
-    min_severity: int | None = None,
-    status: str = "open",
-) -> dict[str, object]:
-    """List WatchFacts issue queue items."""
-    return watchfacts_list_issues_payload(
-        issue_type=issue_type,
-        limit=limit,
-        min_severity=min_severity,
-        status=status,
-    )
-
-
-@app.tool(
-    name="get_issue",
-    description="Get one WatchFacts issue by reference such as F1 or S1.",
-)
-def get_issue(
-    issue_ref: str,
-    issue_type: str | None = None,
-    include_raw_context: bool = True,
-) -> dict[str, object]:
-    """Get one feedback or suspicious issue."""
-    return watchfacts_get_issue_payload(
-        issue_ref=issue_ref,
-        issue_type=issue_type,
-        include_raw_context=include_raw_context,
-    )
-
-
-@app.tool(
-    name="update_issue",
-    description="Mark a WatchFacts issue as open, fixed, or ignored.",
-)
-def update_issue(
-    issue_ref: str,
-    status: str,
-    notes: str | None = None,
-    issue_type: str | None = None,
-) -> dict[str, object]:
-    """Update feedback or suspicious issue status."""
-    return watchfacts_update_issue_payload(
-        issue_ref=issue_ref,
-        status=status,
-        notes=notes,
-        issue_type=issue_type,
-    )
-
-
-@app.tool(
-    name="suspicious_summary",
-    description="Summarize open WatchFacts auto-QA suspicious issues.",
-)
-def suspicious_summary(limit: int = 20) -> dict[str, object]:
-    """Summarize suspicious issue backlog by reason and severity."""
-    return watchfacts_suspicious_summary_payload(limit=limit)
-
-
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    logger.info("starting watchfacts mcp server on http://0.0.0.0:8765/mcp")
-    app.run(transport="streamable-http")
+    import uvicorn
+
+    logger.info("starting watchfacts web server on http://0.0.0.0:8766")
+    uvicorn.run(app, host="0.0.0.0", port=8766)
 
 
 if __name__ == "__main__":

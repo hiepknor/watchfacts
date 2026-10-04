@@ -31,16 +31,20 @@ services:
         max-file: "5"
     command: ["python", "-m", "app.main"]
 
-  watchfacts-mcp:
+  watchfacts-web:
     build:
       context: .
       dockerfile: Dockerfile
     image: ${IMAGE:-watchfacts:local}
-    container_name: watchfacts-mcp
+    container_name: watchfacts-web
     restart: unless-stopped
     env_file:
       - path: .env
         required: false
+    environment:
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "127.0.0.1:8765:8766"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -52,7 +56,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import socket; socket.create_connection(('127.0.0.1', 8765), 5).close()",
+          "import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8766/healthz', timeout=5); payload = json.load(response); raise SystemExit(0 if response.status == 200 and payload.get('status') == 'ok' else 1)",
         ]
       interval: 30s
       timeout: 10s
@@ -63,4 +67,4 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
-    command: ["python", "-m", "app.mcp_server"]
+    command: ["python", "-m", "app.web_server"]

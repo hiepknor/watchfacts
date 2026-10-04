@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.search_contracts import validate_search_payload
+from app.runtime.tool_runtime import watchfacts_search_payload
 
 
 DEFAULT_SMOKE_QUERIES = (
@@ -25,7 +25,6 @@ DEFAULT_SMOKE_QUERIES = (
 
 async def run_smoke(
     *,
-    url: str,
     queries: list[str],
     limit: int,
     timeout_seconds: float,
@@ -35,7 +34,6 @@ async def run_smoke(
     for query in queries:
         try:
             payload = await _call_search(
-                url=url,
                 query=query,
                 limit=limit,
                 timeout_seconds=timeout_seconds,
@@ -44,76 +42,50 @@ async def run_smoke(
         except Exception as exc:
             failures += 1
             print(
-                f"MCP_SMOKE query={query!r} ok=false error_type={exc.__class__.__name__}"
+                f"RUNTIME_SMOKE query={query!r} ok=false error_type={exc.__class__.__name__}"
             )
             continue
 
         if errors:
             failures += 1
             print(
-                f"MCP_SMOKE query={query!r} ok=false errors={json.dumps(errors)}"
+                f"RUNTIME_SMOKE query={query!r} ok=false errors={json.dumps(errors)}"
             )
             continue
 
         print(
-            "MCP_SMOKE "
+            "RUNTIME_SMOKE "
             f"query={query!r} ok=true "
             f"result_count={payload.get('result_count')} "
             f"total_count={payload.get('total_count')} "
             f"has_more={payload.get('has_more')}"
         )
 
-    print(f"SUMMARY mcp_smoke_passed={len(queries) - failures}/{len(queries)}")
+    print(f"SUMMARY runtime_smoke_passed={len(queries) - failures}/{len(queries)}")
     return 0 if failures == 0 else 1
 
 
 async def _call_search(
     *,
-    url: str,
     query: str,
     limit: int,
     timeout_seconds: float,
 ) -> dict[str, Any]:
-    from mcp import ClientSession
-    from mcp.client.streamable_http import streamablehttp_client
-
-    async with streamablehttp_client(
-        url,
+    return await asyncio.wait_for(
+        watchfacts_search_payload(
+            query=query,
+            limit=limit,
+            offset=0,
+            include_similar=False,
+            include_raw=False,
+        ),
         timeout=timeout_seconds,
-        sse_read_timeout=timeout_seconds,
-    ) as (read_stream, write_stream, _get_session_id):
-        async with ClientSession(read_stream, write_stream) as session:
-            await session.initialize()
-            result = await session.call_tool(
-                "search",
-                {
-                    "query": query,
-                    "limit": limit,
-                    "offset": 0,
-                    "include_similar": False,
-                },
-            )
-    if result.isError:
-        raise RuntimeError("MCP search tool returned an error")
-    if result.structuredContent is not None:
-        return dict(result.structuredContent)
-    for item in result.content:
-        text = getattr(item, "text", None)
-        if isinstance(text, str):
-            decoded = json.loads(text)
-            if isinstance(decoded, dict):
-                return decoded
-    raise RuntimeError("MCP search tool did not return a structured object")
+    )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Smoke-test the WatchFacts MCP search tool response shape."
-    )
-    parser.add_argument(
-        "--url",
-        default=os.environ.get("MCP_SMOKE_URL", "http://127.0.0.1:8765/mcp"),
-        help="Streamable HTTP MCP URL.",
+        description="Smoke-test the shared WatchFacts search runtime response shape."
     )
     parser.add_argument(
         "--query",
@@ -137,7 +109,6 @@ def main() -> int:
     queries = _dedupe_queries(args.queries or list(DEFAULT_SMOKE_QUERIES))
     return asyncio.run(
         run_smoke(
-            url=args.url,
             queries=queries,
             limit=args.limit,
             timeout_seconds=args.timeout_seconds,

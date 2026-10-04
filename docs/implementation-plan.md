@@ -1090,7 +1090,8 @@ Likely files:
 
 ## Phase 12: MCP Runtime
 
-Status: complete.
+Status: superseded by [ADR-009](decisions/009-retire-mcp-transport.md). This
+section is retained as historical implementation evidence.
 
 ### Task 12.1: Complete MCP Bridge
 
@@ -1134,7 +1135,9 @@ Acceptance:
 
 ## Phase 13: Result Page Real Actions
 
-Status: complete.
+Status: partially superseded by
+[ADR-010](decisions/010-retire-openwa-handoff.md). The OpenWA route and UI were
+removed; the sidecar, nonce validation, rate limiting, and report action remain.
 
 This phase is implemented. Keep [Result Page Real Actions Plan](result-page-actions-plan.md)
 and [ADR-007](decisions/007-result-page-server-side-actions.md) as the detailed

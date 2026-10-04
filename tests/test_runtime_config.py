@@ -10,7 +10,6 @@ def test_render_text_emits_only_safe_runtime_keys() -> None:
 
     assert "search_cache_ttl_seconds=value-0" in text
     assert "telegram_bot_token" not in text
-    assert "openwa_api_key" not in text
     assert "openai_api_key" not in text
 
 
@@ -18,7 +17,6 @@ def test_safe_runtime_config_payload_omits_secrets(monkeypatch, tmp_path) -> Non
     settings = runtime_config.load_search_settings(
         env={
             "OPENAI_API_KEY": "secret-openai",
-            "OPENWA_API_KEY": "secret-openwa",
             "SEARCH_CACHE_TTL_SECONDS": "1800",
             "SEARCH_RETRIEVAL_CONCURRENCY": "2",
         },
@@ -31,4 +29,3 @@ def test_safe_runtime_config_payload_omits_secrets(monkeypatch, tmp_path) -> Non
     assert payload["search_cache_ttl_seconds"] == 1800
     assert payload["search_retrieval_concurrency"] == 2
     assert "openai_api_key" not in payload
-    assert "openwa_api_key" not in payload

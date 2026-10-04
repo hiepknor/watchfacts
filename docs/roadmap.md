@@ -315,7 +315,12 @@ Detailed spec:
 
 ## Milestone 11: MCP Bridge And Runtime Decoupling
 
-Status: complete.
+Status: superseded by [ADR-009](decisions/009-retire-mcp-transport.md). The
+bridge was completed historically and later retired; Telegram and the standalone
+result-page web service now use the shared runtime directly.
+
+The historical OpenWA handoff deliverables below were also retired by
+[ADR-010](decisions/010-retire-openwa-handoff.md).
 
 Goal: let MCP clients use WatchFacts search without depending on Telegram
 handlers or Telegram formatting.

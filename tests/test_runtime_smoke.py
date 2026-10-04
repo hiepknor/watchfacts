@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.search_contracts import validate_search_diagnostics
-from scripts.diagnostics.mcp_smoke import validate_search_payload
+from scripts.diagnostics.runtime_smoke import validate_search_payload
 
 
 def test_validate_search_payload_accepts_required_search_shape() -> None:

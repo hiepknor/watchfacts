@@ -50,7 +50,7 @@ RESULT_PAGE_TEMPLATE_PATH = APP_ROOT / "templates" / "result_page.html"
 RESULT_PAGE_STATIC_DIR = APP_ROOT / "static"
 RESULT_PAGE_CSS_PATH = RESULT_PAGE_STATIC_DIR / "result_page.css"
 RESULT_PAGE_JS_PATH = RESULT_PAGE_STATIC_DIR / "result_page.js"
-RESULT_PAGE_SCHEMA_VERSION = 1
+RESULT_PAGE_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -141,7 +141,6 @@ def generate_result_page(
         "result_page_schema_version": RESULT_PAGE_SCHEMA_VERSION,
         "actions": {
             "action_nonce": action_nonce,
-            "openwa_draft_url": f"{active_config.public_base_url.rstrip('/')}/{token}/actions/openwa-draft",
             "report_url": f"{active_config.public_base_url.rstrip('/')}/{token}/actions/report",
         },
         "results": page_results,
@@ -230,6 +229,17 @@ def read_result_page_html(
         cleanup_expired_result_pages(active_config, now=now)
         return ResultPageRead(status_code=410)
 
+    sidecar_path = _sidecar_path(active_config, token)
+    sidecar = _read_result_page_sidecar(sidecar_path)
+    if sidecar is None:
+        _unlink_page_files(active_config, token)
+        cleanup_expired_result_pages(active_config, now=now)
+        return ResultPageRead(status_code=404)
+    if not _sidecar_uses_current_schema(sidecar):
+        _unlink_page_files(active_config, token)
+        cleanup_expired_result_pages(active_config, now=now)
+        return ResultPageRead(status_code=410)
+
     cleanup_expired_result_pages(active_config, now=now)
     return ResultPageRead(
         status_code=200,
@@ -262,25 +272,46 @@ def read_result_page_action_payload(
         cleanup_expired_result_pages(active_config, now=now)
         return ResultPageActionRead(status_code=410, error="expired")
 
-    try:
-        sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    sidecar = _read_result_page_sidecar(sidecar_path)
+    if sidecar is None:
         return ResultPageActionRead(status_code=404, error="invalid_sidecar")
 
-    if not isinstance(sidecar, dict):
-        return ResultPageActionRead(status_code=404, error="invalid_sidecar")
     action_nonce = sidecar.get("action_nonce")
     payload = sidecar.get("payload")
     if not isinstance(action_nonce, str) or not action_nonce:
         return ResultPageActionRead(status_code=404, error="invalid_sidecar")
     if not isinstance(payload, dict):
         return ResultPageActionRead(status_code=404, error="invalid_sidecar")
+    if not _sidecar_uses_current_schema(sidecar):
+        _unlink_page_files(active_config, token)
+        cleanup_expired_result_pages(active_config, now=now)
+        return ResultPageActionRead(status_code=410, error="incompatible_schema")
 
     cleanup_expired_result_pages(active_config, now=now)
     return ResultPageActionRead(
         status_code=200,
         payload=payload,
         action_nonce=action_nonce,
+    )
+
+
+def _read_result_page_sidecar(path: Path) -> dict[str, Any] | None:
+    try:
+        sidecar = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return sidecar if isinstance(sidecar, dict) else None
+
+
+def _sidecar_uses_current_schema(sidecar: dict[str, Any]) -> bool:
+    payload = sidecar.get("payload")
+    if not isinstance(payload, dict):
+        return False
+    version = payload.get("result_page_schema_version")
+    return (
+        isinstance(version, int)
+        and not isinstance(version, bool)
+        and version == RESULT_PAGE_SCHEMA_VERSION
     )
 
 

@@ -6,8 +6,8 @@ import json
 import sqlite3
 import sys
 
-import scripts.diagnostics.benchmark_mcp_queries as benchmark_module
-from scripts.diagnostics.benchmark_mcp_queries import (
+import scripts.diagnostics.benchmark_search_queries as benchmark_module
+from scripts.diagnostics.benchmark_search_queries import (
     DEFAULT_ALIAS_TOTAL_DELTA_RATIO,
     BenchmarkRow,
     COLD_PATH_BUDGET_QUERIES,
@@ -280,7 +280,7 @@ def test_renderers_emit_terminal_markdown_and_jsonl_reports() -> None:
     markdown = render_markdown(rows)
     jsonl = render_jsonl(rows)
 
-    assert "MCP_BENCH query='5205r green' run=2 ok=true" in text
+    assert "SEARCH_BENCH query='5205r green' run=2 ok=true" in text
     assert "canonical='5205r green'" in text
     assert "brands=patek_philippe:reference" in text
     assert "descriptors=required:green;optional:2026;conflict:blue" in text
@@ -499,7 +499,6 @@ def test_run_benchmark_repeats_each_deduped_query(monkeypatch) -> None:
 
     rows = asyncio.run(
         benchmark_module.run_benchmark(
-            url="http://127.0.0.1:8765/mcp",
             queries=["5205r green", "5205R GREEN", "Lange 1"],
             limit=3,
             timeout_seconds=1,
@@ -541,7 +540,6 @@ def test_run_benchmark_can_clear_search_cache_before_each_query(
     db_path = tmp_path / "bot.db"
     rows = asyncio.run(
         benchmark_module.run_benchmark(
-            url="http://127.0.0.1:8765/mcp",
             queries=["5205r green", "Lange 1"],
             limit=3,
             timeout_seconds=1,

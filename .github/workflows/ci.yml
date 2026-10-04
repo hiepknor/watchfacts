@@ -82,4 +82,4 @@ jobs:
           else
             COMPOSE_BIN="docker compose"
           fi
-          $COMPOSE_BIN -f docker-compose.yml -f docker-compose.watchfacts-mcp.yml config >/dev/null
+          $COMPOSE_BIN -f docker-compose.yml config >/dev/null

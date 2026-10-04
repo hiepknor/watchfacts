@@ -1,5 +1,9 @@
 # Result Page Real Actions Plan
 
+Status: historical. The OpenWA portions were retired by
+[ADR-010](decisions/010-retire-openwa-handoff.md); nonce-protected issue
+reporting remains active.
+
 ## Purpose
 
 Turn the result-page detail modal from a copy-helper surface into a real action

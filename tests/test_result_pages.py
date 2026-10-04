@@ -22,7 +22,7 @@ from app.result_pages import (
 from app.search_result import SearchResult
 
 
-def make_config(tmp_path, *, public_base_url: str = "https://mcp.example/results"):
+def make_config(tmp_path, *, public_base_url: str = "https://watchfacts.example/results"):
     return ResultPageConfig(
         public_base_url=public_base_url,
         ttl_seconds=60,
@@ -238,23 +238,26 @@ def test_render_result_page_template_includes_product_grid_card_hooks() -> None:
     assert "@media (min-width: 761px) and (max-width: 1024px)" in html
     assert "@media (max-width: 760px)" in html
     assert "@media (max-width: 420px)" in html
-    assert "grid-template-columns: repeat(3, minmax(5.25rem, 5.25rem));" in html
+    assert "grid-template-columns: repeat(2, minmax(5.25rem, 5.25rem));" in html
+    assert "grid-template-columns: minmax(5.25rem, max-content);" in html
     assert ".result-actions-primary .source-link,\n    .results.density-dense .result-actions-primary .source-link" in html
     assert ".result-actions-primary .source-link,\n      .results.density-dense .result-actions-primary .source-link {\n        display: none;" in html
     assert re.search(
         r"@media \(max-width: 1024px\)\s*\{\s*"
+        r"\.result-actions-primary,\s*"
+        r"\.results\.density-dense \.result-actions-primary\s*\{\s*"
+        r"grid-template-columns: minmax\(5\.25rem, max-content\);\s*\}\s*"
         r"\.result-actions-primary \.source-link,\s*"
-        r"\.result-actions-primary \.action-button\[disabled\]:not\(\.openwa-action\),\s*"
+        r"\.result-actions-primary \.action-button\[disabled\],\s*"
         r"\.results\.density-dense \.result-actions-primary \.source-link,\s*"
         r"\.results\.density-dense \.result-actions-primary "
-        r"\.action-button\[disabled\]:not\(\.openwa-action\)\s*\{\s*"
+        r"\.action-button\[disabled\]\s*\{\s*"
         r"display: none;",
         html,
     )
-    assert "order: 3;" in html
+    assert "order: 2;" in html
     assert ".result-actions-primary .action-button:first-child" in html
     assert "order: 1;" in html
-    assert "order: 2;" in html
     assert "min-width: 5.25rem;" in html
     assert ".result-card.no-image .thumb,\n      .result-card.image-load-failed .thumb," in html
     assert "place-items: center;" in html
@@ -334,11 +337,10 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert "createModalFact" not in html
     assert 'class="modal-fact-label"' not in html
     assert 'Report missing details or a wrong match for review.' in html
-    assert 'function createOpenWaDraftAction(item)' not in html
+    assert "OpenWA" not in html
     assert 'function createReportIssueForm(item)' in html
     assert 'function postResultAction(url, item, extra = {})' in html
     assert 'submit.textContent = "Submitting...";' in html
-    assert 'makeButton("OpenWA", "Create an OpenWA chat draft"' in html
     assert '"Submit report"' in html
     assert 'function createModalQuickFacts(item)' not in html
     assert 'const hero = createNode("div", "modal-overview");' in html
@@ -356,26 +358,12 @@ def test_render_result_page_template_wires_result_details_modal_behavior() -> No
     assert "border-right-style: dashed" in html
     assert "position: relative;" in html
     assert 'createNode("div", "modal-section-label", "Listing snapshot")' in html
-    assert 'createNode("div", "action-card-title", "OpenWA handoff")' not in html
     assert 'createNode("div", "action-card-title", "Quality feedback")' in html
-    assert "const openWaDraftStateByResultId = new Map();" in html
-    assert "function createOpenWaDraftButton(item, options = {})" in html
-    assert "function handleOpenWaDraft(item)" in html
-    assert 'primary.appendChild(createOpenWaDraftButton(item, { compact: true }));' in html
-    assert 'button.dataset.openwaActionButton = "true";' in html
-    assert 'status: "success",' in html
-    assert ".openwa-action" in html
-    assert ".openwa-action[disabled]" in html
-    assert "display: inline-flex;" in html
-    assert 'button.textContent = "Retry";' in html
-    assert 'button.textContent = "Retry OpenWA";' not in html
-    assert ".action-button[disabled] {\n        display: none;" not in html
-    assert ".action-button[disabled]:not(.openwa-action)" in html
+    assert ".action-button[disabled]" in html
     assert '"wrong_result", "Wrong result"' in html
     assert '"missing_info", "Missing info"' in html
     assert 'copyValue: text(item.source_url)' in html
     assert 'makeButton("Copy", "Copy " + value.copyLabel' in html
-    assert 'makeButton("Copy OpenWA", "Copy prompt to create an OpenWA chat draft"' not in html
     assert 'makeButton("Copy Report", "Copy prompt to report this result"' in html
     assert '"reason: wrong_result | missing_info | other"' in html
     assert 'const idIcon = createNode("span", "result-id-icon", "ID: ");' in html
@@ -860,8 +848,7 @@ def test_render_result_page_template_action_buttons_handle_success_and_report_er
         "result_count": 1,
         "actions": {
             "action_nonce": "nonce-1",
-            "openwa_draft_url": "https://mcp.example/results/token/actions/openwa-draft",
-            "report_url": "https://mcp.example/results/token/actions/report",
+            "report_url": "https://watchfacts.example/results/token/actions/report",
         },
         "results": [
             {
@@ -892,15 +879,6 @@ def test_render_result_page_template_action_buttons_handle_success_and_report_er
           window.fetch = async (url, options) => {
             const body = JSON.parse(options.body);
             window.__fetchCalls.push({ url, body });
-            if (String(url).includes("openwa-draft")) {
-              return {
-                ok: true,
-                json: async () => ({
-                  ok: true,
-                  dashboard_url: "https://openwa.example/drafts/1"
-                })
-              };
-            }
             if (String(url).includes("report")) {
               return {
                 ok: false,
@@ -913,28 +891,19 @@ def test_render_result_page_template_action_buttons_handle_success_and_report_er
             return { ok: false, json: async () => ({ ok: false }) };
           };
 
-          const cardOpenWa = document.querySelector("[data-openwa-action-button='true']");
-          cardOpenWa.click();
+          document.querySelector('button[aria-label="Show result details"]').click();
+          const modal = document.querySelector("#resultModal");
+          const reportSubmit = modal.querySelector(".report-form button[type='submit']");
+          reportSubmit.click();
 
           setTimeout(() => {
-            output.openWaText = document.querySelector("[data-openwa-action-button='true']").textContent;
-            output.openWaClass = document.querySelector("[data-openwa-action-button='true']").className;
-            output.openWaCall = window.__fetchCalls[0];
-
-            document.querySelector('button[aria-label="Show result details"]').click();
-            const modal = document.querySelector("#resultModal");
-            const reportSubmit = modal.querySelector(".report-form button[type='submit']");
-            reportSubmit.click();
-
-            setTimeout(() => {
-              output.reportStatus = modal.querySelector(".modal-action-status").textContent;
-              output.reportDisabledAfterError = reportSubmit.disabled;
-              output.reportCall = window.__fetchCalls[1];
-              const node = document.createElement("pre");
-              node.id = "actionAudit";
-              node.textContent = JSON.stringify(output);
-              document.body.appendChild(node);
-            }, 0);
+            output.reportStatus = modal.querySelector(".modal-action-status").textContent;
+            output.reportDisabledAfterError = reportSubmit.disabled;
+            output.reportCall = window.__fetchCalls[0];
+            const node = document.createElement("pre");
+            node.id = "actionAudit";
+            node.textContent = JSON.stringify(output);
+            document.body.appendChild(node);
           }, 0);
         } catch (error) {
           const node = document.createElement("pre");
@@ -953,12 +922,6 @@ def test_render_result_page_template_action_buttons_handle_success_and_report_er
         filename="result-actions.html",
     )
 
-    assert behavior["openWaText"] == "Open draft"
-    assert "is-success" in behavior["openWaClass"]
-    assert behavior["openWaCall"]["body"] == {
-        "action_nonce": "nonce-1",
-        "result_id": "watchfacts-result-001",
-    }
     assert behavior["reportStatus"] == "Report failed for audit."
     assert behavior["reportDisabledAfterError"] is False
     assert behavior["reportCall"]["body"] == {
@@ -966,80 +929,6 @@ def test_render_result_page_template_action_buttons_handle_success_and_report_er
         "result_id": "watchfacts-result-001",
         "reason": "wrong_result",
         "notes": "",
-    }
-
-
-def test_render_result_page_template_openwa_falls_back_to_copy_prompt_without_actions(tmp_path) -> None:
-    payload = {
-        "query": "fallback action behavior",
-        "created_at": "2026-06-08T04:00:00Z",
-        "expires_at": "2026-06-08T05:00:00Z",
-        "total_count": 1,
-        "offset": 0,
-        "limit": 60,
-        "next_offset": None,
-        "result_count": 1,
-        "results": [
-            {
-                "rank": 1,
-                "result_id": "watchfacts-result-001",
-                "source_result_id": "watchfacts-result-001",
-                "listing_text": "5712G blue 2015 full set",
-                "seller": "Seller 1",
-                "posted_date": "June 1, 2026",
-                "image_url": None,
-                "source_url": None,
-                "seller_phone": None,
-                "similar_results": [],
-            },
-        ],
-    }
-    audit_script = """
-    <script>
-      setTimeout(() => {
-        const output = {};
-        try {
-          window.__copiedText = [];
-          Object.defineProperty(navigator, "clipboard", {
-            configurable: true,
-            value: { writeText: async value => window.__copiedText.push(value) }
-          });
-          const button = document.querySelector("[data-openwa-action-button='true']");
-          output.buttonDisabled = button.disabled;
-          output.buttonLabel = button.getAttribute("aria-label");
-          button.click();
-          setTimeout(() => {
-            output.copied = window.__copiedText.at(-1);
-            const node = document.createElement("pre");
-            node.id = "fallbackAudit";
-            node.textContent = JSON.stringify(output);
-            document.body.appendChild(node);
-          }, 0);
-        } catch (error) {
-          const node = document.createElement("pre");
-          node.id = "fallbackAudit";
-          node.textContent = JSON.stringify({ error: String(error && error.stack || error) });
-          document.body.appendChild(node);
-        }
-      }, 0);
-    </script>
-    """
-    behavior = run_result_page_browser_audit(
-        tmp_path,
-        payload=payload,
-        audit_script=audit_script,
-        audit_id="fallbackAudit",
-        filename="result-actions-fallback.html",
-    )
-
-    assert behavior == {
-        "buttonDisabled": False,
-        "buttonLabel": "Copy prompt to create an OpenWA chat draft",
-        "copied": (
-            "Create an OpenWA chat draft for this WatchFacts result.\n"
-            "query: fallback action behavior\n"
-            "result_id: watchfacts-result-001"
-        ),
     }
 
 
@@ -1211,10 +1100,10 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
     )
 
     assert page is not None
-    assert page.url.startswith("https://mcp.example/results/")
+    assert page.url.startswith("https://watchfacts.example/results/")
     assert page.expires_at == "2026-06-07T12:01:00Z"
     assert page.result_count == 1
-    assert page.to_payload()["schema_version"] == 1
+    assert page.to_payload()["schema_version"] == 2
 
     files = list(config.storage_dir.glob("*.html"))
     assert len(files) == 1
@@ -1238,11 +1127,10 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
     assert len(sidecar["action_nonce"]) >= 16
     assert sidecar["payload"]["actions"] == {
         "action_nonce": sidecar["action_nonce"],
-        "openwa_draft_url": f"{page.url}/actions/openwa-draft",
         "report_url": f"{page.url}/actions/report",
     }
     assert sidecar["payload"]["query"] == "5712g </script><script>alert(1)</script>"
-    assert sidecar["payload"]["result_page_schema_version"] == 1
+    assert sidecar["payload"]["result_page_schema_version"] == 2
     assert (
         sidecar["payload"]["results"][0]["source_url"]
         == "https://watchfacts.example/listing/5712g"
@@ -1285,7 +1173,6 @@ def test_read_result_page_action_payload_reports_sidecar_states(tmp_path) -> Non
     assert found.payload["query"] == "5712g"
     assert found.payload["actions"] == {
         "action_nonce": found.action_nonce,
-        "openwa_draft_url": f"{page.url}/actions/openwa-draft",
         "report_url": f"{page.url}/actions/report",
     }
     assert found.payload["results"][0]["result_id"].startswith("watchfacts:")
@@ -1330,6 +1217,60 @@ def test_expired_result_page_cleanup_removes_sidecar(tmp_path) -> None:
     assert not (config.storage_dir / f"{token}.json").exists()
 
 
+def test_result_page_schema_migration_retires_old_html_and_action_sidecars(
+    tmp_path,
+) -> None:
+    config = make_config(tmp_path)
+    now = datetime(2026, 6, 7, 12, 0, tzinfo=timezone.utc)
+
+    html_page = generate_result_page(
+        query="5712g",
+        results=[SearchResult("5712G")],
+        now=now,
+        config=config,
+    )
+    assert html_page is not None
+    html_token = html_page.url.rsplit("/", maxsplit=1)[1]
+    html_sidecar_path = config.storage_dir / f"{html_token}.json"
+    html_sidecar = json.loads(html_sidecar_path.read_text(encoding="utf-8"))
+    html_sidecar["payload"]["result_page_schema_version"] = 1
+    html_sidecar_path.write_text(json.dumps(html_sidecar), encoding="utf-8")
+
+    retired_html = read_result_page_html(
+        html_token,
+        config=config,
+        now=now + timedelta(seconds=30),
+    )
+
+    assert retired_html.status_code == 410
+    assert not (config.storage_dir / f"{html_token}.html").exists()
+    assert not html_sidecar_path.exists()
+
+    action_page = generate_result_page(
+        query="5712r",
+        results=[SearchResult("5712R")],
+        now=now,
+        config=config,
+    )
+    assert action_page is not None
+    action_token = action_page.url.rsplit("/", maxsplit=1)[1]
+    action_sidecar_path = config.storage_dir / f"{action_token}.json"
+    action_sidecar = json.loads(action_sidecar_path.read_text(encoding="utf-8"))
+    action_sidecar["payload"]["result_page_schema_version"] = 1
+    action_sidecar_path.write_text(json.dumps(action_sidecar), encoding="utf-8")
+
+    retired_action = read_result_page_action_payload(
+        action_token,
+        config=config,
+        now=now + timedelta(seconds=30),
+    )
+
+    assert retired_action.status_code == 410
+    assert retired_action.error == "incompatible_schema"
+    assert not (config.storage_dir / f"{action_token}.html").exists()
+    assert not action_sidecar_path.exists()
+
+
 def test_generate_result_page_returns_none_when_disabled(tmp_path) -> None:
     config = make_config(tmp_path, public_base_url="")
 
@@ -1367,4 +1308,23 @@ def test_read_result_page_html_reports_missing_and_expired_tokens(tmp_path) -> N
     expired = read_result_page_html(token, config=config, now=now + timedelta(seconds=61))
     assert expired.status_code == 410
     assert expired.html is None
+    assert not (config.storage_dir / f"{token}.html").exists()
+
+
+def test_read_result_page_html_rejects_page_without_sidecar(tmp_path) -> None:
+    config = make_config(tmp_path)
+    now = datetime(2026, 6, 7, 12, 0, tzinfo=timezone.utc)
+    page = generate_result_page(
+        query="5712g",
+        results=[SearchResult("5712G")],
+        now=now,
+        config=config,
+    )
+    assert page is not None
+    token = page.url.rsplit("/", maxsplit=1)[1]
+    (config.storage_dir / f"{token}.json").unlink()
+
+    missing_sidecar = read_result_page_html(token, config=config, now=now)
+
+    assert missing_sidecar.status_code == 404
     assert not (config.storage_dir / f"{token}.html").exists()

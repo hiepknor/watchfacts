@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.diagnostics.benchmark_mcp_queries import (
+from scripts.diagnostics.benchmark_search_queries import (
     DEFAULT_ALIAS_TOTAL_DELTA_RATIO,
     DEFAULT_BENCHMARK_QUERIES,
     _call_search,
@@ -63,7 +63,6 @@ class PrewarmAliasRecallCheck:
 
 async def prewarm_queries(
     *,
-    url: str,
     queries: list[str],
     limit: int,
     timeout_seconds: float,
@@ -73,7 +72,6 @@ async def prewarm_queries(
     deduped = _dedupe_queries(queries)
     rows.extend(
         await _run_pass(
-            url=url,
             queries=deduped,
             limit=limit,
             timeout_seconds=timeout_seconds,
@@ -83,7 +81,6 @@ async def prewarm_queries(
     if verify_hot:
         rows.extend(
             await _run_pass(
-                url=url,
                 queries=deduped,
                 limit=limit,
                 timeout_seconds=timeout_seconds,
@@ -95,7 +92,6 @@ async def prewarm_queries(
 
 async def _run_pass(
     *,
-    url: str,
     queries: list[str],
     limit: int,
     timeout_seconds: float,
@@ -105,7 +101,6 @@ async def _run_pass(
     for query in queries:
         rows.append(
             await _prewarm_query(
-                url=url,
                 query=query,
                 limit=limit,
                 timeout_seconds=timeout_seconds,
@@ -117,7 +112,6 @@ async def _run_pass(
 
 async def _prewarm_query(
     *,
-    url: str,
     query: str,
     limit: int,
     timeout_seconds: float,
@@ -126,7 +120,6 @@ async def _prewarm_query(
     started_at = time.perf_counter()
     try:
         payload = await _call_search(
-            url=url,
             query=query,
             limit=limit,
             timeout_seconds=timeout_seconds,
@@ -194,7 +187,7 @@ def render_text(
             parts.append(f"canonical={row.canonical_query!r}")
         if row.error_type:
             parts.append(f"error_type={row.error_type}")
-        lines.append("MCP_PREWARM " + " ".join(parts))
+        lines.append("SEARCH_PREWARM " + " ".join(parts))
     lines.extend(
         _alias_recall_text_lines(
             alias_checks or (),
@@ -317,12 +310,12 @@ def _alias_recall_text_lines(
 ) -> list[str]:
     if not checks:
         if require_alias_recall:
-            return ["MCP_PREWARM_ALIAS ok=false reason=no_canonical_alias_groups"]
+            return ["SEARCH_PREWARM_ALIAS ok=false reason=no_canonical_alias_groups"]
         return []
     lines: list[str] = []
     for check in checks:
         lines.append(
-            "MCP_PREWARM_ALIAS "
+            "SEARCH_PREWARM_ALIAS "
             f"pass={check.pass_name} "
             f"canonical={check.canonical_query!r} "
             f"ok={str(check.ok).lower()} "
@@ -338,12 +331,7 @@ def _alias_recall_text_lines(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Prewarm WatchFacts MCP search cache for common production queries."
-    )
-    parser.add_argument(
-        "--url",
-        default=os.environ.get("MCP_SMOKE_URL", "http://127.0.0.1:8765/mcp"),
-        help="Streamable HTTP MCP URL.",
+        description="Prewarm WatchFacts search cache through the shared runtime."
     )
     parser.add_argument(
         "--query",
@@ -386,7 +374,6 @@ def main() -> int:
 
     rows = asyncio.run(
         prewarm_queries(
-            url=args.url,
             queries=queries,
             limit=args.limit,
             timeout_seconds=args.timeout_seconds,

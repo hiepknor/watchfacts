@@ -4,23 +4,25 @@ Project-level instructions for AI coding agents working on `watchfacts`.
 
 ## Project Summary
 
-`watchfacts` is a Python WatchFacts Telegram search runtime with an MCP bridge
-and OpenWA handoff support.
+`watchfacts` is a Python WatchFacts Telegram search runtime with generated result
+pages and feedback support.
 
 Expected behavior:
 
-- Receive a WatchFacts query from the Telegram bot primary flow, or from an MCP client.
+- Receive a WatchFacts query from the Telegram bot primary flow or direct
+  operator diagnostics.
 - Crawl the WatchFacts trading page using an authenticated Playwright session.
 - Extract listing data with deterministic parsing.
 - Match listings by query tokens and regex-assisted rules.
 - Deduplicate results.
 - Return structured ranked listing details, including `result_id`, image, listing text, seller, posted date, source, and pagination metadata.
-- Let MCP clients create OpenWA chat drafts from selected `result_id` handles.
+- Let Telegram and result-page actions record feedback from selected result
+  handles.
 
 Core constraint: this project does not require an LLM for core WatchFacts search.
 Matching and extraction logic should remain deterministic unless the user
-explicitly changes that direction. MCP clients must call the MCP runtime instead
-of reimplementing WatchFacts search in prompts.
+explicitly changes that direction. Interfaces and diagnostics must call the
+shared runtime instead of reimplementing WatchFacts search.
 
 ## Local Skills
 
@@ -60,7 +62,7 @@ The README describes this intended layout:
 app/
   main.py
   telegram_bot.py
-  mcp_server.py
+  web_server.py
   tool_runtime.py
   search_result.py
   scraper.py
@@ -73,7 +75,6 @@ app/
   result_scoring.py
   similarity.py
   issues.py
-  openwa_handoff.py
   ai_refiner.py
   match_debug.py
   dedupe.py
@@ -96,7 +97,6 @@ docs/
 logs/
 Dockerfile
 docker-compose.yml
-docker-compose.watchfacts-mcp.yml
 Makefile
 requirements.txt
 .env.example
@@ -120,21 +120,22 @@ Use these commands when the matching files exist:
 | Run Telegram bot locally | `python -m app.main` |
 | Initialize local runtime files | `make init` |
 | Build Docker image | `make build` |
-| Deploy MCP only | `make deploy-mcp` |
+| Deploy result web only | `make deploy-web` |
 | Deploy watchfacts-bot only | `make deploy-bot` |
-| Deploy watchfacts-bot and watchfacts-mcp | `make deploy` |
+| Deploy watchfacts-bot and watchfacts-web | `make deploy` |
 | Start Telegram bot Docker service | `make up` |
 | Stop Docker services | `make down` |
-| Follow MCP logs | `make mcp-logs` |
+| Follow web logs | `make web-logs` |
 | Follow Telegram bot logs | `make logs` |
 | Open container shell | `make shell` |
 | Run repository checks | `make check` |
-| Run authorized HTTPX WatchFacts smoke search | `make mcp-smoke` |
+| Run authorized HTTPX WatchFacts smoke search | `make watchfacts-http-smoke` |
+| Run shared-runtime smoke set | `make runtime-smoke` |
 
 If tests or lint commands are added later, update this file and prefer those commands for verification.
 
-The Telegram bot Docker entrypoint is `python -m app.main`. The MCP service
-entrypoint is `python -m app.mcp_server`.
+The Telegram bot Docker entrypoint is `python -m app.main`. The result-page web
+service entrypoint is `python -m app.web_server`.
 
 ## Project Documentation
 
@@ -144,7 +145,8 @@ Load docs selectively:
 
 - Project context: `SOUL.md`.
 - New features: `docs/product-spec.md`, `docs/technical-spec.md`, and `docs/implementation-plan.md`.
-- MCP changes: `SOUL.md`, `docs/technical-spec.md`, `docs/operations.md`, and `docs/security-compliance.md`.
+- Web/result-page changes: `SOUL.md`, `docs/technical-spec.md`,
+  `docs/operations.md`, `docs/security-compliance.md`, and ADR-009.
 - Crawler/auth changes: `docs/technical-spec.md`, `docs/security-compliance.md`, and `docs/decisions/002-authenticated-browser-session.md`.
 - Matching/parser/dedupe changes: `docs/technical-spec.md` and `docs/decisions/001-deterministic-matching.md`.
 - Docker/runtime changes: `docs/operations.md` and `docs/decisions/004-docker-compose-runtime.md`.
@@ -158,16 +160,13 @@ Expected `.env` keys:
 TELEGRAM_BOT_TOKEN=your_telegram_token
 WATCHFACTS_URL=https://watchfacts.com/simon-match-making
 HEADLESS=true
-ENABLE_OPENWA_CHAT_HANDOFF=false
-OPENWA_BASE_URL=
-OPENWA_API_KEY=
 ```
 
 Rules:
 
 - Never commit `.env`.
 - Never commit real Telegram tokens, WatchFacts credentials, cookies, browser state, or session files.
-- Never commit OpenWA API keys, OpenAI API keys, or MCP prefill files containing secrets.
+- Never commit OpenAI API keys or generated files containing secrets.
 - Treat `data/watchfacts_state.json` as sensitive because it contains authenticated browser state.
 - Treat `data/bot.db` as local runtime data.
 - Keep `logs/`, `.venv/`, `__pycache__/`, and generated runtime files out of commits.
@@ -198,8 +197,9 @@ If a requested change appears to weaken these boundaries, stop and surface the c
 - For Playwright code, use explicit waits and stable selectors where available.
 - For SQLite, use parameterized queries and keep schema changes documented.
 - For Telegram handlers, avoid blocking calls in async paths.
-- For MCP tools, keep tool names/schema stable and return structured payloads rather than human-only text.
-- For MCP client answers, preserve `result_id`, use `offset` / `next_offset` for pagination, and never invent seller contacts, source links, images, prices, or OpenWA links.
+- For shared runtime payloads, preserve `result_id`, use `offset` / `next_offset`
+  for pagination, and never invent seller contacts, source links, images, prices,
+  or fabricated follow-up links.
 - Preserve clear error handling around network, login/session, parsing, and Telegram API failures.
 
 ## Verification Expectations

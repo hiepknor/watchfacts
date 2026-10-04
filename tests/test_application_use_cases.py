@@ -7,14 +7,12 @@ from typing import Any
 from app.application import (
     AuditTriageUseCase,
     IssueTriageUseCase,
-    OpenWAHandoffUseCase,
     ResultReferenceUseCase,
     SearchPayloadUseCase,
     SearchUseCase,
     StoredResult,
 )
 from app.config import load_search_settings
-from app.openwa_handoff import OpenWAChatDraftResponse, OpenWAHandoffConfig
 from app.search_result import SearchResult, source_result_id, stable_listing_id
 
 
@@ -321,7 +319,7 @@ def test_search_payload_use_case_searches_stores_and_paginates_results() -> None
 
     def generate_page(**kwargs):
         result_page_calls.append(kwargs)
-        return {"url": "https://mcp.example/results/token", "result_count": 3}
+        return {"url": "https://watchfacts.example/results/token", "result_count": 3}
 
     use_case = SearchPayloadUseCase(
         workflow=workflow,
@@ -351,7 +349,7 @@ def test_search_payload_use_case_searches_stores_and_paginates_results() -> None
     assert page.visible_results == (SearchResult("5712G second"),)
     assert page.search_diagnostics == workflow.last_search_diagnostics
     assert page.result_page == {
-        "url": "https://mcp.example/results/token",
+        "url": "https://watchfacts.example/results/token",
         "result_count": 3,
     }
     assert result_page_calls == [
@@ -364,32 +362,6 @@ def test_search_payload_use_case_searches_stores_and_paginates_results() -> None
             "next_offset": 2,
         }
     ]
-
-
-def test_openwa_handoff_use_case_delegates_chat_draft_creation() -> None:
-    config = OpenWAHandoffConfig(
-        base_url="https://openwa.example",
-        api_key="test-key",
-        dashboard_url="https://dashboard.example",
-        chat_draft_endpoint="/api/chats/drafts",
-        enabled=True,
-    )
-    captured_payloads: list[dict[str, Any]] = []
-
-    async def fake_client(payload: dict[str, Any]) -> OpenWAChatDraftResponse:
-        captured_payloads.append(payload)
-        return OpenWAChatDraftResponse(
-            draft_id="draft-1",
-            chat_id="chat-1",
-            dashboard_url="https://dashboard.example/chats/drafts/draft-1",
-        )
-
-    use_case = OpenWAHandoffUseCase(config=config, client=fake_client)
-    response = asyncio.run(use_case.create_chat_draft({"source": "watchfacts"}))
-
-    assert captured_payloads == [{"source": "watchfacts"}]
-    assert response.draft_id == "draft-1"
-    assert response.chat_id == "chat-1"
 
 
 @dataclass(frozen=True)

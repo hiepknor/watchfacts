@@ -608,43 +608,6 @@
       flex: 1 1 auto;
     }
 
-    .openwa-action {
-      border-color: color-mix(in srgb, var(--listing-strong) 38%, var(--border));
-      background: var(--listing-strong);
-      color: white;
-      font-weight: 760;
-      flex: 0 1 auto;
-    }
-
-    .openwa-action:hover {
-      background: color-mix(in srgb, var(--listing-strong) 90%, black);
-      color: white;
-    }
-
-    .openwa-action.is-loading {
-      cursor: progress;
-      opacity: 0.78;
-    }
-
-    .openwa-action.is-success {
-      border-color: color-mix(in srgb, var(--success) 50%, var(--border));
-      background: color-mix(in srgb, var(--success) 16%, white);
-      color: var(--success);
-    }
-
-    .openwa-action.is-error {
-      border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
-      background: color-mix(in srgb, var(--danger) 12%, white);
-      color: var(--danger);
-    }
-
-    .openwa-action[disabled] {
-      color: var(--muted);
-      background: var(--surface);
-      border-color: var(--border);
-      opacity: 0.72;
-    }
-
     .result-details {
       min-width: 0;
       display: grid;
@@ -2515,7 +2478,7 @@
       }
 
       .results.density-dense .source-link,
-      .results.density-dense .result-actions-primary .action-button[disabled]:not(.openwa-action) {
+      .results.density-dense .result-actions-primary .action-button[disabled] {
         display: none;
       }
 
@@ -2569,9 +2532,9 @@
       }
 
       .result-actions-primary .source-link,
-      .result-actions-primary .action-button[disabled]:not(.openwa-action),
+      .result-actions-primary .action-button[disabled],
       .results.density-dense .result-actions-primary .source-link,
-      .results.density-dense .result-actions-primary .action-button[disabled]:not(.openwa-action) {
+      .results.density-dense .result-actions-primary .action-button[disabled] {
         display: none;
       }
 
@@ -2583,7 +2546,7 @@
       }
     }
 
-    /* Final action-layout pass: keep row actions stable after adding OpenWA. */
+    /* Final action-layout pass: keep row actions stable. */
     .result-actions,
     .results.density-dense .result-actions {
       grid-template-columns: minmax(0, 1fr) minmax(5.25rem, auto);
@@ -2594,7 +2557,7 @@
     .result-actions-primary,
     .results.density-dense .result-actions-primary {
       display: grid;
-      grid-template-columns: repeat(3, minmax(4.5rem, max-content));
+      grid-template-columns: repeat(2, minmax(4.5rem, max-content));
       justify-content: start;
       align-items: stretch;
       gap: 0.35rem;
@@ -2682,14 +2645,12 @@
         min-width: 4.5rem;
       }
 
-      .results.density-dense .result-actions-primary .action-button:first-child,
-      .results.density-dense .result-actions-primary .openwa-action,
-      .results.density-dense .result-actions-primary .openwa-action[disabled] {
+      .results.density-dense .result-actions-primary .action-button:first-child {
         min-width: 0;
       }
 
       .results.density-dense .result-actions-primary .source-link,
-      .results.density-dense .result-actions-primary .action-button[disabled]:not(.openwa-action) {
+      .results.density-dense .result-actions-primary .action-button[disabled] {
         display: none;
       }
     }
@@ -2706,18 +2667,11 @@
       }
 
       .result-actions-primary .source-link,
-      .result-actions-primary .action-button[disabled]:not(.openwa-action),
+      .result-actions-primary .action-button[disabled],
       .results.density-dense .result-actions-primary .source-link,
-      .results.density-dense .result-actions-primary .action-button[disabled]:not(.openwa-action) {
+      .results.density-dense .result-actions-primary .action-button[disabled] {
         display: none;
       }
-    }
-
-    .result-actions-primary .openwa-action,
-    .results.density-dense .result-actions-primary .openwa-action,
-    .result-actions-primary .openwa-action[disabled],
-    .results.density-dense .result-actions-primary .openwa-action[disabled] {
-      display: inline-flex;
     }
 
     /* Modal redesign: clean operational detail sheet. */
@@ -2956,32 +2910,19 @@
     .result-actions-primary,
     .results.density-dense .result-actions-primary {
       display: grid;
-      grid-template-columns: repeat(3, minmax(5.25rem, 5.25rem));
+      grid-template-columns: repeat(2, minmax(5.25rem, 5.25rem));
       justify-content: start;
       gap: 0.35rem;
     }
 
     .result-actions-primary .source-link,
     .results.density-dense .result-actions-primary .source-link {
-      order: 3;
+      order: 2;
     }
 
     .result-actions-primary .action-button:first-child,
     .results.density-dense .result-actions-primary .action-button:first-child {
       order: 1;
-    }
-
-    .result-actions-primary .openwa-action,
-    .results.density-dense .result-actions-primary .openwa-action {
-      order: 2;
-      min-width: 5.25rem;
-    }
-
-    .result-actions-primary .openwa-action,
-    .results.density-dense .result-actions-primary .openwa-action,
-    .result-actions-primary .openwa-action[disabled],
-    .results.density-dense .result-actions-primary .openwa-action[disabled] {
-      display: inline-flex;
     }
 
     @media (min-width: 1180px) {
@@ -3052,7 +2993,7 @@
       }
 
       .results.density-dense .result-actions-primary .source-link,
-      .results.density-dense .result-actions-primary .action-button[disabled]:not(.openwa-action) {
+      .results.density-dense .result-actions-primary .action-button[disabled] {
         display: none;
       }
     }
@@ -3189,18 +3130,12 @@
       }
 
       .result-actions-primary .source-link,
-      .result-actions-primary .action-button[disabled]:not(.openwa-action),
+      .result-actions-primary .action-button[disabled],
       .results.density-dense .result-actions-primary .source-link,
-      .results.density-dense .result-actions-primary .action-button[disabled]:not(.openwa-action) {
+      .results.density-dense .result-actions-primary .action-button[disabled] {
         display: none;
       }
 
-      .result-actions-primary .openwa-action,
-      .results.density-dense .result-actions-primary .openwa-action,
-      .result-actions-primary .openwa-action[disabled],
-      .results.density-dense .result-actions-primary .openwa-action[disabled] {
-        display: inline-flex;
-      }
     }
 
     /* In-app browser compact pass: keep the first result visible on short mobile viewports. */
@@ -3292,10 +3227,15 @@
     }
 
     @media (max-width: 1024px) {
+      .result-actions-primary,
+      .results.density-dense .result-actions-primary {
+        grid-template-columns: minmax(5.25rem, max-content);
+      }
+
       .result-actions-primary .source-link,
-      .result-actions-primary .action-button[disabled]:not(.openwa-action),
+      .result-actions-primary .action-button[disabled],
       .results.density-dense .result-actions-primary .source-link,
-      .results.density-dense .result-actions-primary .action-button[disabled]:not(.openwa-action) {
+      .results.density-dense .result-actions-primary .action-button[disabled] {
         display: none;
       }
     }

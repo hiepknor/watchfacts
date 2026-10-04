@@ -7,12 +7,10 @@ import pytest
 
 from app.config import load_search_settings
 from app.db import Database
-from app.openwa_handoff import OpenWAChatDraftResponse
 from app.scraper import BrowserSessionStatus
 from app.search_contracts import validate_search_payload
 from app.search_result import SearchResult
 from app.tool_runtime import (
-    watchfacts_create_chat_draft_payload,
     watchfacts_get_issue_payload,
     watchfacts_health_payload,
     _RESULT_CACHE,
@@ -163,7 +161,7 @@ def test_watchfacts_search_payload_serializes_results_for_tool_runtime(tmp_path)
     }
 
 
-def test_watchfacts_search_payload_preserves_mcp_contract_fields(tmp_path) -> None:
+def test_watchfacts_search_payload_preserves_runtime_contract_fields(tmp_path) -> None:
     settings = load_search_settings(env={}, project_root=tmp_path)
     workflow = FakeWorkflow(
         [
@@ -228,205 +226,6 @@ def test_watchfacts_search_payload_preserves_mcp_contract_fields(tmp_path) -> No
     assert result["presentation"]["price_amount"] == 417000.0
     assert result["presentation"]["price_text"] == "$417,000"
     assert result["presentation"]["has_image"] is True
-
-
-def test_watchfacts_create_chat_draft_uses_db_reference_when_memory_cache_missing(
-    tmp_path,
-) -> None:
-    settings = load_search_settings(
-        env={
-            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
-            "OPENWA_BASE_URL": "https://openwa.example",
-            "OPENWA_API_KEY": "secret",
-            "OPENWA_DASHBOARD_URL": "https://dashboard.example",
-        },
-        project_root=tmp_path,
-    )
-    search_workflow = FakeWorkflow(
-        [
-            SearchResult(
-                listing_text="5712G Used 2015 - 76k usdt",
-                seller="Issac",
-                seller_phone="+86 178 2624 1887",
-                source_url="/listing/1",
-                image_url="/image/1.jpg",
-                raw_listing_text="raw listing",
-            )
-        ]
-    )
-    search_payload = asyncio.run(
-        watchfacts_search_payload(
-            "5712g",
-            workflow=search_workflow,
-            settings=settings,
-        )
-    )
-    result_id = search_payload["results"][0]["result_id"]
-
-    original_cache = dict(_RESULT_CACHE)
-    _RESULT_CACHE.clear()
-    requests = []
-
-    async def fake_client(payload):
-        requests.append(payload)
-        return OpenWAChatDraftResponse(
-            draft_id="draft-1",
-            chat_id="chat-1",
-            dashboard_url="https://dashboard.example/chats/drafts/draft-1",
-        )
-
-    followup_workflow = FakeWorkflow([])
-    try:
-        draft_payload = asyncio.run(
-            watchfacts_create_chat_draft_payload(
-                "5712g",
-                result_id,
-                settings=settings,
-                workflow=followup_workflow,
-                openwa_client=fake_client,
-            )
-        )
-    finally:
-        _RESULT_CACHE.clear()
-        _RESULT_CACHE.update(original_cache)
-
-    assert followup_workflow.queries == []
-    assert draft_payload["status"] == "created"
-    assert draft_payload["result_id"] == result_id
-    assert draft_payload["rank"] == 1
-    assert len(requests) == 1
-    assert requests[0]["sourceResultId"] == result_id
-
-
-def test_watchfacts_create_chat_draft_prefers_result_id_when_rank_is_also_supplied(
-    tmp_path,
-) -> None:
-    settings = load_search_settings(
-        env={
-            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
-            "OPENWA_BASE_URL": "https://openwa.example",
-            "OPENWA_API_KEY": "secret",
-            "OPENWA_DASHBOARD_URL": "https://dashboard.example",
-        },
-        project_root=tmp_path,
-    )
-    search_workflow = FakeWorkflow(
-        [
-            SearchResult(
-                listing_text="5712G Used 2015 - 76k usdt",
-                seller="Issac",
-                source_url="/listing/1",
-            )
-        ]
-    )
-    original_cache = dict(_RESULT_CACHE)
-    _RESULT_CACHE.clear()
-    requests = []
-
-    async def fake_client(payload):
-        requests.append(payload)
-        return OpenWAChatDraftResponse(
-            draft_id="draft-1",
-            chat_id="chat-1",
-            dashboard_url="https://dashboard.example/chats/drafts/draft-1",
-        )
-
-    try:
-        search_payload = asyncio.run(
-            watchfacts_search_payload(
-                "5712g",
-                workflow=search_workflow,
-                settings=settings,
-            )
-        )
-        result_id = search_payload["results"][0]["result_id"]
-        followup_workflow = FakeWorkflow([])
-
-        draft_payload = asyncio.run(
-            watchfacts_create_chat_draft_payload(
-                "5712g",
-                result_id,
-                rank=0,
-                settings=settings,
-                workflow=followup_workflow,
-                openwa_client=fake_client,
-            )
-        )
-    finally:
-        _RESULT_CACHE.clear()
-        _RESULT_CACHE.update(original_cache)
-
-    assert followup_workflow.queries == []
-    assert draft_payload["status"] == "created"
-    assert draft_payload["result_id"] == result_id
-    assert requests
-
-
-def test_watchfacts_create_chat_draft_uses_db_reference_by_stable_listing_id(
-    tmp_path,
-) -> None:
-    settings = load_search_settings(
-        env={
-            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
-            "OPENWA_BASE_URL": "https://openwa.example",
-            "OPENWA_API_KEY": "secret",
-            "OPENWA_DASHBOARD_URL": "https://dashboard.example",
-        },
-        project_root=tmp_path,
-    )
-    search_workflow = FakeWorkflow(
-        [
-            SearchResult(
-                listing_text="5712G Used 2015 - 76k usdt",
-                seller="Issac",
-                seller_phone="+86 178 2624 1887",
-                source_url="/listing/1",
-                image_url="/image/1.jpg",
-                raw_listing_text="raw listing",
-            )
-        ]
-    )
-    search_payload = asyncio.run(
-        watchfacts_search_payload(
-            "5712g",
-            workflow=search_workflow,
-            settings=settings,
-        )
-    )
-    stable_id = search_payload["results"][0]["stable_listing_id"]
-
-    original_cache = dict(_RESULT_CACHE)
-    _RESULT_CACHE.clear()
-    requests = []
-
-    async def fake_client(payload):
-        requests.append(payload)
-        return OpenWAChatDraftResponse(
-            draft_id="draft-1",
-            chat_id=None,
-            dashboard_url="https://dashboard.example/chats/drafts/draft-1",
-        )
-
-    followup_workflow = FakeWorkflow([])
-    try:
-        draft_payload = asyncio.run(
-            watchfacts_create_chat_draft_payload(
-                "5712g",
-                stable_id,
-                settings=settings,
-                workflow=followup_workflow,
-                openwa_client=fake_client,
-            )
-        )
-    finally:
-        _RESULT_CACHE.clear()
-        _RESULT_CACHE.update(original_cache)
-
-    assert followup_workflow.queries == []
-    assert draft_payload["status"] == "created"
-    assert draft_payload["rank"] == 1
-    assert requests
-    assert requests[0]["sourceResultId"] == draft_payload["result_id"]
 
 
 def test_watchfacts_search_payload_can_include_raw_and_similar_results() -> None:
@@ -524,7 +323,7 @@ def test_watchfacts_search_payload_supports_offset_pagination() -> None:
 def test_watchfacts_search_payload_adds_result_page_when_enabled(tmp_path) -> None:
     settings = load_search_settings(
         env={
-            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results",
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://watchfacts.example/results",
             "RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages"),
             "RESULT_PAGE_TTL_SECONDS": "60",
             "RESULT_PAGE_MAX_RESULTS": "2",
@@ -556,9 +355,9 @@ def test_watchfacts_search_payload_adds_result_page_when_enabled(tmp_path) -> No
         "url": payload["result_page"]["url"],
         "expires_at": payload["result_page"]["expires_at"],
         "result_count": 2,
-        "schema_version": 1,
+        "schema_version": 2,
     }
-    assert payload["result_page"]["url"].startswith("https://mcp.example/results/")
+    assert payload["result_page"]["url"].startswith("https://watchfacts.example/results/")
     html_files = list(settings.result_page_storage_dir.glob("*.html"))
     assert len(html_files) == 1
     html = html_files[0].read_text(encoding="utf-8")
@@ -635,159 +434,6 @@ def test_watchfacts_report_issue_records_feedback_from_result_id(tmp_path) -> No
     assert issue_payload["issue"]["reason"] == "wrong_result"
     assert issue_payload["issue"]["seller"] == "Issac"
     assert Database(settings.db_path).get_issue(1, issue_type="feedback") is not None
-
-
-def test_watchfacts_create_chat_draft_uses_cached_search_result(tmp_path) -> None:
-    settings = load_search_settings(
-        env={
-            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
-            "OPENWA_BASE_URL": "https://openwa.example",
-            "OPENWA_API_KEY": "secret",
-            "OPENWA_DASHBOARD_URL": "https://dashboard.example",
-        },
-        project_root=tmp_path,
-    )
-    workflow = FakeWorkflow(
-        [
-            SearchResult(
-                listing_text="5712G Used 2015 - 76k usdt",
-                seller="Issac",
-                seller_phone="+86 178 2624 1887",
-                source_url="/listing/1",
-                image_url="/image/1.jpg",
-                raw_listing_text="raw listing",
-            )
-        ]
-    )
-    search_payload = asyncio.run(
-        watchfacts_search_payload("5712g", workflow=workflow, settings=settings)
-    )
-    result_id = search_payload["results"][0]["result_id"]
-    requests = []
-
-    async def fake_client(payload):
-        requests.append(payload)
-        return OpenWAChatDraftResponse(
-            draft_id="draft-1",
-            chat_id="chat-1",
-            dashboard_url="https://dashboard.example/chats/drafts/draft-1",
-        )
-
-    draft_payload = asyncio.run(
-        watchfacts_create_chat_draft_payload(
-            "5712g",
-            result_id,
-            settings=settings,
-            workflow=workflow,
-            openwa_client=fake_client,
-        )
-    )
-
-    assert draft_payload["status"] == "created"
-    assert draft_payload["rank"] == 1
-    assert draft_payload["result_id"] == result_id
-    assert draft_payload["draft_id"] == "draft-1"
-    assert draft_payload["dashboard_url"] == "https://dashboard.example/chats/drafts/draft-1"
-    assert "payload" not in draft_payload
-    assert requests[0]["sourceResultId"] == result_id
-    assert requests[0]["seller"]["phone"] == "8617826241887"
-    assert requests[0]["sourceUrl"] == "https://watchfacts.com/listing/1"
-    assert requests[0]["product"]["imageUrl"] == "https://watchfacts.com/image/1.jpg"
-
-    rank_payload = asyncio.run(
-        watchfacts_create_chat_draft_payload(
-            "5712g",
-            rank=1,
-            settings=settings,
-            workflow=workflow,
-            openwa_client=fake_client,
-        )
-    )
-
-    assert rank_payload["status"] == "created"
-    assert rank_payload["rank"] == 1
-    assert rank_payload["result_id"] == result_id
-
-
-def test_watchfacts_create_chat_draft_rank_uses_latest_cached_result(tmp_path) -> None:
-    settings = load_search_settings(
-        env={
-            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
-            "OPENWA_BASE_URL": "https://openwa.example",
-            "OPENWA_API_KEY": "secret",
-            "OPENWA_DASHBOARD_URL": "https://dashboard.example",
-        },
-        project_root=tmp_path,
-    )
-    old_workflow = FakeWorkflow(
-        [
-            SearchResult(
-                listing_text="5712G old listing",
-                source_url="/listing/old",
-            )
-        ]
-    )
-    new_workflow = FakeWorkflow(
-        [
-            SearchResult(
-                listing_text="5712G new listing",
-                source_url="/listing/new",
-            )
-        ]
-    )
-
-    old_payload = asyncio.run(
-        watchfacts_search_payload("5712g", workflow=old_workflow, settings=settings)
-    )
-    new_payload = asyncio.run(
-        watchfacts_search_payload("5712g", workflow=new_workflow, settings=settings)
-    )
-    old_result_id = old_payload["results"][0]["result_id"]
-    new_result_id = new_payload["results"][0]["result_id"]
-    requests = []
-
-    async def fake_client(payload):
-        requests.append(payload)
-        return OpenWAChatDraftResponse(
-            draft_id="draft-1",
-            chat_id=None,
-            dashboard_url="https://dashboard.example/chats/drafts/draft-1",
-        )
-
-    rank_payload = asyncio.run(
-        watchfacts_create_chat_draft_payload(
-            "5712g",
-            rank=1,
-            settings=settings,
-            workflow=new_workflow,
-            openwa_client=fake_client,
-        )
-    )
-
-    assert old_result_id != new_result_id
-    assert rank_payload["result_id"] == new_result_id
-    assert requests[0]["sourceResultId"] == new_result_id
-    assert requests[0]["listingText"] == "5712G new listing"
-
-
-def test_watchfacts_create_chat_draft_requires_result_reference(tmp_path) -> None:
-    settings = load_search_settings(
-        env={
-            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
-            "OPENWA_BASE_URL": "https://openwa.example",
-            "OPENWA_API_KEY": "secret",
-        },
-        project_root=tmp_path,
-    )
-
-    with pytest.raises(ValueError, match="result_id or rank is required"):
-        asyncio.run(
-            watchfacts_create_chat_draft_payload(
-                "5712g",
-                settings=settings,
-                workflow=FakeWorkflow([]),
-            )
-        )
 
 
 def test_watchfacts_issue_queue_payloads_round_trip(tmp_path) -> None:
@@ -971,7 +617,6 @@ def test_watchfacts_health_payload_reports_dependencies(tmp_path) -> None:
 
     assert payload["watchfacts_session"]["ok"] is True
     assert payload["database"]["ok"] is True
-    assert payload["openwa"]["ready"] is False
     assert payload["search_runtime"]["ready"] is True
 
 

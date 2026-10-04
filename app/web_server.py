@@ -1,4 +1,4 @@
-from app.runtime import mcp_server as _impl
+from app.runtime import web_server as _impl
 import sys as _sys
 
 if __name__ == "__main__":

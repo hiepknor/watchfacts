@@ -17,6 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.search_contracts import validate_search_payload
+from app.runtime.tool_runtime import watchfacts_search_payload
 
 
 DEFAULT_ALIAS_TOTAL_DELTA_RATIO = 0.10
@@ -176,7 +177,6 @@ class CaseExpectationCheck:
 
 async def run_benchmark(
     *,
-    url: str,
     queries: list[str],
     limit: int,
     timeout_seconds: float,
@@ -193,7 +193,6 @@ async def run_benchmark(
                 _clear_search_cache(_cache_db_path(db_path))
             rows.append(
                 await _benchmark_query(
-                    url=url,
                     query=query,
                     limit=limit,
                     timeout_seconds=timeout_seconds,
@@ -207,7 +206,6 @@ async def run_benchmark(
 
 async def _benchmark_query(
     *,
-    url: str,
     query: str,
     limit: int,
     timeout_seconds: float,
@@ -218,7 +216,6 @@ async def _benchmark_query(
     started_at = time.perf_counter()
     try:
         payload = await _call_search(
-            url=url,
             query=query,
             limit=limit,
             timeout_seconds=timeout_seconds,
@@ -246,42 +243,21 @@ async def _benchmark_query(
 
 async def _call_search(
     *,
-    url: str,
     query: str,
     limit: int,
     timeout_seconds: float,
     include_similar: bool,
 ) -> dict[str, Any]:
-    from mcp import ClientSession
-    from mcp.client.streamable_http import streamablehttp_client
-
-    async with streamablehttp_client(
-        url,
+    return await asyncio.wait_for(
+        watchfacts_search_payload(
+            query=query,
+            limit=limit,
+            offset=0,
+            include_similar=include_similar,
+            include_raw=False,
+        ),
         timeout=timeout_seconds,
-        sse_read_timeout=timeout_seconds,
-    ) as (read_stream, write_stream, _get_session_id):
-        async with ClientSession(read_stream, write_stream) as session:
-            await session.initialize()
-            result = await session.call_tool(
-                "search",
-                {
-                    "query": query,
-                    "limit": limit,
-                    "offset": 0,
-                    "include_similar": include_similar,
-                },
-            )
-    if result.isError:
-        raise RuntimeError(_result_text(result) or "MCP search tool returned an error")
-    if result.structuredContent is not None:
-        return dict(result.structuredContent)
-    for item in result.content:
-        text = getattr(item, "text", None)
-        if isinstance(text, str):
-            decoded = json.loads(text)
-            if isinstance(decoded, dict):
-                return decoded
-    raise RuntimeError("MCP search tool did not return a structured object")
+    )
 
 
 def _row_from_payload(
@@ -374,7 +350,7 @@ def render_markdown(
         else alias_checks
     )
     lines = [
-        "# MCP Query Benchmark",
+        "# WatchFacts Search Benchmark",
         "",
         (
             f"Passed: {summary['passed']}/{summary['total']} | "
@@ -481,7 +457,7 @@ def render_text(
             details.append(f"stages={_stage_timing_summary(row.stage_timings_ms)}")
         if row.error_type:
             details.append(f"error_type={row.error_type}")
-        lines.append("MCP_BENCH " + " ".join(details))
+        lines.append("SEARCH_BENCH " + " ".join(details))
     lines.extend(
         _alias_recall_text_lines(
             checks,
@@ -1093,12 +1069,7 @@ def _clear_search_cache(db_path: Path) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Benchmark WatchFacts MCP search queries and emit pasteable reports."
-    )
-    parser.add_argument(
-        "--url",
-        default=os.environ.get("MCP_SMOKE_URL", "http://127.0.0.1:8765/mcp"),
-        help="Streamable HTTP MCP URL.",
+        description="Benchmark WatchFacts search queries through the shared runtime."
     )
     parser.add_argument(
         "--query",
@@ -1130,7 +1101,7 @@ def main() -> int:
         action="store_true",
         help=(
             "Delete local search_cache and result_reference_cache rows before each "
-            "query run. Intended for benchmarks running beside the MCP runtime DB."
+            "query run. Intended for benchmarks running beside the shared runtime DB."
         ),
     )
     parser.add_argument(
@@ -1183,7 +1154,6 @@ def main() -> int:
 
     rows = asyncio.run(
         run_benchmark(
-            url=args.url,
             queries=queries,
             limit=args.limit,
             timeout_seconds=args.timeout_seconds,

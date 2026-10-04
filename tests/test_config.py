@@ -8,7 +8,6 @@ from app.config import (
     DEFAULT_OPENAI_MAX_REFINES,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_TIMEOUT_SECONDS,
-    DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT,
     DEFAULT_RESULT_PAGE_MAX_RESULTS,
     DEFAULT_RESULT_PAGE_TTL_SECONDS,
     DEFAULT_RUNTIME_MODE,
@@ -177,11 +176,6 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
         settings.watchfacts_http_warmup_on_health
         is DEFAULT_WATCHFACTS_HTTP_WARMUP_ON_HEALTH
     )
-    assert settings.enable_openwa_chat_handoff is False
-    assert settings.openwa_base_url == ""
-    assert settings.openwa_api_key == ""
-    assert settings.openwa_dashboard_url == ""
-    assert settings.openwa_chat_draft_endpoint == DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT
     assert settings.result_page_public_base_url == ""
     assert settings.result_page_ttl_seconds == DEFAULT_RESULT_PAGE_TTL_SECONDS
     assert settings.result_page_max_results == DEFAULT_RESULT_PAGE_MAX_RESULTS
@@ -190,6 +184,21 @@ def test_load_settings_uses_defaults_and_runtime_paths(tmp_path: Path) -> None:
     assert settings.logs_dir == tmp_path / "logs"
     assert settings.db_path == tmp_path / "data" / "bot.db"
     assert settings.browser_state_path == tmp_path / "data" / "watchfacts_state.json"
+
+
+def test_openwa_environment_is_not_part_of_runtime_settings(tmp_path: Path) -> None:
+    settings = load_settings(
+        env={
+            "TELEGRAM_BOT_TOKEN": "token",
+            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
+            "OPENWA_BASE_URL": "https://openwa.example",
+            "OPENWA_API_KEY": "retired-secret",
+        },
+        project_root=tmp_path,
+    )
+
+    assert not any(name.startswith("openwa_") for name in settings.__dataclass_fields__)
+    assert "enable_openwa_chat_handoff" not in settings.__dataclass_fields__
 
 
 def test_load_settings_reads_allowed_telegram_user_ids(tmp_path: Path) -> None:
@@ -361,30 +370,10 @@ def test_load_settings_reads_watchfacts_http_client_options(tmp_path: Path) -> N
     assert settings.watchfacts_http_warmup_on_health is False
 
 
-def test_load_settings_reads_openwa_handoff_options(tmp_path: Path) -> None:
-    settings = load_settings(
-        env={
-            "TELEGRAM_BOT_TOKEN": "token",
-            "ENABLE_OPENWA_CHAT_HANDOFF": "true",
-            "OPENWA_BASE_URL": "https://openwa.example/",
-            "OPENWA_API_KEY": "openwa-secret",
-            "OPENWA_DASHBOARD_URL": "https://dashboard.example/",
-            "OPENWA_CHAT_DRAFT_ENDPOINT": "api/custom-drafts",
-        },
-        project_root=tmp_path,
-    )
-
-    assert settings.enable_openwa_chat_handoff is True
-    assert settings.openwa_base_url == "https://openwa.example"
-    assert settings.openwa_api_key == "openwa-secret"
-    assert settings.openwa_dashboard_url == "https://dashboard.example"
-    assert settings.openwa_chat_draft_endpoint == "/api/custom-drafts"
-
-
 def test_load_settings_reads_result_page_options(tmp_path: Path) -> None:
     settings = load_search_settings(
         env={
-            "RESULT_PAGE_PUBLIC_BASE_URL": "https://mcp.example/results/",
+            "RESULT_PAGE_PUBLIC_BASE_URL": "https://watchfacts.example/results/",
             "RESULT_PAGE_TTL_SECONDS": "60",
             "RESULT_PAGE_MAX_RESULTS": "25",
             "RESULT_PAGE_STORAGE_DIR": "tmp/result-pages",
@@ -392,7 +381,7 @@ def test_load_settings_reads_result_page_options(tmp_path: Path) -> None:
         project_root=tmp_path,
     )
 
-    assert settings.result_page_public_base_url == "https://mcp.example/results"
+    assert settings.result_page_public_base_url == "https://watchfacts.example/results"
     assert settings.result_page_ttl_seconds == 60
     assert settings.result_page_max_results == 25
     assert settings.result_page_storage_dir == tmp_path / "tmp" / "result-pages"
@@ -404,22 +393,3 @@ def test_load_settings_rejects_empty_result_page_storage_dir(tmp_path: Path) -> 
             env={"RESULT_PAGE_STORAGE_DIR": " "},
             project_root=tmp_path,
         )
-
-
-def test_load_settings_does_not_enable_openwa_from_legacy_handoff_names(
-    tmp_path: Path,
-) -> None:
-    old_enable_name = "ENABLE_OPENWA_" + "DEAL_HANDOFF"
-    settings = load_settings(
-        env={
-            "TELEGRAM_BOT_TOKEN": "token",
-            old_enable_name: "true",
-            "OPENWA_BASE_URL": "https://openwa.example",
-            "OPENWA_API_KEY": "openwa-secret",
-            "OPENWA_DASHBOARD_URL": "https://dashboard.example",
-        },
-        project_root=tmp_path,
-    )
-
-    assert settings.enable_openwa_chat_handoff is False
-    assert settings.openwa_chat_draft_endpoint == DEFAULT_OPENWA_CHAT_DRAFT_ENDPOINT

@@ -1,5 +1,12 @@
 # ADR-008: Adopt Layered Runtime Architecture Boundaries
 
+Amended by [ADR-009](009-retire-mcp-transport.md): the layer rules remain, but
+the MCP adapter and service described below have been retired. MCP references
+in this record are historical context.
+
+Amended by [ADR-010](010-retire-openwa-handoff.md): OpenWA-specific application
+and integration boundaries were removed when the handoff flow was retired.
+
 ## Status
 
 Accepted

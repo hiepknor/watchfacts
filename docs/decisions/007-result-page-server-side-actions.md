@@ -4,6 +4,9 @@
 
 Accepted
 
+Amended by ADR-010: the OpenWA draft action described here has been retired.
+The nonce-protected feedback action remains active.
+
 ## Date
 
 2026-06-11

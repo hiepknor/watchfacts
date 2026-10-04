@@ -1,1 +1,1 @@
-"""External service integrations for WatchFacts, OpenWA, and optional AI review."""
+"""External service integrations for WatchFacts and optional AI review."""
