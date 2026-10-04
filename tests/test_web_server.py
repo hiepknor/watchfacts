@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from starlette.testclient import TestClient
 
 from app.config import load_search_settings
@@ -10,11 +11,44 @@ from app.result_pages import generate_result_page, read_result_page_action_paylo
 from app.search_result import SearchResult
 
 
-def test_healthz_reports_web_service() -> None:
+@pytest.fixture(autouse=True)
+def clear_web_rate_limit_state():
+    web_server._RESULT_PAGE_RATE_LIMIT_TIMESTAMPS.clear()
+    web_server._RESULT_PAGE_RATE_LIMIT_BLOCKED.clear()
+    yield
+    web_server._RESULT_PAGE_RATE_LIMIT_TIMESTAMPS.clear()
+    web_server._RESULT_PAGE_RATE_LIMIT_BLOCKED.clear()
+
+
+def test_healthz_reports_web_service(monkeypatch, tmp_path) -> None:
+    settings = load_search_settings(
+        env={"RESULT_PAGE_STORAGE_DIR": str(tmp_path / "pages")},
+        project_root=tmp_path,
+    )
+    monkeypatch.setattr(web_server, "load_search_settings", lambda: settings)
     response = TestClient(web_server.app).get("/healthz")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "service": "watchfacts-web"}
+
+
+def test_healthz_reports_unready_runtime(monkeypatch, tmp_path) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    monkeypatch.setattr(web_server, "load_search_settings", lambda: settings)
+
+    def fail_readiness(_settings):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(web_server, "check_runtime_readiness", fail_readiness)
+
+    response = TestClient(web_server.app).get("/healthz")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "service": "watchfacts-web",
+        "error": "OSError",
+    }
 
 
 def test_retired_openwa_action_is_not_routed() -> None:
@@ -244,3 +278,25 @@ def test_result_page_action_is_rate_limited(monkeypatch, tmp_path) -> None:
 
     assert limited.status_code == 429
     assert limited.json()["error"] == "rate_limited"
+
+
+def test_invalid_action_token_does_not_allocate_rate_limit_state() -> None:
+    response = TestClient(web_server.app).post(
+        "/results/invalid/actions/report",
+        json={},
+    )
+
+    assert response.status_code == 404
+    assert web_server._RESULT_PAGE_RATE_LIMIT_TIMESTAMPS == {}
+    assert web_server._RESULT_PAGE_RATE_LIMIT_BLOCKED == {}
+
+
+def test_rate_limit_state_has_bounded_capacity(monkeypatch, tmp_path) -> None:
+    settings = load_search_settings(env={}, project_root=tmp_path)
+    monkeypatch.setattr(web_server, "_RESULT_PAGE_RATE_LIMIT_MAX_KEYS", 2)
+
+    assert web_server._is_rate_limited("page:one", settings) is False
+    assert web_server._is_rate_limited("page:two", settings) is False
+    assert web_server._is_rate_limited("page:three", settings) is False
+
+    assert len(web_server._RESULT_PAGE_RATE_LIMIT_TIMESTAMPS) == 2

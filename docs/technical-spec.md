@@ -8,7 +8,8 @@ result pages and their bounded server-side actions.
 
 ```text
 Telegram -> SearchUseCase -> WatchFacts fetch -> parser -> matcher
-         -> scoring -> dedupe -> cache/issues -> result-page artifact
+         -> scoring -> dedupe -> SearchPayloadUseCase
+         -> cache/issues -> result-page artifact
 
 Browser -> watchfacts-web -> result page / feedback action
 ```
@@ -64,6 +65,8 @@ should use the layered package paths.
 - Owns user authorization, queueing, Telegram formatting, pagination callbacks,
   owner review commands and feedback callbacks.
 - Generates result-page artifacts when configured.
+- Uses the same `SearchPayloadUseCase` as direct diagnostics for result
+  collection and result-page orchestration.
 
 ### `watchfacts-web`
 
@@ -113,14 +116,18 @@ data/result_pages/{token}.html
 data/result_pages/{token}.json
 ```
 
+Both artifacts are prepared as temporary files in the destination directory.
+The sidecar is committed first and HTML is atomically renamed last as the
+publication marker. A failed publication removes temporary and partial files.
+
 The sidecar contains sanitized displayed fields and an action nonce. It must not
 contain raw HTML, cookies, browser state, API keys, or unbounded raw listings.
 
 Action validation order:
 
-1. Rate limit client/token/action.
-2. Validate token syntax and page TTL.
-3. Load and validate the sidecar.
+1. Validate token syntax.
+2. Apply a bounded, expiring per-client/action rate limit.
+3. Validate page TTL and load the sidecar.
 4. Parse bounded JSON.
 5. Compare the action nonce in constant time.
 6. Resolve the requested result only inside the page payload.
@@ -138,6 +145,10 @@ SQLite stores:
 
 Connections enable foreign keys and a bounded busy timeout. SQL must remain
 parameterized. Schema changes require tests and documentation.
+
+Anonymous web feedback is explicitly merged because SQLite unique constraints
+do not treat two `NULL` reporter identities as equal. Repeated reports update
+`report_count` and reopen the existing issue instead of creating duplicate rows.
 
 ## Important Configuration
 
@@ -159,6 +170,9 @@ parameterized. Schema changes require tests and documentation.
 `app/runtime/tool_runtime.py` remains a transport-neutral structured-payload
 adapter used by direct diagnostics and contract tests. It must not grow a new
 network protocol or duplicate search behavior.
+
+Telegram and this adapter both delegate search-page orchestration to
+`SearchPayloadUseCase`; interface-specific formatting remains in the adapters.
 
 Diagnostic scripts call the shared runtime directly:
 

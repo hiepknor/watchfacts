@@ -795,6 +795,50 @@ def test_cancel_command_handles_empty_result_pages() -> None:
     assert message.replies == [CANCEL_EMPTY_MESSAGE]
 
 
+def test_pending_result_pages_are_capacity_bounded(monkeypatch) -> None:
+    context = make_context()
+    monkeypatch.setattr(telegram_bot, "MAX_PENDING_RESULT_PAGES", 2)
+
+    tokens = [
+        telegram_bot._store_result_page(
+            context,
+            query=f"query-{index}",
+            results=[SearchResult(f"result-{index}")],
+            next_offset=0,
+            result_limit=5,
+        )
+        for index in range(3)
+    ]
+
+    pages = context.application.bot_data["result_pages"]
+    assert len(pages) == 2
+    assert tokens[0] not in pages
+    assert tokens[1] in pages
+    assert tokens[2] in pages
+
+
+def test_pending_result_pages_expire(monkeypatch) -> None:
+    context = make_context()
+    timestamps = iter(
+        [
+            10.0,
+            10.0,
+            10.0 + telegram_bot.PENDING_RESULT_PAGE_TTL_SECONDS + 1,
+        ]
+    )
+    monkeypatch.setattr(telegram_bot.time, "monotonic", lambda: next(timestamps))
+    token = telegram_bot._store_result_page(
+        context,
+        query="5712g",
+        results=[SearchResult("5712G")],
+        next_offset=0,
+        result_limit=5,
+    )
+
+    assert telegram_bot._get_result_page(context, token) is None
+    assert context.application.bot_data["result_pages"] == {}
+
+
 def test_search_summary_includes_generated_result_page_link_when_enabled(tmp_path) -> None:
     message = FakeMessage("5712g")
     workflow = FakeWorkflow([SearchResult("5712G Used")])

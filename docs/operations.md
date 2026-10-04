@@ -43,14 +43,16 @@ make run
 python -m app.web_server
 ```
 
-The web liveness endpoint is:
+The web readiness endpoint is:
 
 ```text
 http://127.0.0.1:8766/healthz
 ```
 
 Direct Python execution listens on `8766`; Docker publishes that container port
-as legacy-compatible host port `8765`.
+as legacy-compatible host port `8765`. Readiness loads runtime configuration,
+initializes SQLite, and verifies that result-page storage is writable. It returns
+`503` without exposing paths or credentials when those dependencies fail.
 
 ## Deployment
 
@@ -137,7 +139,8 @@ RESULT_PAGE_STORAGE_DIR=data/result_pages
 ```
 
 Caddy must proxy only `/results/*` to `127.0.0.1:8765`. The generated page and
-JSON sidecar share a random token and expire together.
+JSON sidecar share a random token and expire together. Generation writes both to
+temporary files and atomically publishes HTML only after the sidecar is ready.
 
 Result-page schema changes invalidate older stored HTML safely. An incompatible
 page returns `410 Gone` and its matching HTML/JSON artifact pair is removed on
@@ -153,6 +156,8 @@ Smoke test:
 Rollback options:
 
 - Set `RESULT_PAGE_PUBLIC_BASE_URL=` to fall back to Telegram result batches.
+- Telegram fallback pagination retains at most 100 pending sessions for 30
+  minutes; older sessions return the normal expired-result response.
 - Roll Caddy back with `deploy/caddy/reload-caddy-safe.sh`.
 
 ## Owner Review

@@ -106,6 +106,10 @@ class ResultPageActionRead:
     error: str | None = None
 
 
+def is_valid_result_page_token(token: str) -> bool:
+    return bool(TOKEN_RE.fullmatch(token))
+
+
 def generate_result_page(
     query: str,
     results: list[SearchResult],
@@ -151,21 +155,40 @@ def generate_result_page(
     html = render_result_page_template(payload)
     page_path = _page_path(active_config, token)
     sidecar_path = _sidecar_path(active_config, token)
-    page_path.write_text(html, encoding="utf-8")
-    sidecar_path.write_text(
-        json.dumps(
-            {
-                "action_nonce": action_nonce,
-                "payload": payload,
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ),
-        encoding="utf-8",
+    temporary_suffix = secrets.token_hex(6)
+    page_temporary_path = active_config.storage_dir / (
+        f".{token}.{temporary_suffix}.html.tmp"
+    )
+    sidecar_temporary_path = active_config.storage_dir / (
+        f".{token}.{temporary_suffix}.json.tmp"
     )
     timestamp = created_at.timestamp()
-    os.utime(page_path, (timestamp, timestamp))
-    os.utime(sidecar_path, (timestamp, timestamp))
+    try:
+        page_temporary_path.write_text(html, encoding="utf-8")
+        sidecar_temporary_path.write_text(
+            json.dumps(
+                {
+                    "action_nonce": action_nonce,
+                    "payload": payload,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        os.utime(page_temporary_path, (timestamp, timestamp))
+        os.utime(sidecar_temporary_path, (timestamp, timestamp))
+        os.replace(sidecar_temporary_path, sidecar_path)
+        try:
+            # HTML is the publication marker: readers never observe it before
+            # its matching sidecar has been committed in the same directory.
+            os.replace(page_temporary_path, page_path)
+        except Exception:
+            _unlink_quietly(sidecar_path)
+            raise
+    finally:
+        _unlink_quietly(page_temporary_path)
+        _unlink_quietly(sidecar_temporary_path)
     return GeneratedResultPage(
         url=f"{active_config.public_base_url.rstrip('/')}/{token}",
         expires_at=payload["expires_at"],
@@ -216,7 +239,7 @@ def read_result_page_html(
     now: datetime | None = None,
 ) -> ResultPageRead:
     active_config = config or ResultPageConfig.from_settings(settings)
-    if not TOKEN_RE.fullmatch(token):
+    if not is_valid_result_page_token(token):
         return ResultPageRead(status_code=404)
 
     page_path = _page_path(active_config, token)
@@ -255,7 +278,7 @@ def read_result_page_action_payload(
     now: datetime | None = None,
 ) -> ResultPageActionRead:
     active_config = config or ResultPageConfig.from_settings(settings)
-    if not TOKEN_RE.fullmatch(token):
+    if not is_valid_result_page_token(token):
         return ResultPageActionRead(status_code=404, error="invalid_token")
 
     page_path = _page_path(active_config, token)

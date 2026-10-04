@@ -1149,6 +1149,30 @@ def test_generate_result_page_writes_tokenized_safe_html(tmp_path) -> None:
     assert "token=secret" not in json.dumps(sidecar, ensure_ascii=False)
 
 
+def test_generate_result_page_does_not_publish_partial_pair(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    config = make_config(tmp_path)
+    original_replace = result_pages.os.replace
+
+    def fail_html_publish(source, destination):
+        if str(source).endswith(".html.tmp"):
+            raise OSError("simulated publish failure")
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(result_pages.os, "replace", fail_html_publish)
+
+    with pytest.raises(OSError, match="simulated publish failure"):
+        generate_result_page(
+            query="5712g",
+            results=[SearchResult("5712G")],
+            config=config,
+        )
+
+    assert list(config.storage_dir.iterdir()) == []
+
+
 def test_read_result_page_action_payload_reports_sidecar_states(tmp_path) -> None:
     config = make_config(tmp_path)
     now = datetime(2026, 6, 7, 12, 0, tzinfo=timezone.utc)

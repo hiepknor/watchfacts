@@ -10,8 +10,13 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Protocol
 
-from app.application import IssueTriageUseCase, SearchUseCase
-from app.config import DEFAULT_TELEGRAM_RESULT_LIMIT, DEFAULT_WATCHFACTS_URL, Settings
+from app.application import IssueTriageUseCase, SearchPayloadUseCase, SearchUseCase
+from app.config import (
+    DEFAULT_SEARCH_CACHE_TTL_SECONDS,
+    DEFAULT_TELEGRAM_RESULT_LIMIT,
+    DEFAULT_WATCHFACTS_URL,
+    Settings,
+)
 from app.db import (
     AIRefinementSuggestionRecord,
     Database,
@@ -123,6 +128,7 @@ FEEDBACK_CONTEXTS_KEY = "feedback_contexts"
 WATCHFACTS_SESSION_CHECKER_KEY = "watchfacts_session_checker"
 WATCHFACTS_SESSION_ALERT_LAST_SENT_KEY = "watchfacts_session_alert_last_sent"
 SEARCH_SEMAPHORE_KEY = "search_semaphore"
+SEARCH_CACHE_TTL_SECONDS_KEY = "search_cache_ttl_seconds"
 MORE_RESULTS_PREFIX = "more_results:"
 FEEDBACK_PREFIX = "feedback:"
 ALLOWED_USER_IDS_KEY = "allowed_user_ids"
@@ -130,6 +136,8 @@ TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
 TELEGRAM_TEXT_MESSAGE_LIMIT = 4096
 WATCHFACTS_SESSION_ALERT_COOLDOWN_SECONDS = 30 * 60
 MAX_FEEDBACK_CONTEXTS = 500
+MAX_PENDING_RESULT_PAGES = 100
+PENDING_RESULT_PAGE_TTL_SECONDS = 30 * 60
 ISSUES_EXPORT_LIMIT = 30
 
 
@@ -428,7 +436,15 @@ async def handle_text_message(update, context) -> None:
     try:
         async with _search_semaphore(context):
             await _delete_message(queued_message)
-            results = await workflow.search(query)
+            page = await SearchPayloadUseCase(
+                workflow=workflow,
+                result_cache_ttl_seconds=_search_cache_ttl_seconds(context),
+                generate_result_page=lambda **kwargs: _generate_result_page(
+                    context,
+                    query=kwargs["query"],
+                    results=kwargs["results"],
+                ),
+            ).search_page(query)
     except BrowserSessionError as exc:
         await _delete_processing_message(
             processing_message,
@@ -468,9 +484,10 @@ async def handle_text_message(update, context) -> None:
         await send_search_results(
             context,
             message,
-            results,
+            list(page.results),
             query=query,
             result_limit=_result_limit(context),
+            result_page=page.result_page,
         )
 
 
@@ -481,17 +498,17 @@ async def send_search_results(
     *,
     query: str,
     result_limit: int = DEFAULT_TELEGRAM_RESULT_LIMIT,
+    result_page: dict[str, object] | None = None,
 ) -> None:
     if not results:
         await _maybe_await(message.reply_text(NO_RESULTS_MESSAGE))
         return
 
-    result_page = _generate_result_page(
-        context,
-        query=query,
-        results=results,
+    result_page_url = (
+        str(result_page.get("url") or "") if result_page is not None else None
     )
-    result_page_url = result_page.url if result_page is not None else None
+    if not result_page_url:
+        result_page_url = None
     token = ""
     if result_page_url is None:
         token = _store_result_page(
@@ -1020,6 +1037,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
     application.bot_data[TELEGRAM_MAX_CONCURRENT_SEARCHES_KEY] = (
         settings.telegram_max_concurrent_searches
     )
+    application.bot_data[SEARCH_CACHE_TTL_SECONDS_KEY] = settings.search_cache_ttl_seconds
     application.bot_data[HYBRID_AI_MODE_KEY] = settings.hybrid_ai_mode
     application.bot_data[OPENAI_MODEL_KEY] = settings.openai_model
     application.bot_data[WATCHFACTS_URL_KEY] = settings.watchfacts_url
@@ -1104,6 +1122,16 @@ def _max_concurrent_searches(context) -> int:
         return max(1, int(value))
     except (TypeError, ValueError):
         return 1
+
+
+def _search_cache_ttl_seconds(context) -> int:
+    application = getattr(context, "application", None)
+    bot_data = getattr(application, "bot_data", {}) if application is not None else {}
+    value = bot_data.get(SEARCH_CACHE_TTL_SECONDS_KEY, DEFAULT_SEARCH_CACHE_TTL_SECONDS)
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return DEFAULT_SEARCH_CACHE_TTL_SECONDS
 
 
 def _search_semaphore(context) -> asyncio.Semaphore:
@@ -1573,6 +1601,11 @@ def _store_result_page(
     application = getattr(context, "application", None)
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     pages = bot_data.setdefault(RESULT_PAGES_KEY, {})
+    _prune_pending_result_pages(pages)
+    while len(pages) >= MAX_PENDING_RESULT_PAGES:
+        oldest_token = next(iter(pages))
+        page = pages.pop(oldest_token, None)
+        _cancel_prefetch_task(page)
     token = secrets.token_urlsafe(8)
     pages[token] = {
         "query": query,
@@ -1580,6 +1613,7 @@ def _store_result_page(
         "next_offset": next_offset,
         "result_limit": result_limit,
         "refined_results": {},
+        "created_at": time.monotonic(),
     }
     return token
 
@@ -1613,6 +1647,7 @@ def _get_result_page(context, token: str):
     application = getattr(context, "application", None)
     bot_data = getattr(application, "bot_data", {}) if application is not None else {}
     pages = bot_data.get(RESULT_PAGES_KEY, {})
+    _prune_pending_result_pages(pages)
     return pages.get(token)
 
 
@@ -1662,6 +1697,20 @@ def _clear_result_pages(context) -> int:
     cleared_count = len(pages)
     pages.clear()
     return cleared_count
+
+
+def _prune_pending_result_pages(pages, *, now: float | None = None) -> None:
+    current = time.monotonic() if now is None else now
+    expired_tokens = []
+    for token, page in pages.items():
+        created_at = page.get("created_at") if isinstance(page, dict) else None
+        if isinstance(created_at, (int, float)) and (
+            current - created_at > PENDING_RESULT_PAGE_TTL_SECONDS
+        ):
+            expired_tokens.append(token)
+    for token in expired_tokens:
+        page = pages.pop(token, None)
+        _cancel_prefetch_task(page)
 
 
 async def _refined_page_results(context, page, offset: int) -> list[SearchResult]:

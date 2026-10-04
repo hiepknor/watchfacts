@@ -2,7 +2,8 @@
 
 Status: historical. The OpenWA portions were retired by
 [ADR-010](decisions/010-retire-openwa-handoff.md); nonce-protected issue
-reporting remains active.
+reporting remains active. Everything below the "Historical Design" heading is
+retained only as implementation history and is not the current runtime contract.
 
 ## Purpose
 
@@ -15,18 +16,18 @@ This plan was written before implementation and now records the first production
 version. Future changes should preserve the server-side action boundary unless a
 new ADR supersedes ADR-007.
 
-Implementation status as of 2026-06-11:
+Current state as of 2026-10-04:
 
-- Phase 1 complete: generated pages write `{token}.html` plus `{token}.json`
-  sidecars with a page-scoped `action_nonce`.
-- Phase 2 complete: the MCP server exposes OpenWA draft and report action POST
-  routes with token, expiry, nonce, result identity, and rate-limit validation.
-- Phase 3 complete: the detail modal calls the action routes directly and keeps
-  copy/source/similar controls as utilities.
-- Phase 4 complete: operations and technical docs document the deployed behavior
-  and smoke-test expectations.
+- `watchfacts-web` serves generated HTML and the report action; MCP and OpenWA
+  routes no longer exist.
+- Generated pages publish `{token}.json` followed by `{token}.html` atomically;
+  the HTML rename is the publication marker.
+- The report action validates token, TTL, bounded rate limit, nonce and result
+  identity before writing feedback.
+- Repeated anonymous web feedback is merged into one issue and increments its
+  report count.
 
-## Current State
+## Historical Design
 
 Generated result pages are static HTML served by `GET /results/{token}` from the
 MCP service. Each page has a sidecar JSON file used only by server-side action

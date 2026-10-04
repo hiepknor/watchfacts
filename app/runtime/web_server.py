@@ -13,8 +13,10 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from app.application import IssueTriageUseCase
 from app.config import ConfigError, Settings, load_search_settings
+from app.infrastructure import check_runtime_readiness
 from app.results.result_pages import (
     ResultPageConfig,
+    is_valid_result_page_token,
     read_result_page_action_payload,
     read_result_page_html,
 )
@@ -38,6 +40,7 @@ RESULT_PAGE_HEADERS = {
 _RESULT_PAGE_RATE_LIMIT_LOCK = threading.Lock()
 _RESULT_PAGE_RATE_LIMIT_TIMESTAMPS: dict[str, Deque[float]] = defaultdict(deque)
 _RESULT_PAGE_RATE_LIMIT_BLOCKED: dict[str, float] = {}
+_RESULT_PAGE_RATE_LIMIT_MAX_KEYS = 4096
 VALID_RESULT_PAGE_REPORT_REASONS = {"missing_info", "wrong_result", "other"}
 
 
@@ -56,13 +59,32 @@ def route(path: str, *, methods: list[str]):
 
 @route("/healthz", methods=["GET"])
 async def healthz(_request: Request):
-    """Report liveness for the result-page HTTP service."""
+    """Report readiness for the result-page HTTP service."""
+    try:
+        settings = load_search_settings()
+        check_runtime_readiness(settings)
+    except Exception as exc:
+        logger.warning(
+            "event=web.readiness_failed error_type=%s",
+            exc.__class__.__name__,
+        )
+        return JSONResponse(
+            {
+                "status": "error",
+                "service": "watchfacts-web",
+                "error": exc.__class__.__name__,
+            },
+            status_code=503,
+        )
     return JSONResponse({"status": "ok", "service": "watchfacts-web"})
 
 
 @route("/results/{token}", methods=["GET"])
 async def result_page(request: Request):
     client_ip = _extract_client_ip(request)
+    token = request.path_params.get("token", "")
+    if not is_valid_result_page_token(token):
+        return PlainTextResponse("Result page not found", status_code=404)
     try:
         settings = load_search_settings()
     except ConfigError as exc:
@@ -71,9 +93,7 @@ async def result_page(request: Request):
         )
         return PlainTextResponse("Result page unavailable", status_code=404)
 
-    token = request.path_params.get("token", "")
-
-    if _is_rate_limited(client_ip, settings):
+    if _is_rate_limited(f"page:{client_ip}", settings):
         logger.warning(
             "event=result_page.rate_limited ip=%s token=%s retry_after=%s",
             client_ip,
@@ -171,29 +191,58 @@ def _extract_client_ip(request: Request) -> str:
     return "unknown"
 
 
-def _is_rate_limited(client_ip: str, settings: Settings) -> bool:
+def _is_rate_limited(rate_limit_key: str, settings: Settings) -> bool:
     if not settings.result_page_rate_limit_enabled:
         return False
 
-    now = time.time()
+    now = time.monotonic()
     with _RESULT_PAGE_RATE_LIMIT_LOCK:
-        blocked_until = _RESULT_PAGE_RATE_LIMIT_BLOCKED.get(client_ip)
+        _prune_rate_limit_state(
+            now,
+            window_seconds=settings.result_page_rate_limit_window_seconds,
+        )
+        blocked_until = _RESULT_PAGE_RATE_LIMIT_BLOCKED.get(rate_limit_key)
         if blocked_until is not None and now < blocked_until:
             return True
 
-        timestamps = _RESULT_PAGE_RATE_LIMIT_TIMESTAMPS[client_ip]
+        timestamps = _RESULT_PAGE_RATE_LIMIT_TIMESTAMPS[rate_limit_key]
         cutoff = now - settings.result_page_rate_limit_window_seconds
         while timestamps and timestamps[0] < cutoff:
             timestamps.popleft()
 
         if len(timestamps) >= settings.result_page_rate_limit_max_requests:
-            _RESULT_PAGE_RATE_LIMIT_BLOCKED[client_ip] = (
+            _RESULT_PAGE_RATE_LIMIT_BLOCKED[rate_limit_key] = (
                 now + settings.result_page_rate_limit_block_seconds
             )
+            _enforce_rate_limit_capacity()
             return True
 
         timestamps.append(now)
+        _enforce_rate_limit_capacity()
         return False
+
+
+def _prune_rate_limit_state(now: float, *, window_seconds: int) -> None:
+    cutoff = now - window_seconds
+    for key, timestamps in list(_RESULT_PAGE_RATE_LIMIT_TIMESTAMPS.items()):
+        while timestamps and timestamps[0] < cutoff:
+            timestamps.popleft()
+        if not timestamps and _RESULT_PAGE_RATE_LIMIT_BLOCKED.get(key, 0) <= now:
+            _RESULT_PAGE_RATE_LIMIT_TIMESTAMPS.pop(key, None)
+    for key, blocked_until in list(_RESULT_PAGE_RATE_LIMIT_BLOCKED.items()):
+        if blocked_until <= now:
+            _RESULT_PAGE_RATE_LIMIT_BLOCKED.pop(key, None)
+
+
+def _enforce_rate_limit_capacity() -> None:
+    while len(_RESULT_PAGE_RATE_LIMIT_TIMESTAMPS) > _RESULT_PAGE_RATE_LIMIT_MAX_KEYS:
+        oldest_key = next(iter(_RESULT_PAGE_RATE_LIMIT_TIMESTAMPS))
+        _RESULT_PAGE_RATE_LIMIT_TIMESTAMPS.pop(oldest_key, None)
+        _RESULT_PAGE_RATE_LIMIT_BLOCKED.pop(oldest_key, None)
+    while len(_RESULT_PAGE_RATE_LIMIT_BLOCKED) > _RESULT_PAGE_RATE_LIMIT_MAX_KEYS:
+        oldest_key = next(iter(_RESULT_PAGE_RATE_LIMIT_BLOCKED))
+        _RESULT_PAGE_RATE_LIMIT_BLOCKED.pop(oldest_key, None)
+        _RESULT_PAGE_RATE_LIMIT_TIMESTAMPS.pop(oldest_key, None)
 
 
 async def _load_result_page_action_context(
@@ -203,12 +252,14 @@ async def _load_result_page_action_context(
 ) -> dict[str, Any] | JSONResponse:
     client_ip = _extract_client_ip(request)
     token = request.path_params.get("token", "")
+    if not is_valid_result_page_token(token):
+        return _action_error("not_found", "Result page action not found.", status_code=404)
     try:
         settings = load_search_settings()
     except ConfigError:
         return _action_error("not_found", "Result page action not found.", status_code=404)
 
-    if _is_rate_limited(f"{client_ip}:{token}:{action}", settings):
+    if _is_rate_limited(f"action:{client_ip}:{action}", settings):
         return _action_error(
             "rate_limited",
             "Too many result page action requests.",

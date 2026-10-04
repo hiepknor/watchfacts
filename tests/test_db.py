@@ -677,6 +677,35 @@ def test_result_feedback_records_and_dedupes_reports(tmp_path) -> None:
     assert issue.source_url == "/flash-sales/9927122"
 
 
+def test_anonymous_result_feedback_dedupes_null_reporter(tmp_path) -> None:
+    database = Database(tmp_path / "data" / "bot.db")
+
+    first_id = database.record_result_feedback(
+        query_text="5712g",
+        result_rank=1,
+        reason="wrong_result",
+        listing_text="5712G blue dial",
+        telegram_user_id=None,
+    )
+    second_id = database.record_result_feedback(
+        query_text="5712g",
+        result_rank=1,
+        reason="wrong_result",
+        listing_text="5712G blue dial",
+        telegram_user_id=None,
+    )
+
+    assert second_id == first_id
+    issue = database.get_issue(first_id, issue_type="feedback")
+    assert issue is not None
+    assert issue.report_count == 2
+    with database.connect() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM result_feedback WHERE telegram_user_id IS NULL"
+        ).fetchone()[0]
+    assert count == 1
+
+
 def test_suspicious_result_records_and_exports_open_issues(tmp_path) -> None:
     db_path = tmp_path / "data" / "bot.db"
     database = Database(db_path)

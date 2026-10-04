@@ -1019,6 +1019,72 @@ class Database:
 
         with self.connect() as connection:
             _ensure_schema(connection)
+            if telegram_user_id is None:
+                # Serialize anonymous web reports because SQLite UNIQUE keys do
+                # not consider NULL reporter identities equal.
+                connection.execute("BEGIN IMMEDIATE")
+                existing_rows = connection.execute(
+                    """
+                    SELECT id, report_count
+                    FROM result_feedback
+                    WHERE normalized_query = ?
+                      AND result_rank = ?
+                      AND reason = ?
+                      AND telegram_user_id IS NULL
+                      AND listing_text = ?
+                    ORDER BY id
+                    """,
+                    (
+                        normalized_query,
+                        result_rank,
+                        reason,
+                        listing_text,
+                    ),
+                ).fetchall()
+                if existing_rows:
+                    issue_id = int(existing_rows[0][0])
+                    merged_report_count = sum(int(row[1]) for row in existing_rows) + 1
+                    connection.execute(
+                        """
+                        UPDATE result_feedback
+                        SET updated_at = ?,
+                            report_count = ?,
+                            raw_listing_text = COALESCE(?, raw_listing_text),
+                            seller = COALESCE(?, seller),
+                            posted_date = COALESCE(?, posted_date),
+                            source_url = COALESCE(?, source_url),
+                            issue_status = 'open',
+                            review_notes = COALESCE(?, review_notes)
+                        WHERE id = ?
+                        """,
+                        (
+                            now,
+                            merged_report_count,
+                            raw_listing_text,
+                            seller,
+                            posted_date,
+                            source_url,
+                            notes,
+                            issue_id,
+                        ),
+                    )
+                    duplicate_ids = [int(row[0]) for row in existing_rows[1:]]
+                    if duplicate_ids:
+                        placeholders = ",".join("?" for _ in duplicate_ids)
+                        connection.execute(
+                            f"""
+                            UPDATE ai_refinement_suggestions
+                            SET issue_id = ?
+                            WHERE issue_type = 'feedback'
+                              AND issue_id IN ({placeholders})
+                            """,
+                            (issue_id, *duplicate_ids),
+                        )
+                        connection.execute(
+                            f"DELETE FROM result_feedback WHERE id IN ({placeholders})",
+                            duplicate_ids,
+                        )
+                    return issue_id
             connection.execute(
                 """
                 INSERT INTO result_feedback (

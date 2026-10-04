@@ -68,7 +68,8 @@ There is no public search API; diagnostics call the shared runtime directly.
 - Search payload must include a short-lived `result_id` for follow-up actions.
 - Search payload must include `stable_listing_id` when a listing identity can be computed, so restart-tolerant follow-up lookup does not depend only on process memory.
 - Search payload should include `image_url` when WatchFacts provides a product image.
-- Expose `GET /healthz` from the result-page web service.
+- Expose readiness through `GET /healthz`; it must fail safely when shared
+  SQLite or result-page storage is unavailable.
 - Support issue reporting through Telegram callbacks and nonce-protected
   result-page actions.
 - Accept plain-text Telegram messages as search queries in the primary bot.

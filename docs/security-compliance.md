@@ -90,6 +90,9 @@ Rules:
 
 - Require token validation, page TTL validation, `action_nonce` validation, and
   rate limiting before any result-page action side effect.
+- Keep in-process rate-limit state bounded and expiring. Reject malformed tokens
+  before allocating rate-limit state; do not key public pre-validation state by
+  attacker-controlled token text.
 - Browser code must never receive `.env` values, cookies, browser state, or
   database paths.
 - Store only sanitized result-page payloads in action sidecars. Do not store raw

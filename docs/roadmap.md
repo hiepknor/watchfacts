@@ -1,9 +1,10 @@
 # Roadmap
 
 Current operating model: WatchFacts search is a shared runtime.
-`watchfacts-bot` is the primary user-facing Telegram runtime. MCP clients access
-the same pipeline through the `watchfacts-mcp` Docker service for structured
-integrations.
+`watchfacts-bot` is the primary user-facing Telegram runtime and
+`watchfacts-web` serves generated result pages plus feedback actions. Direct
+diagnostics call the shared application/search runtime without a network tool
+protocol.
 
 ## Milestone 0: Project Foundation
 

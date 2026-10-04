@@ -112,6 +112,17 @@ def test_tool_runtime_search_payload_uses_application_use_case() -> None:
     assert "generate_result_page(" not in function_source
 
 
+def test_telegram_search_uses_shared_payload_use_case() -> None:
+    source = Path("app/runtime/telegram_bot.py").read_text(encoding="utf-8")
+    function_source = source.split("async def handle_text_message", 1)[1].split(
+        "\n\nasync def send_search_results",
+        1,
+    )[0]
+
+    assert "SearchPayloadUseCase" in function_source
+    assert "await workflow.search(" not in function_source
+
+
 def test_tool_runtime_result_reference_resolution_uses_application_use_case() -> None:
     source = Path("app/runtime/tool_runtime.py").read_text(encoding="utf-8")
     function_source = source.split("async def _resolve_result_reference", 1)[1].split(
