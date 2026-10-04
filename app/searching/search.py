@@ -622,176 +622,15 @@ class WatchFactsSearchWorkflow:
         retrieval_reason_codes = list(retrieval_plan.reason_codes)
         state = _RetrievalState()
 
-        async def fetch_and_process_retrieval_branches(
-            retrieval_branch_queries: tuple[str, ...],
-            *,
-            start_index: int,
-            reason_codes: tuple[str, ...],
-        ) -> None:
-
-            fetch_results = await self._fetch_retrieval_branches(
-                retrieval_branch_queries,
-                start_index=start_index,
-            )
-            for fetch_result in fetch_results:
-                retrieval_index = fetch_result.index
-                retrieval_query = fetch_result.query
-                _add_stage_timing_value(
-                    stage_timings_ms,
-                    "watchfacts_fetch",
-                    fetch_result.fetch_ms,
-                )
-                if fetch_result.failed:
-                    state.retrieval_fetch_error_count += 1
-                    state.first_fetch_exception = (
-                        state.first_fetch_exception or fetch_result.exception
-                    )
-                    error_type = fetch_result.error_type or "Exception"
-                    self._audit_retrieval_fetch_error(
-                        state.audit_events,
-                        query=query,
-                        query_intent=query_intent,
-                        candidate_id=(
-                            "raw:1"
-                            if retrieval_index == 1
-                            else f"raw:{retrieval_index}"
-                        ),
-                        reason_codes=reason_codes,
-                        error_type=error_type,
-                    )
-                    state.retrieval_timings.append(
-                        RetrievalTiming(
-                            query=retrieval_query,
-                            queue_index=retrieval_index,
-                            cache_status=fetch_result.branch_cache_status,
-                            fetch_ms=fetch_result.fetch_ms,
-                            parse_ms=0,
-                            match_ms=0,
-                            total_ms=fetch_result.fetch_ms,
-                            parsed_count=0,
-                            matched_count=0,
-                            empty=True,
-                            server_filtered=False,
-                            playwright_fallback=False,
-                            failed=True,
-                            error_type=error_type,
-                            reason_codes=(
-                                *reason_codes,
-                                *_retrieval_branch_cache_reason_codes(fetch_result),
-                                *(
-                                    ("retrieval.branch_coalesced",)
-                                    if fetch_result.coalesced
-                                    else ()
-                                ),
-                                f"retrieval.fetch_error:{error_type}",
-                            ),
-                        )
-                    )
-                    continue
-                scrape_result = fetch_result.scrape_result
-                if scrape_result is None:
-                    continue
-                state.retrieval_fetch_success_count += 1
-                self._audit_raw_scrape(
-                    state.audit_events,
-                    query=query,
-                    query_intent=query_intent,
-                    scrape_result=scrape_result,
-                    candidate_id=(
-                        "raw:1" if retrieval_index == 1 else f"raw:{retrieval_index}"
-                    ),
-                    reason_codes=reason_codes,
-                )
-                state.server_filtered_hit_count += int(scrape_result.server_filtered)
-                state.playwright_fallback_count += int(scrape_result.used_playwright_fallback)
-                parse_started_at = time.perf_counter()
-                parsed = parse_listings(scrape_result.html)
-                self._audit_listing_candidates(
-                    state.audit_events,
-                    query=query,
-                    query_intent=query_intent,
-                    stage="parsed",
-                    listings=parsed,
-                    candidate_prefix=(
-                        None
-                        if retrieval_index == 1
-                        else f"retrieval-{retrieval_index}-parsed"
-                    ),
-                )
-                parse_ms = _stage_elapsed_ms(parse_started_at)
-                _add_stage_timing_value(stage_timings_ms, "parse", parse_ms)
-                match_started_at = time.perf_counter()
-                retrieval_matched = _filter_retrieved_listings(
-                    local_filter_queries,
-                    parsed,
-                    server_filtered=scrape_result.server_filtered,
-                    strict_local_filter=retrieval_plan.strict_local_filter,
-                )
-                self._audit_listing_candidates(
-                    state.audit_events,
-                    query=query,
-                    query_intent=query_intent,
-                    stage="matched",
-                    listings=retrieval_matched,
-                    candidate_prefix=(
-                        None
-                        if retrieval_index == 1
-                        else f"retrieval-{retrieval_index}-matched"
-                    ),
-                )
-                weak_count, ambiguous_count = self._audit_match_confidence(
-                    state.audit_events,
-                    query=query,
-                    query_intent=query_intent,
-                    parsed=parsed,
-                    matched=retrieval_matched,
-                    candidate_prefix=(
-                        "candidate"
-                        if retrieval_index == 1
-                        else f"retrieval-{retrieval_index}"
-                    ),
-                )
-                state.weak_match_count += weak_count
-                state.ambiguous_candidate_count += ambiguous_count
-                match_ms = _stage_elapsed_ms(match_started_at)
-                _add_stage_timing_value(stage_timings_ms, "match", match_ms)
-                state.parsed_count += len(parsed)
-                _record_retrieval_contributions(
-                    state.candidate_branch_by_key,
-                    retrieval_matched,
-                    branch_query=retrieval_query,
-                )
-                state.matched = _merge_listing_candidates(state.matched, retrieval_matched)
-                state.retrieval_timings.append(
-                    RetrievalTiming(
-                        query=retrieval_query,
-                        queue_index=retrieval_index,
-                        cache_status=fetch_result.branch_cache_status,
-                        fetch_ms=fetch_result.fetch_ms,
-                        parse_ms=parse_ms,
-                        match_ms=match_ms,
-                        total_ms=fetch_result.fetch_ms + parse_ms + match_ms,
-                        parsed_count=len(parsed),
-                        matched_count=len(retrieval_matched),
-                        empty=not retrieval_matched,
-                        server_filtered=scrape_result.server_filtered,
-                        playwright_fallback=scrape_result.used_playwright_fallback,
-                        reason_codes=(
-                            *reason_codes,
-                            *_retrieval_branch_cache_reason_codes(fetch_result),
-                            *(
-                                ("retrieval.branch_coalesced",)
-                                if fetch_result.coalesced
-                                else ()
-                            ),
-                        ),
-                    )
-                )
-
-        await fetch_and_process_retrieval_branches(
-            retrieval_plan.fetch_queries,
+        await self._process_retrieval_branches(
+            query=query,
+            query_intent=query_intent,
+            retrieval_plan=retrieval_plan,
+            branch_queries=retrieval_plan.fetch_queries,
             start_index=1,
             reason_codes=retrieval_plan.reason_codes,
+            state=state,
+            stage_timings_ms=stage_timings_ms,
         )
 
         if state.retrieval_fetch_success_count == 0 and state.first_fetch_exception is not None:
@@ -822,109 +661,320 @@ class WatchFactsSearchWorkflow:
                     retrieval_reason_codes.extend(fallback_reason_codes)
                     start_index = len(retrieval_queries) + 1
                     retrieval_queries.extend(fallback_queries)
-                    await fetch_and_process_retrieval_branches(
-                        fallback_queries,
+                    await self._process_retrieval_branches(
+                        query=query,
+                        query_intent=query_intent,
+                        retrieval_plan=retrieval_plan,
+                        branch_queries=fallback_queries,
                         start_index=start_index,
                         reason_codes=fallback_reason_codes,
+                        state=state,
+                        stage_timings_ms=stage_timings_ms,
                     )
             else:
                 retrieval_reason_codes.append("retrieval.conditional_fallback_skipped")
 
-        if (
-            len(local_filter_queries) == 1
-            and _should_expand_year_query(local_filter_queries[0], len(state.matched))
-        ):
-            expanded_query = _query_without_year_descriptors(local_filter_queries[0])
-            if expanded_query is not None:
-                retrieval_started_at = time.perf_counter()
-                fetch_started_at = time.perf_counter()
-                expanded_scrape_result = await self.fetch_html(
-                    self.settings,
-                    query=expanded_query,
+        await self._expand_year_retrieval(
+            query=query,
+            query_intent=query_intent,
+            local_filter_queries=local_filter_queries,
+            retrieval_queries=retrieval_queries,
+            retrieval_reason_codes=retrieval_reason_codes,
+            state=state,
+            stage_timings_ms=stage_timings_ms,
+        )
+        return self._build_retrieval_outcome(
+            query_intent=query_intent,
+            query_plan=query_plan,
+            retrieval_queries=retrieval_queries,
+            retrieval_reason_codes=retrieval_reason_codes,
+            state=state,
+        )
+
+    async def _process_retrieval_branches(
+        self,
+        *,
+        query: str,
+        query_intent: QueryIntentMetadata,
+        retrieval_plan: RetrievalPlan,
+        branch_queries: tuple[str, ...],
+        start_index: int,
+        reason_codes: tuple[str, ...],
+        state: _RetrievalState,
+        stage_timings_ms: dict[str, int],
+    ) -> None:
+        fetch_results = await self._fetch_retrieval_branches(
+            branch_queries,
+            start_index=start_index,
+        )
+        for fetch_result in fetch_results:
+            retrieval_index = fetch_result.index
+            retrieval_query = fetch_result.query
+            _add_stage_timing_value(
+                stage_timings_ms,
+                "watchfacts_fetch",
+                fetch_result.fetch_ms,
+            )
+            if fetch_result.failed:
+                state.retrieval_fetch_error_count += 1
+                state.first_fetch_exception = (
+                    state.first_fetch_exception or fetch_result.exception
                 )
-                if expanded_query not in retrieval_queries:
-                    retrieval_queries.append(expanded_query)
-                expanded_queue_index = retrieval_queries.index(expanded_query) + 1
-                retrieval_reason_codes.append("retrieval.expand_without_year_descriptor")
-                fetch_ms = _stage_elapsed_ms(fetch_started_at)
-                _add_stage_timing_value(stage_timings_ms, "watchfacts_fetch", fetch_ms)
-                self._audit_raw_scrape(
+                error_type = fetch_result.error_type or "Exception"
+                self._audit_retrieval_fetch_error(
                     state.audit_events,
                     query=query,
                     query_intent=query_intent,
-                    scrape_result=expanded_scrape_result,
-                    candidate_id="raw:expanded",
-                    reason_codes=("expanded_year_query",),
-                )
-                state.server_filtered_hit_count += int(expanded_scrape_result.server_filtered)
-                state.playwright_fallback_count += int(
-                    expanded_scrape_result.used_playwright_fallback
-                )
-                parse_started_at = time.perf_counter()
-                expanded_parsed = parse_listings(expanded_scrape_result.html)
-                self._audit_listing_candidates(
-                    state.audit_events,
-                    query=query,
-                    query_intent=query_intent,
-                    stage="parsed",
-                    listings=expanded_parsed,
-                    candidate_prefix="expanded-parsed",
-                )
-                state.parsed_count += len(expanded_parsed)
-                parse_ms = _stage_elapsed_ms(parse_started_at)
-                _add_stage_timing_value(stage_timings_ms, "parse", parse_ms)
-                match_started_at = time.perf_counter()
-                expanded_matched = filter_matching_listings(
-                    local_filter_queries[0],
-                    expanded_parsed,
-                )
-                self._audit_listing_candidates(
-                    state.audit_events,
-                    query=query,
-                    query_intent=query_intent,
-                    stage="matched",
-                    listings=expanded_matched,
-                    candidate_prefix="expanded-matched",
-                )
-                state.matched = _merge_listing_candidates(state.matched, expanded_matched)
-                expanded_weak_count, expanded_ambiguous_count = (
-                    self._audit_match_confidence(
-                        state.audit_events,
-                        query=query,
-                        query_intent=query_intent,
-                        parsed=expanded_parsed,
-                        matched=expanded_matched,
-                        candidate_prefix="expanded",
-                    )
-                )
-                state.weak_match_count += expanded_weak_count
-                state.ambiguous_candidate_count += expanded_ambiguous_count
-                match_ms = _stage_elapsed_ms(match_started_at)
-                _add_stage_timing_value(stage_timings_ms, "match", match_ms)
-                _record_retrieval_contributions(
-                    state.candidate_branch_by_key,
-                    expanded_matched,
-                    branch_query=expanded_query,
+                    candidate_id=(
+                        "raw:1" if retrieval_index == 1 else f"raw:{retrieval_index}"
+                    ),
+                    reason_codes=reason_codes,
+                    error_type=error_type,
                 )
                 state.retrieval_timings.append(
                     RetrievalTiming(
-                        query=expanded_query,
-                        queue_index=expanded_queue_index,
-                        cache_status="miss",
-                        fetch_ms=fetch_ms,
-                        parse_ms=parse_ms,
-                        match_ms=match_ms,
-                        total_ms=_stage_elapsed_ms(retrieval_started_at),
-                        parsed_count=len(expanded_parsed),
-                        matched_count=len(expanded_matched),
-                        empty=not expanded_matched,
-                        server_filtered=expanded_scrape_result.server_filtered,
-                        playwright_fallback=(
-                            expanded_scrape_result.used_playwright_fallback
+                        query=retrieval_query,
+                        queue_index=retrieval_index,
+                        cache_status=fetch_result.branch_cache_status,
+                        fetch_ms=fetch_result.fetch_ms,
+                        parse_ms=0,
+                        match_ms=0,
+                        total_ms=fetch_result.fetch_ms,
+                        parsed_count=0,
+                        matched_count=0,
+                        empty=True,
+                        server_filtered=False,
+                        playwright_fallback=False,
+                        failed=True,
+                        error_type=error_type,
+                        reason_codes=(
+                            *reason_codes,
+                            *_retrieval_branch_cache_reason_codes(fetch_result),
+                            *(
+                                ("retrieval.branch_coalesced",)
+                                if fetch_result.coalesced
+                                else ()
+                            ),
+                            f"retrieval.fetch_error:{error_type}",
                         ),
-                        reason_codes=("retrieval.expand_without_year_descriptor",),
                     )
                 )
+                continue
+            scrape_result = fetch_result.scrape_result
+            if scrape_result is None:
+                continue
+            state.retrieval_fetch_success_count += 1
+            self._audit_raw_scrape(
+                state.audit_events,
+                query=query,
+                query_intent=query_intent,
+                scrape_result=scrape_result,
+                candidate_id=(
+                    "raw:1" if retrieval_index == 1 else f"raw:{retrieval_index}"
+                ),
+                reason_codes=reason_codes,
+            )
+            state.server_filtered_hit_count += int(scrape_result.server_filtered)
+            state.playwright_fallback_count += int(
+                scrape_result.used_playwright_fallback
+            )
+            parse_started_at = time.perf_counter()
+            parsed = parse_listings(scrape_result.html)
+            self._audit_listing_candidates(
+                state.audit_events,
+                query=query,
+                query_intent=query_intent,
+                stage="parsed",
+                listings=parsed,
+                candidate_prefix=(
+                    None
+                    if retrieval_index == 1
+                    else f"retrieval-{retrieval_index}-parsed"
+                ),
+            )
+            parse_ms = _stage_elapsed_ms(parse_started_at)
+            _add_stage_timing_value(stage_timings_ms, "parse", parse_ms)
+            match_started_at = time.perf_counter()
+            retrieval_matched = _filter_retrieved_listings(
+                retrieval_plan.local_filter_queries,
+                parsed,
+                server_filtered=scrape_result.server_filtered,
+                strict_local_filter=retrieval_plan.strict_local_filter,
+            )
+            self._audit_listing_candidates(
+                state.audit_events,
+                query=query,
+                query_intent=query_intent,
+                stage="matched",
+                listings=retrieval_matched,
+                candidate_prefix=(
+                    None
+                    if retrieval_index == 1
+                    else f"retrieval-{retrieval_index}-matched"
+                ),
+            )
+            weak_count, ambiguous_count = self._audit_match_confidence(
+                state.audit_events,
+                query=query,
+                query_intent=query_intent,
+                parsed=parsed,
+                matched=retrieval_matched,
+                candidate_prefix=(
+                    "candidate"
+                    if retrieval_index == 1
+                    else f"retrieval-{retrieval_index}"
+                ),
+            )
+            state.weak_match_count += weak_count
+            state.ambiguous_candidate_count += ambiguous_count
+            match_ms = _stage_elapsed_ms(match_started_at)
+            _add_stage_timing_value(stage_timings_ms, "match", match_ms)
+            state.parsed_count += len(parsed)
+            _record_retrieval_contributions(
+                state.candidate_branch_by_key,
+                retrieval_matched,
+                branch_query=retrieval_query,
+            )
+            state.matched = _merge_listing_candidates(state.matched, retrieval_matched)
+            state.retrieval_timings.append(
+                RetrievalTiming(
+                    query=retrieval_query,
+                    queue_index=retrieval_index,
+                    cache_status=fetch_result.branch_cache_status,
+                    fetch_ms=fetch_result.fetch_ms,
+                    parse_ms=parse_ms,
+                    match_ms=match_ms,
+                    total_ms=fetch_result.fetch_ms + parse_ms + match_ms,
+                    parsed_count=len(parsed),
+                    matched_count=len(retrieval_matched),
+                    empty=not retrieval_matched,
+                    server_filtered=scrape_result.server_filtered,
+                    playwright_fallback=scrape_result.used_playwright_fallback,
+                    reason_codes=(
+                        *reason_codes,
+                        *_retrieval_branch_cache_reason_codes(fetch_result),
+                        *(
+                            ("retrieval.branch_coalesced",)
+                            if fetch_result.coalesced
+                            else ()
+                        ),
+                    ),
+                )
+            )
+
+    async def _expand_year_retrieval(
+        self,
+        *,
+        query: str,
+        query_intent: QueryIntentMetadata,
+        local_filter_queries: tuple[str, ...],
+        retrieval_queries: list[str],
+        retrieval_reason_codes: list[str],
+        state: _RetrievalState,
+        stage_timings_ms: dict[str, int],
+    ) -> None:
+        if len(local_filter_queries) != 1 or not _should_expand_year_query(
+            local_filter_queries[0], len(state.matched)
+        ):
+            return
+        expanded_query = _query_without_year_descriptors(local_filter_queries[0])
+        if expanded_query is None:
+            return
+        retrieval_started_at = time.perf_counter()
+        fetch_started_at = time.perf_counter()
+        expanded_scrape_result = await self.fetch_html(
+            self.settings,
+            query=expanded_query,
+        )
+        if expanded_query not in retrieval_queries:
+            retrieval_queries.append(expanded_query)
+        expanded_queue_index = retrieval_queries.index(expanded_query) + 1
+        retrieval_reason_codes.append("retrieval.expand_without_year_descriptor")
+        fetch_ms = _stage_elapsed_ms(fetch_started_at)
+        _add_stage_timing_value(stage_timings_ms, "watchfacts_fetch", fetch_ms)
+        self._audit_raw_scrape(
+            state.audit_events,
+            query=query,
+            query_intent=query_intent,
+            scrape_result=expanded_scrape_result,
+            candidate_id="raw:expanded",
+            reason_codes=("expanded_year_query",),
+        )
+        state.server_filtered_hit_count += int(expanded_scrape_result.server_filtered)
+        state.playwright_fallback_count += int(
+            expanded_scrape_result.used_playwright_fallback
+        )
+        parse_started_at = time.perf_counter()
+        expanded_parsed = parse_listings(expanded_scrape_result.html)
+        self._audit_listing_candidates(
+            state.audit_events,
+            query=query,
+            query_intent=query_intent,
+            stage="parsed",
+            listings=expanded_parsed,
+            candidate_prefix="expanded-parsed",
+        )
+        state.parsed_count += len(expanded_parsed)
+        parse_ms = _stage_elapsed_ms(parse_started_at)
+        _add_stage_timing_value(stage_timings_ms, "parse", parse_ms)
+        match_started_at = time.perf_counter()
+        expanded_matched = filter_matching_listings(
+            local_filter_queries[0],
+            expanded_parsed,
+        )
+        self._audit_listing_candidates(
+            state.audit_events,
+            query=query,
+            query_intent=query_intent,
+            stage="matched",
+            listings=expanded_matched,
+            candidate_prefix="expanded-matched",
+        )
+        state.matched = _merge_listing_candidates(state.matched, expanded_matched)
+        expanded_weak_count, expanded_ambiguous_count = self._audit_match_confidence(
+            state.audit_events,
+            query=query,
+            query_intent=query_intent,
+            parsed=expanded_parsed,
+            matched=expanded_matched,
+            candidate_prefix="expanded",
+        )
+        state.weak_match_count += expanded_weak_count
+        state.ambiguous_candidate_count += expanded_ambiguous_count
+        match_ms = _stage_elapsed_ms(match_started_at)
+        _add_stage_timing_value(stage_timings_ms, "match", match_ms)
+        _record_retrieval_contributions(
+            state.candidate_branch_by_key,
+            expanded_matched,
+            branch_query=expanded_query,
+        )
+        state.retrieval_timings.append(
+            RetrievalTiming(
+                query=expanded_query,
+                queue_index=expanded_queue_index,
+                cache_status="miss",
+                fetch_ms=fetch_ms,
+                parse_ms=parse_ms,
+                match_ms=match_ms,
+                total_ms=_stage_elapsed_ms(retrieval_started_at),
+                parsed_count=len(expanded_parsed),
+                matched_count=len(expanded_matched),
+                empty=not expanded_matched,
+                server_filtered=expanded_scrape_result.server_filtered,
+                playwright_fallback=expanded_scrape_result.used_playwright_fallback,
+                reason_codes=("retrieval.expand_without_year_descriptor",),
+            )
+        )
+
+    @staticmethod
+    def _build_retrieval_outcome(
+        *,
+        query_intent: QueryIntentMetadata,
+        query_plan: QueryPlan,
+        retrieval_queries: list[str],
+        retrieval_reason_codes: list[str],
+        state: _RetrievalState,
+    ) -> RetrievalOutcome:
         return RetrievalOutcome(
             query_intent=query_intent,
             query_plan=query_plan,

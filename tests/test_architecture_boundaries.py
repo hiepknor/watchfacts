@@ -90,13 +90,20 @@ def test_search_workflow_keeps_pipeline_stages_separate() -> None:
     }
 
     assert "_execute_retrieval_pipeline" in methods
+    assert "_process_retrieval_branches" in methods
+    assert "_expand_year_retrieval" in methods
+    assert "_build_retrieval_outcome" in methods
     assert "_process_result_pipeline" in methods
     assert methods["_search_uncached_inner"].end_lineno - methods[
         "_search_uncached_inner"
     ].lineno < 150
+    assert methods["_execute_retrieval_pipeline"].end_lineno - methods[
+        "_execute_retrieval_pipeline"
+    ].lineno < 120
     assert not any(
-        isinstance(node, ast.Nonlocal)
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Nonlocal))
         for node in ast.walk(methods["_execute_retrieval_pipeline"])
+        if node is not methods["_execute_retrieval_pipeline"]
     )
 
 

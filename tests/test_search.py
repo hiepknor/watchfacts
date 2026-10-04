@@ -3118,6 +3118,23 @@ def test_search_workflow_expands_sparse_year_query_and_refilters_locally(tmp_pat
         "Rolex 126500ln white 2026 n1 HKD 273000",
         "126500LN White N3/2026 HK$279000 without box",
     ]
+    assert workflow.last_search_diagnostics is not None
+    diagnostics_payload = workflow.last_search_diagnostics.to_payload()
+    assert diagnostics_payload["parsed_count"] == 3
+    assert diagnostics_payload["matched_count"] == 2
+    assert diagnostics_payload["retrieval_queries"] == [
+        "126500ln white 2026",
+        "126500ln white",
+    ]
+    assert [
+        timing["parsed_count"] for timing in diagnostics_payload["retrieval_timings"]
+    ] == [1, 2]
+    assert [
+        timing["matched_count"] for timing in diagnostics_payload["retrieval_timings"]
+    ] == [1, 1]
+    assert "retrieval.expand_without_year_descriptor" in diagnostics_payload[
+        "retrieval_reason_codes"
+    ]
 
 
 def test_search_workflow_drops_server_filtered_conflicting_color_descriptor(tmp_path) -> None:
