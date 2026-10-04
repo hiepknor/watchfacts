@@ -8,14 +8,9 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
+from typing import Any, Protocol
 
 from app.config import Settings
-from app.db import Database
-from app.infrastructure import (
-    AiSuggestionRepository,
-    IssueRepository,
-    SearchCacheRepository,
-)
 from app.searching.dedupe import latest_dedupe_key, unique_latest_by_text, unique_latest_listings
 from app.integrations.ai_refiner import evaluate_refinement_suggestion
 from app.searching.fuzzy_diagnostics import score_fuzzy_match
@@ -48,13 +43,31 @@ from app.searching.result_scoring import (
     rank_results_by_quality,
     score_result,
 )
-from app.integrations.scraper import ScrapeResult, fetch_watchfacts_html
+from app.integrations.scraper import ScrapeResult
 from app.searching.search_result import SearchResult, search_results_to_dicts
 from app.searching.similarity import group_similar_results
 
 
 FetchHtml = Callable[..., Awaitable[ScrapeResult]]
 RefineResults = Callable[[str, list[SearchResult]], Awaitable[list[SearchResult]]]
+
+
+class AiSuggestionPort(Protocol):
+    def record_suggestion(self, **kwargs: Any) -> int: ...
+
+
+class IssuePort(Protocol):
+    def record_suspicious(self, **kwargs: Any) -> None: ...
+
+
+class SearchCachePort(Protocol):
+    def record_query_results(self, *args: Any, **kwargs: Any) -> Any: ...
+
+    def get_quality_metrics(self, cache_key: str) -> dict[str, int]: ...
+
+    def get_fresh_row(self, cache_key: str) -> tuple[str, int, int, int] | None: ...
+
+    def record_cache(self, **kwargs: Any) -> None: ...
 logger = logging.getLogger("app.search")
 SEARCH_CACHE_VERSION = "search-v33"
 PRODUCT_REFERENCE_RE = re.compile(
@@ -279,23 +292,17 @@ class WatchFactsSearchWorkflow:
         self,
         settings: Settings,
         *,
-        database: Database | None = None,
-        ai_suggestion_repository: AiSuggestionRepository | None = None,
-        issue_repository: IssueRepository | None = None,
-        search_cache_repository: SearchCacheRepository | None = None,
-        fetch_html: FetchHtml | None = None,
+        ai_suggestion_repository: AiSuggestionPort,
+        issue_repository: IssuePort,
+        search_cache_repository: SearchCachePort,
+        fetch_html: FetchHtml,
         refine_results: RefineResults | None = None,
     ) -> None:
         self.settings = settings
-        self.database = database or Database(settings.db_path)
-        self.ai_suggestion_repository = ai_suggestion_repository or AiSuggestionRepository(
-            self.database
-        )
-        self.issue_repository = issue_repository or IssueRepository(self.database)
-        self.search_cache_repository = search_cache_repository or SearchCacheRepository(
-            self.database
-        )
-        self.fetch_html = fetch_html or fetch_watchfacts_html
+        self.ai_suggestion_repository = ai_suggestion_repository
+        self.issue_repository = issue_repository
+        self.search_cache_repository = search_cache_repository
+        self.fetch_html = fetch_html
         self.refine_results = refine_results
         self.last_search_diagnostics: SearchDiagnostics | None = None
         self.last_search_audit_events: tuple[SearchAuditEvent, ...] = ()
@@ -791,6 +798,114 @@ class WatchFactsSearchWorkflow:
                         reason_codes=("retrieval.expand_without_year_descriptor",),
                     )
                 )
+        (
+            unique,
+            results,
+            unique_latest_count,
+            unique_text_count,
+            fuzzy_scores,
+            deduped_drop_count,
+            rejection_reasons,
+            retrieval_timings,
+        ) = await self._process_result_pipeline(
+            query=query,
+            matched=matched,
+            candidate_branch_by_key=candidate_branch_by_key,
+            query_intent=query_intent,
+            audit_events=audit_events,
+            stage_timings_ms=stage_timings_ms,
+            retrieval_timings=retrieval_timings,
+            retrieval_fetch_error_count=retrieval_fetch_error_count,
+        )
+        self.last_search_audit_events = tuple(audit_events)
+
+        persist_started_at = time.perf_counter()
+        self.search_cache_repository.record_query_results(
+            query,
+            unique,
+            image_missing_count=self._count_missing_images(unique),
+            server_filtered_hit_count=server_filtered_hit_count,
+            playwright_fallback_count=playwright_fallback_count,
+        )
+        self._record_suspicious_results(query, unique)
+        if retrieval_fetch_error_count == 0:
+            self._record_cached_results(
+                cache_key=cache_key,
+                query=query,
+                results=unique,
+                image_missing_count=self._count_missing_images(unique),
+                server_filtered_hit_count=server_filtered_hit_count,
+                playwright_fallback_count=playwright_fallback_count,
+            )
+        _add_stage_timing(stage_timings_ms, "persist", persist_started_at)
+        stage_timings_ms["total"] = _stage_elapsed_ms(search_started_at)
+        self.last_search_diagnostics = SearchDiagnostics(
+            parsed_count=parsed_count,
+            matched_count=len(matched),
+            search_result_count=len(results),
+            unique_latest_count=unique_latest_count,
+            unique_text_count=unique_text_count,
+            final_count=len(unique),
+            server_filtered=server_filtered_hit_count > 0,
+            playwright_fallback=playwright_fallback_count > 0,
+            cache_hit=False,
+            source_truncation_suspected=(
+                parsed_count >= WATCHFACTS_SOURCE_TRUNCATION_THRESHOLD
+            ),
+            raw_candidate_count=sum(
+                1 for event in audit_events if event.stage == "raw"
+            ),
+            deduped_drop_count=deduped_drop_count,
+            weak_match_count=weak_match_count,
+            ambiguous_candidate_count=ambiguous_candidate_count,
+            fuzzy_score_min=min(fuzzy_scores) if fuzzy_scores else None,
+            fuzzy_score_avg=(
+                round(sum(fuzzy_scores) / len(fuzzy_scores), 2)
+                if fuzzy_scores
+                else None
+            ),
+            query_intent=query_intent.kind,
+            query_plan=query_plan,
+            retrieval_query_count=len(retrieval_queries),
+            retrieval_queries=tuple(retrieval_queries),
+            retrieval_reason_codes=_dedupe_strings(retrieval_reason_codes),
+            required_descriptor_tokens=query_intent.required_descriptor_tokens,
+            optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
+            intent_reason_codes=query_intent.reason_codes,
+            guardrail_action_counts=_guardrail_action_counts(audit_events),
+            rejection_reasons=rejection_reasons,
+            stage_timings_ms=dict(stage_timings_ms),
+            retrieval_timings=_mark_dominant_retrieval_timing(retrieval_timings),
+        )
+        logger.info(
+            "event=query.end parsed_count=%d matched_count=%d result_count=%d",
+            parsed_count,
+            len(matched),
+            len(unique),
+        )
+        return unique
+
+    async def _process_result_pipeline(
+        self,
+        *,
+        query: str,
+        matched: list[ListingCandidate],
+        candidate_branch_by_key: dict[tuple[str, str, str, str], str],
+        query_intent: QueryIntentMetadata,
+        audit_events: list[SearchAuditEvent],
+        stage_timings_ms: dict[str, int],
+        retrieval_timings: list[RetrievalTiming],
+        retrieval_fetch_error_count: int,
+    ) -> tuple[
+        list[SearchResult],
+        list[SearchResult],
+        int,
+        int,
+        list[int],
+        int,
+        dict[str, int],
+        list[RetrievalTiming],
+    ]:
         result_pipeline_started_at = time.perf_counter()
         results: list[SearchResult] = []
         result_branch_by_key: dict[tuple[str, str, str, str], str] = {}
@@ -939,73 +1054,16 @@ class WatchFactsSearchWorkflow:
             "result_pipeline",
             result_pipeline_started_at,
         )
-        self.last_search_audit_events = tuple(audit_events)
-
-        persist_started_at = time.perf_counter()
-        self.search_cache_repository.record_query_results(
-            query,
+        return (
             unique,
-            image_missing_count=self._count_missing_images(unique),
-            server_filtered_hit_count=server_filtered_hit_count,
-            playwright_fallback_count=playwright_fallback_count,
+            results,
+            unique_latest_count,
+            unique_text_count,
+            fuzzy_scores,
+            deduped_drop_count,
+            rejection_reasons,
+            retrieval_timings,
         )
-        self._record_suspicious_results(query, unique)
-        if retrieval_fetch_error_count == 0:
-            self._record_cached_results(
-                cache_key=cache_key,
-                query=query,
-                results=unique,
-                image_missing_count=self._count_missing_images(unique),
-                server_filtered_hit_count=server_filtered_hit_count,
-                playwright_fallback_count=playwright_fallback_count,
-            )
-        _add_stage_timing(stage_timings_ms, "persist", persist_started_at)
-        stage_timings_ms["total"] = _stage_elapsed_ms(search_started_at)
-        self.last_search_diagnostics = SearchDiagnostics(
-            parsed_count=parsed_count,
-            matched_count=len(matched),
-            search_result_count=len(results),
-            unique_latest_count=unique_latest_count,
-            unique_text_count=unique_text_count,
-            final_count=len(unique),
-            server_filtered=server_filtered_hit_count > 0,
-            playwright_fallback=playwright_fallback_count > 0,
-            cache_hit=False,
-            source_truncation_suspected=(
-                parsed_count >= WATCHFACTS_SOURCE_TRUNCATION_THRESHOLD
-            ),
-            raw_candidate_count=sum(
-                1 for event in audit_events if event.stage == "raw"
-            ),
-            deduped_drop_count=deduped_drop_count,
-            weak_match_count=weak_match_count,
-            ambiguous_candidate_count=ambiguous_candidate_count,
-            fuzzy_score_min=min(fuzzy_scores) if fuzzy_scores else None,
-            fuzzy_score_avg=(
-                round(sum(fuzzy_scores) / len(fuzzy_scores), 2)
-                if fuzzy_scores
-                else None
-            ),
-            query_intent=query_intent.kind,
-            query_plan=query_plan,
-            retrieval_query_count=len(retrieval_queries),
-            retrieval_queries=tuple(retrieval_queries),
-            retrieval_reason_codes=_dedupe_strings(retrieval_reason_codes),
-            required_descriptor_tokens=query_intent.required_descriptor_tokens,
-            optional_descriptor_tokens=query_intent.optional_descriptor_tokens,
-            intent_reason_codes=query_intent.reason_codes,
-            guardrail_action_counts=_guardrail_action_counts(audit_events),
-            rejection_reasons=rejection_reasons,
-            stage_timings_ms=dict(stage_timings_ms),
-            retrieval_timings=_mark_dominant_retrieval_timing(retrieval_timings),
-        )
-        logger.info(
-            "event=query.end parsed_count=%d matched_count=%d result_count=%d",
-            parsed_count,
-            len(matched),
-            len(unique),
-        )
-        return unique
 
     async def _fetch_retrieval_branches(
         self,

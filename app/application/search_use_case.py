@@ -26,33 +26,12 @@ class SearchUseCase:
         cls,
         settings: Settings,
         *,
-        workflow_factory: WorkflowFactory | None = None,
-        database: Any = None,
-        ai_suggestion_repository: Any = None,
-        issue_repository: Any = None,
-        search_cache_repository: Any = None,
-        fetch_html: Any = None,
-        refine_results: RefineResults | None = None,
+        workflow_factory: WorkflowFactory,
+        **workflow_options: Any,
     ) -> "SearchUseCase":
-        if workflow_factory is None:
-            from app.searching.search import WatchFactsSearchWorkflow
+        """Compatibility constructor for explicitly supplied workflow factories."""
 
-            workflow_factory = WatchFactsSearchWorkflow
-
-        kwargs: dict[str, Any] = {}
-        if database is not None:
-            kwargs["database"] = database
-        if ai_suggestion_repository is not None:
-            kwargs["ai_suggestion_repository"] = ai_suggestion_repository
-        if issue_repository is not None:
-            kwargs["issue_repository"] = issue_repository
-        if search_cache_repository is not None:
-            kwargs["search_cache_repository"] = search_cache_repository
-        if fetch_html is not None:
-            kwargs["fetch_html"] = fetch_html
-        if refine_results is not None:
-            kwargs["refine_results"] = refine_results
-        return cls(workflow_factory(settings, **kwargs))
+        return cls(workflow_factory(settings, **workflow_options))
 
     async def search(self, query: str) -> list[SearchResult]:
         return await self.workflow.search(query)

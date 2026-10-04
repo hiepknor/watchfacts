@@ -67,6 +67,34 @@ def test_search_orchestration_exceptions_are_explicit() -> None:
     assert existing_files == DETERMINISTIC_DOMAIN_FILES | documented_exceptions
 
 
+def test_search_workflow_depends_on_ports_not_concrete_persistence() -> None:
+    source = Path("app/searching/search.py").read_text(encoding="utf-8")
+
+    assert "from app.db import" not in source
+    assert "from app.infrastructure import" not in source
+    assert "Database(" not in source
+    assert "SearchCacheRepository(" not in source
+
+
+def test_search_workflow_keeps_result_pipeline_as_a_separate_stage() -> None:
+    tree = ast.parse(Path("app/searching/search.py").read_text(encoding="utf-8"))
+    workflow = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "WatchFactsSearchWorkflow"
+    )
+    methods = {
+        node.name: node
+        for node in workflow.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+    assert "_process_result_pipeline" in methods
+    assert methods["_search_uncached_inner"].end_lineno - methods[
+        "_search_uncached_inner"
+    ].lineno < 450
+
+
 def test_application_use_cases_do_not_import_interface_adapters() -> None:
     violations: list[str] = []
     for path in sorted(Path("app/application").glob("*.py")):

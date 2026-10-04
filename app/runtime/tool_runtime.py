@@ -10,7 +10,6 @@ from app.application import (
     ResultReferenceUseCase,
     SearchPayloadPage,
     SearchPayloadUseCase,
-    SearchUseCase,
     StoredResult,
 )
 from app.config import (
@@ -25,7 +24,7 @@ from app.results.result_pages import (
     result_presentation_payload,
 )
 from app.integrations.scraper import BrowserSessionStatus, check_watchfacts_session
-from app.searching.search import WatchFactsSearchWorkflow, _search_cache_key
+from app.searching.search import _search_cache_key
 from app.searching.search_result import (
     SearchResult,
     search_result_to_dict,
@@ -38,6 +37,7 @@ from app.integrations.watchfacts_http import (
     watchfacts_http_client_status,
 )
 from app.infrastructure import ResultReferenceRepository
+from app.infrastructure.search_workflow import build_search_use_case
 
 
 RESULT_CACHE_TTL_SECONDS = DEFAULT_SEARCH_CACHE_TTL_SECONDS
@@ -114,9 +114,8 @@ async def watchfacts_search_payload(
     active_workflow = (
         workflow
         if workflow is not None
-        else SearchUseCase.from_settings(
+        else build_search_use_case(
             active_settings,
-            workflow_factory=WatchFactsSearchWorkflow,
             refine_results=_build_search_refiner(active_settings),
         )
     )
@@ -518,10 +517,7 @@ async def _resolve_result_reference(
         result_id=result_id,
         rank=rank,
         workflow=workflow,
-        workflow_factory=lambda: SearchUseCase.from_settings(
-            settings,
-            workflow_factory=WatchFactsSearchWorkflow,
-        ),
+        workflow_factory=lambda: build_search_use_case(settings),
         store_results=lambda search_query, results, ttl_seconds: _store_results(
             search_query,
             results,

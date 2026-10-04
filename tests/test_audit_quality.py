@@ -72,7 +72,11 @@ def test_run_audit_uses_search_settings_without_telegram_token(
         "load_search_settings",
         lambda: load_search_settings(env={}, project_root=tmp_path),
     )
-    monkeypatch.setattr(audit_quality, "WatchFactsSearchWorkflow", FakeWorkflow)
+    monkeypatch.setattr(
+        audit_quality,
+        "build_search_use_case",
+        lambda settings, **kwargs: FakeWorkflow(settings, **kwargs),
+    )
 
     reports = asyncio.run(audit_quality.run_audit(["5712g"], limit=1))
 

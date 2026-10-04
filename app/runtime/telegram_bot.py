@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Protocol
 
-from app.application import IssueTriageUseCase, SearchPayloadUseCase, SearchUseCase
+from app.application import IssueTriageUseCase, SearchPayloadUseCase
 from app.config import (
     DEFAULT_SEARCH_CACHE_TTL_SECONDS,
     DEFAULT_TELEGRAM_RESULT_LIMIT,
@@ -26,6 +26,7 @@ from app.db import (
 from app.results.result_pages import ResultPageConfig, generate_result_page
 from app.integrations.scraper import BrowserSessionError, BrowserSessionStatus
 from app.infrastructure import AiSuggestionRepository
+from app.infrastructure.search_workflow import build_search_use_case
 from app.searching.search_result import SearchResult
 
 
@@ -1076,12 +1077,7 @@ def build_application(settings: Settings, workflow: SearchWorkflow | None = None
 
 def run_bot(settings: Settings, workflow: SearchWorkflow | None = None) -> None:
     if workflow is None:
-        from app.searching.search import WatchFactsSearchWorkflow
-
-        workflow = SearchUseCase.from_settings(
-            settings,
-            workflow_factory=WatchFactsSearchWorkflow,
-        )
+        workflow = build_search_use_case(settings)
 
     application = build_application(settings, workflow)
     logger.info("event=bot.starting")

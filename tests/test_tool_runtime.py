@@ -60,9 +60,12 @@ def test_watchfacts_search_payload_includes_hybrid_refiner_when_enabled(tmp_path
             captured_refiners.append(self.refine_results)
             return [SearchResult("5712G Used")]
 
+    def fake_build_search_use_case(settings_arg, *, refine_results=None):
+        return FakeRefinedWorkflow(settings_arg, refine_results=refine_results)
+
     monkeypatch.setattr(
-        "app.tool_runtime.WatchFactsSearchWorkflow",
-        FakeRefinedWorkflow,
+        "app.tool_runtime.build_search_use_case",
+        fake_build_search_use_case,
     )
 
     payload = asyncio.run(

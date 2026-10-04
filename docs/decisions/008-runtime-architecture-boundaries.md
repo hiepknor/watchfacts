@@ -7,6 +7,11 @@ in this record are historical context.
 Amended by [ADR-010](010-retire-openwa-handoff.md): OpenWA-specific application
 and integration boundaries were removed when the handoff flow was retired.
 
+Implementation note (2026-10-04): concrete database, repository, and fetch
+adapter construction for search now lives in
+`app/infrastructure/search_workflow.py`. `WatchFactsSearchWorkflow` receives
+ports explicitly and no longer creates persistence adapters itself.
+
 ## Status
 
 Accepted

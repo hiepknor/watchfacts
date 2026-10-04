@@ -11,6 +11,7 @@ import pytest
 import app.search as search_module
 from app.config import Settings
 from app.db import Database
+from app.infrastructure.search_workflow import build_search_workflow
 from app.parser import ListingCandidate
 from app.scraper import ScrapeResult
 from app.search import SEARCH_CACHE_VERSION, WatchFactsSearchWorkflow
@@ -44,7 +45,7 @@ def test_search_workflow_scrapes_parses_matches_dedupes_and_persists(tmp_path) -
         fetch_calls.append((received_settings, query))
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -196,7 +197,7 @@ def test_search_workflow_records_quality_metrics(tmp_path) -> None:
             used_playwright_fallback=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -304,7 +305,7 @@ def test_search_workflow_preserves_seller_phone_from_watchfacts_json(tmp_path) -
     async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -350,7 +351,7 @@ def test_search_workflow_serves_repeated_query_from_cache(tmp_path) -> None:
         fetch_count += 1
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -400,7 +401,7 @@ def test_search_workflow_serves_descriptor_alias_query_from_cache(tmp_path) -> N
         fetch_queries.append(query)
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -442,7 +443,7 @@ def test_search_workflow_refetches_after_cache_expiry(tmp_path) -> None:
         fetch_count += 1
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -651,7 +652,7 @@ def test_search_workflow_coalesces_concurrent_same_query_fetches(tmp_path) -> No
         await asyncio.sleep(0.01)
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -688,12 +689,12 @@ def test_search_workflow_reports_in_flight_wait_for_coalesced_workflows(tmp_path
         await asyncio.sleep(0.01)
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    owner_workflow = WatchFactsSearchWorkflow(
+    owner_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
     )
-    coalesced_workflow = WatchFactsSearchWorkflow(
+    coalesced_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -742,12 +743,12 @@ def test_search_workflow_coalesces_in_flight_descriptor_alias_queries(tmp_path) 
         await asyncio.sleep(0.01)
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    owner_workflow = WatchFactsSearchWorkflow(
+    owner_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
     )
-    coalesced_workflow = WatchFactsSearchWorkflow(
+    coalesced_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -802,12 +803,12 @@ def test_search_workflow_coalesces_in_flight_retrieval_branch_across_queries(
         await asyncio.sleep(0.01)
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    rg_workflow = WatchFactsSearchWorkflow(
+    rg_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
     )
-    wg_workflow = WatchFactsSearchWorkflow(
+    wg_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -873,12 +874,12 @@ def test_search_workflow_reuses_fresh_retrieval_branch_cache_across_queries(
         fetch_queries.append(query)
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    rg_workflow = WatchFactsSearchWorkflow(
+    rg_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
     )
-    wg_workflow = WatchFactsSearchWorkflow(
+    wg_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -939,12 +940,12 @@ def test_search_workflow_refreshes_stale_retrieval_branch_cache(tmp_path) -> Non
         fetch_count += 1
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    rg_workflow = WatchFactsSearchWorkflow(
+    rg_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
     )
-    wg_workflow = WatchFactsSearchWorkflow(
+    wg_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -1015,12 +1016,12 @@ def test_search_workflow_does_not_cache_failed_retrieval_branch(tmp_path) -> Non
             final_url=settings.watchfacts_url,
         )
 
-    failing_workflow = WatchFactsSearchWorkflow(
+    failing_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
     )
-    successful_workflow = WatchFactsSearchWorkflow(
+    successful_workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -1065,7 +1066,7 @@ def test_search_workflow_limits_search_runtime_concurrent_distinct_queries(tmp_p
         active_fetches -= 1
         return ScrapeResult(html="{}", final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     async def run_searches() -> None:
         await asyncio.gather(
@@ -1084,7 +1085,7 @@ def test_search_workflow_persists_no_result_queries(tmp_path) -> None:
     async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         return ScrapeResult(html=FIXTURE.read_text(), final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("does not exist"))
 
@@ -1127,7 +1128,7 @@ def test_search_workflow_keeps_server_filtered_results_without_strict_refilter(t
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("5712 blue"))
 
@@ -1165,7 +1166,7 @@ def test_search_workflow_refilters_broad_server_filtered_reference_queries(tmp_p
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
     results = asyncio.run(workflow.search("5205r"))
 
     assert [result.listing_text for result in results] == [
@@ -1204,7 +1205,7 @@ def test_server_filtered_color_query_filters_text_mismatches(tmp_path) -> None:
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
     results = asyncio.run(workflow.search("15510or blue"))
 
     assert [result.listing_text for result in results] == [
@@ -1240,7 +1241,7 @@ def test_server_filtered_color_query_with_or_connector_filters_text_mismatches(t
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
     results = asyncio.run(workflow.search("15510 or blue"))
 
     assert [result.listing_text for result in results] == [
@@ -1275,7 +1276,7 @@ def test_server_filtered_color_query_uses_dial_color_match_text_for_server_json(
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
     results = asyncio.run(workflow.search("15510or blue"))
 
     assert len(results) == 1
@@ -1316,7 +1317,7 @@ def test_server_filtered_nested_variant_color_matches_are_variant_specific(tmp_p
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
     results = asyncio.run(workflow.search("15510or blue"))
 
     assert [result.listing_text for result in results] == [
@@ -1355,7 +1356,7 @@ def test_search_workflow_matches_non_blue_variant_without_inheriting_blue_parent
     async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=Database(settings.db_path),
         fetch_html=fetch_html,
@@ -1401,7 +1402,7 @@ def test_server_filtered_parent_color_isolation_for_nested_listings(tmp_path) ->
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
     results = asyncio.run(workflow.search("15510or blue"))
 
     assert [result.listing_text for result in results] == [
@@ -1435,7 +1436,7 @@ def test_search_workflow_drops_server_filtered_non_sale_requests(tmp_path) -> No
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("228235a choco"))
 
@@ -1475,7 +1476,7 @@ def test_search_workflow_refilters_server_filtered_non_color_descriptor_queries(
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("228235a cho"))
 
@@ -1516,7 +1517,7 @@ def test_search_workflow_refilters_server_filtered_non_color_variant_descriptors
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("228349rbr mete"))
 
@@ -1547,7 +1548,7 @@ def test_search_workflow_falls_back_to_image_backed_reference_matches(tmp_path) 
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("228349rbr mete"))
 
@@ -1603,7 +1604,7 @@ def test_search_workflow_matches_server_filtered_rg_snow_material_aliases(tmp_pa
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("rm07-01 rg snow"))
 
@@ -1663,7 +1664,7 @@ def test_search_workflow_uses_same_uncached_retrieval_for_compound_material_alia
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     rose_gold_results = asyncio.run(workflow.search("rm07-01 rose gold"))
     with sqlite3.connect(settings.db_path) as connection:
@@ -1762,7 +1763,7 @@ def test_search_workflow_expands_daytona_panda_retrieval_with_local_filters(
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("daytona panda"))
     result_texts = {result.listing_text for result in results}
@@ -1890,7 +1891,7 @@ def test_search_workflow_fetches_retrieval_branches_with_bounded_parallelism(
             completed.append(query)
             active_fetches -= 1
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("daytona panda"))
 
@@ -1963,7 +1964,7 @@ def test_search_workflow_isolates_partial_retrieval_fetch_failures(tmp_path) -> 
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("5711 blue"))
 
@@ -2031,7 +2032,7 @@ def test_search_workflow_does_not_expand_reference_only_query(tmp_path) -> None:
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("126500ln"))
 
@@ -2085,7 +2086,7 @@ def test_search_workflow_does_not_expand_reference_with_nickname_query(tmp_path)
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("126500ln panda"))
 
@@ -2169,7 +2170,7 @@ def test_search_workflow_expands_5711_blue_retrieval_with_reference_scoped_filte
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("5711 blue"))
     result_texts = {result.listing_text for result in results}
@@ -2256,7 +2257,7 @@ def test_search_workflow_skips_5711_blue_fallback_when_primary_is_sufficient(
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("5711 blue"))
 
@@ -2301,7 +2302,7 @@ def test_search_workflow_does_not_expand_5711_blue_when_extra_descriptors_change
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search(query))
 
@@ -2420,7 +2421,7 @@ def test_search_workflow_expands_15500st_blue_retrieval_with_reference_scoped_fi
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("15500st blue"))
     result_texts = {result.listing_text for result in results}
@@ -2507,7 +2508,7 @@ def test_search_workflow_skips_15500st_blue_fallback_when_primary_is_sufficient(
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("15500st blue"))
 
@@ -2552,7 +2553,7 @@ def test_search_workflow_does_not_expand_15500st_blue_when_extra_descriptors_cha
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search(query))
 
@@ -2667,7 +2668,7 @@ def test_search_workflow_uses_fp_journe_brand_alias_retrieval_fallback(tmp_path)
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
     results = asyncio.run(workflow.search("rp journe elegante titanium"))
     result_texts = {result.listing_text for result in results}
 
@@ -2727,7 +2728,7 @@ def test_search_workflow_does_not_use_reference_only_fallback_for_multi_descript
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("rm07-01 rg snow"))
 
@@ -2761,7 +2762,7 @@ def test_search_workflow_allows_reference_only_fallback_for_optional_year_descri
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("126500ln white 2026"))
 
@@ -2796,7 +2797,7 @@ def test_search_workflow_exposes_raw_context_used_segment_reason(tmp_path) -> No
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("126500ln white 2026"))
 
@@ -2859,7 +2860,7 @@ def test_search_workflow_matches_server_filtered_compound_material_phrases(
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("rm07-01 rose gold"))
 
@@ -2892,7 +2893,7 @@ def test_search_workflow_refilters_server_filtered_non_color_variant_descriptor_
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("228349rbr meteorite"))
 
@@ -3001,7 +3002,7 @@ def test_search_workflow_refilters_server_filtered_alias_plus_noncolor_descripto
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("116500 panda mete"))
 
@@ -3052,7 +3053,7 @@ def test_search_workflow_demotes_missing_price_result_when_priced_results_exist(
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("5205r 2026"))
 
@@ -3108,7 +3109,7 @@ def test_search_workflow_expands_sparse_year_query_and_refilters_locally(tmp_pat
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("126500ln white 2026"))
 
@@ -3147,7 +3148,7 @@ def test_search_workflow_drops_server_filtered_conflicting_color_descriptor(tmp_
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("126500ln white 2026"))
 
@@ -3184,7 +3185,7 @@ def test_search_workflow_keeps_server_filtered_panda_alias_results(tmp_path) -> 
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("116500 panda"))
 
@@ -3224,7 +3225,7 @@ def test_search_workflow_omits_bundle_images_for_multi_listing_cards(tmp_path) -
     async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("7118/1200a blue"))
 
@@ -3257,7 +3258,7 @@ def test_search_workflow_records_suspicious_incomplete_results(tmp_path) -> None
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
     database = Database(settings.db_path)
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=database,
         fetch_html=fetch_html,
@@ -3301,7 +3302,7 @@ def test_search_workflow_scopes_variant_reference_and_omits_bundle_image(tmp_pat
     async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         return ScrapeResult(html=html, final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("5726/1a"))
 
@@ -3336,7 +3337,7 @@ def test_server_filtered_json_stock_list_scopes_reference_and_omits_bundle_image
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("5712g"))
 
@@ -3382,7 +3383,7 @@ def test_server_filtered_json_stock_list_exposes_excluded_raw_context_reason(
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("126500ln white 2026"))
 
@@ -3401,7 +3402,7 @@ def test_search_workflow_logs_counts_without_query_or_state_path(tmp_path, caplo
     async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         return ScrapeResult(html=FIXTURE.read_text(), final_url=settings.watchfacts_url)
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     with caplog.at_level(logging.INFO, logger="app.search"):
         asyncio.run(workflow.search("228253a choco"))
@@ -3420,7 +3421,7 @@ def test_search_workflow_logs_error_type_without_query_or_state_path(tmp_path, c
     async def fetch_html(_: Settings, *, query: str | None = None) -> ScrapeResult:
         raise RuntimeError("network unavailable")
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     with caplog.at_level(logging.INFO, logger="app.search"):
         try:
@@ -3485,7 +3486,7 @@ def test_search_workflow_refines_results_with_openai_when_enabled(tmp_path) -> N
             )
         ]
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         fetch_html=fetch_html,
         refine_results=refine_results,
@@ -3551,7 +3552,7 @@ def test_search_workflow_dedupes_again_after_openai_refine(tmp_path) -> None:
             for result in results
         ]
 
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         fetch_html=fetch_html,
         refine_results=refine_results,
@@ -3616,7 +3617,7 @@ def test_search_workflow_records_shadow_ai_suggestions_without_changing_results(
         ]
 
     database = Database(settings.db_path)
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=database,
         fetch_html=fetch_html,
@@ -3686,7 +3687,7 @@ def test_search_workflow_records_guarded_ai_suggestions_and_applies_safe_result(
         ]
 
     database = Database(settings.db_path)
-    workflow = WatchFactsSearchWorkflow(
+    workflow = build_search_workflow(
         settings,
         database=database,
         fetch_html=fetch_html,
@@ -3737,7 +3738,7 @@ def test_search_workflow_final_dedupe_keeps_newest_when_text_matches_across_sell
             server_filtered=True,
         )
 
-    workflow = WatchFactsSearchWorkflow(settings, fetch_html=fetch_html)
+    workflow = build_search_workflow(settings, fetch_html=fetch_html)
 
     results = asyncio.run(workflow.search("Fpj Elegante Titanium"))
 
