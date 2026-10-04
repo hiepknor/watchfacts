@@ -76,7 +76,7 @@ def test_search_workflow_depends_on_ports_not_concrete_persistence() -> None:
     assert "SearchCacheRepository(" not in source
 
 
-def test_search_workflow_keeps_result_pipeline_as_a_separate_stage() -> None:
+def test_search_workflow_keeps_pipeline_stages_separate() -> None:
     tree = ast.parse(Path("app/searching/search.py").read_text(encoding="utf-8"))
     workflow = next(
         node
@@ -89,10 +89,15 @@ def test_search_workflow_keeps_result_pipeline_as_a_separate_stage() -> None:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
 
+    assert "_execute_retrieval_pipeline" in methods
     assert "_process_result_pipeline" in methods
     assert methods["_search_uncached_inner"].end_lineno - methods[
         "_search_uncached_inner"
-    ].lineno < 450
+    ].lineno < 150
+    assert not any(
+        isinstance(node, ast.Nonlocal)
+        for node in ast.walk(methods["_execute_retrieval_pipeline"])
+    )
 
 
 def test_application_use_cases_do_not_import_interface_adapters() -> None:
